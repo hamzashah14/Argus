@@ -25,7 +25,7 @@ echo "============================================="
 echo ""
 
 # =============================================================================
-# ROLE 1: aiops-lambda-role
+# ROLE 1: aiops-lambda-roles
 # Used by: aiops-fetch-logs, aiops-fetch-metrics, aiops-fetch-health
 # =============================================================================
 LAMBDA_ROLE_NAME="aiops-lambda-role"
