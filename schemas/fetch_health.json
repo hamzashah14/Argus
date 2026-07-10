@@ -1,0 +1,56 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "EKS Health Checker",
+    "version": "1.0.0",
+    "description": "Checks health status of an EKS cluster including node groups, deployments, and pod restarts"
+  },
+  "paths": {
+    "/fetch_service_health": {
+      "get": {
+        "summary": "Check EKS cluster health",
+        "description": "Checks the health of an EKS cluster — cluster status, node group health, unhealthy or scaled-down deployments, and crashing pods. Use this when the user asks if services are running, if pods are healthy, if anything is down, or for a general system health check. Default cluster is eks-cluster and default namespace is boutique.",
+        "operationId": "fetch_service_health",
+        "parameters": [
+          {
+            "name": "cluster_name",
+            "in": "query",
+            "required": false,
+            "description": "EKS cluster name to check. Defaults to eks-cluster.",
+            "schema": {
+              "type": "string",
+              "default": "eks-cluster"
+            }
+          },
+          {
+            "name": "namespace",
+            "in": "query",
+            "required": false,
+            "description": "Kubernetes namespace to check deployments and pods in. Defaults to boutique.",
+            "schema": {
+              "type": "string",
+              "default": "boutique"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "EKS cluster health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "overall_healthy": { "type": "boolean" },
+                    "details": { "type": "object" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

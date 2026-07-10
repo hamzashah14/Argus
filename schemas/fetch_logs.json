@@ -1,0 +1,73 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "CloudWatch Logs Fetcher",
+    "version": "1.0.0",
+    "description": "Fetches and filters application logs from AWS CloudWatch Logs"
+  },
+  "paths": {
+    "/fetch_cloudwatch_logs": {
+      "get": {
+        "summary": "Fetch application logs from CloudWatch",
+        "description": "Searches CloudWatch Logs for entries matching a filter pattern within a time range. Use this when the user asks about errors, exceptions, warnings, or any application-level issues visible in logs. Available log groups: /eks/boutique/pods (us-east-1) for pod-level application logs from the boutique microservices (orders, auth, gateway, frontend, products), /aws/eks/eks-cluster/cluster (us-east-1) for Kubernetes control plane logs, /app/production (eu-north-1) for synthetic demo logs.",
+        "operationId": "fetch_cloudwatch_logs",
+        "parameters": [
+          {
+            "name": "filter_pattern",
+            "in": "query",
+            "required": true,
+            "description": "The search pattern to filter logs. Examples: ERROR, 503, timeout, connection refused, OutOfMemory, Unauthorized, Failed",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "log_group_name",
+            "in": "query",
+            "required": false,
+            "description": "The CloudWatch Log Group name. Use /eks/boutique/pods for boutique microservice pod logs. Use /aws/eks/eks-cluster/cluster for Kubernetes control plane logs. Use /app/production for synthetic demo logs.",
+            "schema": { "type": "string", "default": "/eks/boutique/pods" }
+          },
+          {
+            "name": "hours_back",
+            "in": "query",
+            "required": false,
+            "description": "How many hours back to search. Use 1 for recent issues, 6 for trends, 24 for daily patterns.",
+            "schema": { "type": "string", "default": "1" }
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "required": false,
+            "description": "AWS region where the logs are stored. Use us-east-1 for EKS pod logs (/eks/boutique/pods) and control plane logs (/aws/eks/eks-cluster/cluster). Use eu-north-1 for synthetic demo logs (/app/production).",
+            "schema": { "type": "string", "default": "us-east-1" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log entries matching the filter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string" },
+                    "total_events": { "type": "integer" },
+                    "logs": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": { "type": "string" },
+                          "message": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
