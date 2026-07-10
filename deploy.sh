@@ -3,7 +3,7 @@
 # AIOps Assistant — Bedrock Agent Deployment Script
 #
 # What this script does:
-#   - Creates the Bedrock Agent (aiops-assistant / Kira)
+#   - Creates the Bedrock Agent (aiops-assistant)
 #   - Attaches all 3 action groups with OpenAPI schemas
 #   - Prepares the agent
 #
