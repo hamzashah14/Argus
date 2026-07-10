@@ -39,6 +39,7 @@ chmod +x setup-iam.sh
 
 This creates:
 
+
 | Role | Used By | Permissions |
 |------|---------|-------------|
 | `aiops-lambda-role` | All 3 Lambda functions | CloudWatch Logs read, EKS describe, Lambda basic execution |
@@ -46,9 +47,19 @@ This creates:
 
 ---
 
-## Step 2: Create the Lambda Functions
+## Step 2: Deploy the Lambda Functions
 
-Create the following 3 Lambda functions in the AWS Console (or via CLI). Use the code from the `lambda/` directory.
+Deploy the following 3 Lambda functions to AWS.
+
+This is fully automated (creates/updates functions and uploads code from `lambda/`):
+
+```bash
+chmod +x setup-lambdas.sh
+./setup-lambdas.sh --prometheus-url http://<YOUR_PROMETHEUS_ELB_URL>:9090
+```
+
+The script uses the execution role created in Step 1: `aiops-lambda-role`.
+
 
 | Function Name | Code File | Execution Role |
 |---------------|-----------|----------------|
@@ -60,33 +71,7 @@ Runtime: **Python 3.12** | Timeout: **30 seconds**
 
 ---
 
-## Step 3: Update the Prometheus URL
-
-Both `fetch_metrics` and `fetch_health` lambdas query Prometheus directly. Update the `PROMETHEUS_URL` placeholder in each file before uploading the code.
-
-In `lambda/fetch_metrics/lambda_function.py`:
-```python
-PROMETHEUS_URL = "http://<YOUR_PROMETHEUS_ELB_URL>:9090"
-```
-
-In `lambda/fetch_health/lambda_function.py`:
-```python
-PROMETHEUS_URL = "http://<YOUR_PROMETHEUS_ELB_URL>:9090"
-```
-
-To get the Prometheus ELB URL, expose Prometheus as a LoadBalancer service:
-
-```bash
-kubectl patch svc kube-prometheus-stack-prometheus -n monitoring \
-  -p '{"spec": {"type": "LoadBalancer"}}'
-
-kubectl get svc kube-prometheus-stack-prometheus -n monitoring
-# Copy the EXTERNAL-IP value — that is your ELB URL
-```
-
----
-
-## Step 4: Deploy the Bedrock Agent
+## Step 3: Deploy the Bedrock Agent
 
 Run the deploy script. It will:
 - Verify the Lambda functions and IAM role exist
@@ -101,6 +86,23 @@ chmod +x deploy.sh
 ```
 
 At the end, the script prints your **Agent ID** — keep it for the next step.
+
+---
+
+## Step 3b: Get the Prometheus ELB URL
+
+To get the Prometheus ELB URL, expose Prometheus as a LoadBalancer service:
+
+
+```bash
+kubectl patch svc kube-prometheus-stack-prometheus -n monitoring \
+  -p '{"spec": {"type": "LoadBalancer"}}'
+
+kubectl get svc kube-prometheus-stack-prometheus -n monitoring
+# Copy the EXTERNAL-IP value — that is your ELB URL
+```
+
+
 
 ---
 
@@ -149,23 +151,25 @@ Open **http://localhost:8501** in your browser.
 ## Project Structure
 
 ```
-aiops-assistant/
-├── app.py                  # Streamlit chat UI
-├── deploy.sh               # Bedrock Agent deployment script
-├── setup-iam.sh            # IAM roles and policies setup
-├── requirements.txt        # Python dependencies
-├── .env.example            # Environment variable template
+aiops-agent/
+├── app.py                    # Streamlit chat UI
+├── deploy.sh                 # Bedrock Agent deployment script
+├── setup-iam.sh              # IAM roles and policies setup
+├── setup-lambdas.sh          # Lambda create/update + code upload
+├── requirements.txt          # Python dependencies
+├── .env.example              # Environment variable template
 ├── lambda/
-│   ├── fetch_logs/         # CloudWatch Logs query
-│   ├── fetch_metrics/      # Prometheus metrics query
-│   └── fetch_health/       # EKS cluster health check
+│   ├── fetch_logs/          # CloudWatch Logs query
+│   ├── fetch_metrics/       # Prometheus metrics query
+│   └── fetch_health/        # EKS cluster health check
 ├── schemas/
-│   ├── fetch_logs.json     # OpenAPI schema for fetch_logs
-│   ├── fetch_metrics.json  # OpenAPI schema for fetch_metrics
-│   └── fetch_health.json   # OpenAPI schema for fetch_health
+│   ├── fetch_logs.json      # OpenAPI schema for fetch_logs
+│   ├── fetch_metrics.json   # OpenAPI schema for fetch_metrics
+│   └── fetch_health.json    # OpenAPI schema for fetch_health
 └── scripts/
     └── generate_sample_data.py  # Seed CloudWatch with test errors
 ```
+
 
 ---
 
