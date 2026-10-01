@@ -1,0 +1,32 @@
+{
+  "synthetic": true,
+  "instance_id": "i-0123456789abcdef0",
+  "now": "2026-10-01T12:00:00+00:00",
+  "alarm": {
+    "AlarmName": "aiops-i-0123456789abcdef0-nginx-errors",
+    "NewStateValue": "ALARM",
+    "NewStateReason": "Synthetic threshold crossed",
+    "StateChangeTime": "2026-09-24T10:15:32.123+0000",
+    "Trigger": {
+      "Namespace": "AIOpsNginx",
+      "MetricName": "nginx-upstream-errors-i-0123456789abcdef0",
+      "Statistic": "Sum",
+      "Dimensions": []
+    }
+  },
+  "sns_message_id": "synthetic-event-001",
+  "time_input": "2026-09-24T15:00:00+05:00",
+  "time_expected_utc": "2026-09-24T10:00:00+00:00",
+  "malformed_time": "not-a-time",
+  "unicode_character": "界",
+  "unicode_repeat": 100000,
+  "discovery_group_count": 300,
+  "discovery_name_length": 480,
+  "stream_start_remaining_seconds": 50,
+  "stream_block_seconds": 60,
+  "minimal_config": {
+    "MONITOR_REGION": "us-east-1",
+    "BEDROCK_REGION": "us-east-1",
+    "BEDROCK_MODEL_ID": "synthetic-model-not-deployable"
+  }
+}

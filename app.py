@@ -5,27 +5,29 @@ Connects to AWS Bedrock Agent for root cause analysis.
 Setup:
     1. pip install -r requirements.txt
     2. cp .env.example .env
-    3. Fill in your values in .env
+    3. Fill in your values in .env (or set them as environment variables on Render)
     4. streamlit run app.py
 """
 
-import streamlit as st
-import boto3
-import uuid
-import json
+import hmac
 import os
+import time
+import uuid
+
+import boto3
+import streamlit as st
+from botocore.config import Config
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
 load_dotenv()
 
-# --- Config from environment ---
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")
-AWS_REGION = os.getenv("AWS_REGION", "eu-north-1")
+AWS_REGION = os.getenv("BEDROCK_REGION") or os.getenv("AWS_REGION")
 AGENT_ID = os.getenv("BEDROCK_AGENT_ID")
 AGENT_ALIAS_ID = os.getenv("BEDROCK_AGENT_ALIAS_ID")
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 
 
 # --- Page Config ---
@@ -154,9 +156,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# --- Access control ---
+# The UI is reachable from the internet and Kira can read production logs, so it
+# refuses to run at all without a password rather than defaulting to open.
+def require_login():
+    if st.session_state.get("authenticated"):
+        return
+    if len(APP_PASSWORD) < 12:
+        st.error("APP_PASSWORD is not set (or is shorter than 12 characters). Kira won't start without it.")
+        st.stop()
+    with st.form("login"):
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Sign in")
+    if submitted:
+        if hmac.compare_digest(password.encode(), APP_PASSWORD.encode()):
+            st.session_state.authenticated = True
+            st.rerun()
+        time.sleep(2)
+        st.error("Wrong password.")
+    st.stop()
+
+
+require_login()
+
 # --- Validate Config ---
 # Access keys optional: boto3 uses ~/.aws/credentials, SSO, env, or IAM role if unset.
-config_ok = bool(AGENT_ID and AGENT_ALIAS_ID)
+config_ok = bool(AGENT_ID and AGENT_ALIAS_ID and AWS_REGION)
 
 
 # --- Initialize Session State ---
@@ -169,7 +194,9 @@ if "session_id" not in st.session_state:
 # --- Bedrock Agent Client ---
 @st.cache_resource
 def get_bedrock_client():
-    kwargs = {"service_name": "bedrock-agent-runtime", "region_name": AWS_REGION}
+    # An investigation can run several minutes of tool calls with no bytes streamed.
+    kwargs = {"service_name": "bedrock-agent-runtime", "region_name": AWS_REGION,
+              "config": Config(connect_timeout=10, read_timeout=600, retries={"max_attempts": 2, "mode": "standard"})}
     if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
         kwargs["aws_access_key_id"] = AWS_ACCESS_KEY_ID
         kwargs["aws_secret_access_key"] = AWS_SECRET_ACCESS_KEY
@@ -221,15 +248,15 @@ if not config_ok:
     </div>
     """, unsafe_allow_html=True)
 
-    st.error("Missing Bedrock agent settings. Create a `.env` file with at least:")
-    st.code("""AWS_REGION=us-east-1
-BEDROCK_AGENT_ID=your_agent_id
-BEDROCK_AGENT_ALIAS_ID=TSTALIASID
+    st.error("Missing Bedrock agent settings. Set these (in .env locally, or as Render environment variables):")
+    st.code("""BEDROCK_REGION=<region the agent runs in>
+BEDROCK_AGENT_ID=<agent id printed by deploy.sh>
+BEDROCK_AGENT_ALIAS_ID=<id of the versioned alias you created>
+APP_PASSWORD=<12+ characters>
 
 # Optional (omit to use AWS CLI profile / SSO / role):
 # AWS_ACCESS_KEY_ID=...
-# AWS_SECRET_ACCESS_KEY=...
-# AWS_SESSION_TOKEN=...  # only for temporary credentials""", language="bash")
+# AWS_SECRET_ACCESS_KEY=...""", language="bash")
     st.stop()
 
 
@@ -248,38 +275,14 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 
-# --- Quick Actions ---
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    if st.button("🔴 Check 503 errors"):
-        st.session_state.quick_action = "Why are we seeing 503 errors in the last hour?"
-with col2:
-    if st.button("📊 CPU & Memory"):
-        st.session_state.quick_action = "Check CPU and memory utilization across all services"
-with col3:
-    if st.button("🗄️ Database health"):
-        st.session_state.quick_action = "Is the database healthy? Check connections and latency"
-with col4:
-    if st.button("🔍 Recent errors"):
-        st.session_state.quick_action = "What are the most frequent errors in the last hour?"
-
-st.markdown("<div style='height: 0.5rem'></div>", unsafe_allow_html=True)
-
-
 # --- Chat History ---
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
 
-# --- Handle Quick Actions ---
-quick_action = st.session_state.pop("quick_action", None)
-
-
 # --- Chat Input ---
-user_input = st.chat_input("Describe the issue... e.g. 'Why is the API slow?'")
-
-prompt = quick_action or user_input
+prompt = st.chat_input("Name the instance and time, e.g. 'What went wrong on i-0abc… around 21:05 UTC?'")
 
 if prompt:
     # Show user message
@@ -307,19 +310,17 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("**Tools Available:**")
-    st.markdown("- 📋 `fetch_logs` — CloudWatch Logs")
-    st.markdown("- 📊 `fetch_metrics` — CloudWatch Metrics")
-    st.markdown("- 🏥 `fetch_service_health` — ECS/RDS/ALB")
+    st.markdown("- 📋 `fetch_logs` — CloudWatch / CWAgent Logs")
+    st.markdown("- 📊 `fetch_metrics` — CloudWatch EC2 / CWAgent Metrics")
 
     st.markdown("---")
     st.markdown("**Sample Questions:**")
     st.markdown("""
-    - Why are we seeing 503 errors?
-    - Is CPU usage high?
-    - Check database connections
-    - Are all services healthy?
-    - What errors happened in the last 2 hours?
-    - Is there a memory leak?
+    - Check what went wrong on instance i-0123456789abcdef0 around 14:35 UTC
+    - Why are we seeing 503 errors on that instance in the last hour?
+    - Is CPU or memory usage high on i-0123456789abcdef0?
+    - What are the most frequent errors in the last 2 hours?
+    - Is there a memory leak on that instance?
     """)
 
     st.markdown("---")

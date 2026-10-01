@@ -2,65 +2,81 @@
   "openapi": "3.0.0",
   "info": {
     "title": "CloudWatch Logs Fetcher",
-    "version": "1.0.0",
-    "description": "Fetches and filters application logs from AWS CloudWatch Logs"
+    "version": "2.0.0",
+    "description": "Lists an EC2 instance's log groups, or searches one around an incident time"
   },
   "paths": {
     "/fetch_cloudwatch_logs": {
       "get": {
-        "summary": "Fetch application logs from CloudWatch",
-        "description": "Searches CloudWatch Logs for entries matching a filter pattern within a time range. Use this when the user asks about errors, exceptions, warnings, or any application-level issues visible in logs. Available log groups: /eks/boutique/pods (us-east-1) for pod-level application logs from the boutique microservices (orders, auth, gateway, frontend, products), /aws/eks/eks-cluster/cluster (us-east-1) for Kubernetes control plane logs, /app/production (eu-north-1) for synthetic demo logs.",
+        "summary": "Discover an instance's log groups, or search one for log lines and activity gaps",
+        "description": "Two modes. DISCOVERY: pass only instance_id (no log_group_name) to list every log group that instance has, e.g. its Nginx access/error logs and each application container. Never guess a log group name; discover it first. SEARCH: pass log_group_name (from discovery) plus instance_id. With time_string, returns lines_before and lines_after that exact moment; without it, the most recent lines. Every search also returns activity_all_lines: how many lines were logged per time bin across the whole window, ignoring filter_text, with silent_gaps listing periods where nothing at all was logged. A silent gap at the incident time with a normal line just before it is strong evidence of a hang, even when no error line exists.",
         "operationId": "fetch_cloudwatch_logs",
         "parameters": [
           {
-            "name": "filter_pattern",
+            "name": "instance_id",
             "in": "query",
-            "required": true,
-            "description": "The search pattern to filter logs. Examples: ERROR, 503, timeout, connection refused, OutOfMemory, Unauthorized, Failed",
+            "required": false,
+            "description": "EC2 instance ID, e.g. i-0123456789abcdef0. Alone, it lists that instance's log groups.",
             "schema": { "type": "string" }
           },
           {
             "name": "log_group_name",
             "in": "query",
             "required": false,
-            "description": "The CloudWatch Log Group name. Use /eks/boutique/pods for boutique microservice pod logs. Use /aws/eks/eks-cluster/cluster for Kubernetes control plane logs. Use /app/production for synthetic demo logs.",
-            "schema": { "type": "string", "default": "/eks/boutique/pods" }
+            "description": "Exact log group name returned by discovery. Omit it to run discovery instead.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "filter_text",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive text the returned lines must contain. Separate alternatives with |, e.g. error|timeout|exception. Leave empty to see every line — do that when investigating a hang, since a frozen process often logs no error at all.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "time_string",
+            "in": "query",
+            "required": false,
+            "description": "Exact UTC incident time, YYYY-MM-DD HH:MM:SS. Whenever an incident time is known (from an alarm or the user), pass it: the search centres on that moment instead of the current time.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "window_minutes",
+            "in": "query",
+            "required": false,
+            "description": "With time_string: minutes before and after the incident to cover (1-180).",
+            "schema": { "type": "string", "default": "30" }
           },
           {
             "name": "hours_back",
             "in": "query",
             "required": false,
-            "description": "How many hours back to search. Use 1 for recent issues, 6 for trends, 24 for daily patterns.",
+            "description": "Without time_string: hours back from now to search (1-24).",
             "schema": { "type": "string", "default": "1" }
           },
           {
-            "name": "region",
+            "name": "lines",
             "in": "query",
             "required": false,
-            "description": "AWS region where the logs are stored. Use us-east-1 for EKS pod logs (/eks/boutique/pods) and control plane logs (/aws/eks/eks-cluster/cluster). Use eu-north-1 for synthetic demo logs (/app/production).",
-            "schema": { "type": "string", "default": "us-east-1" }
+            "description": "Maximum lines to return on each side of the incident (1-50).",
+            "schema": { "type": "string", "default": "20" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Log entries matching the filter",
+            "description": "Discovery result, or log lines plus an activity summary",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "status": { "type": "string" },
-                    "total_events": { "type": "integer" },
-                    "logs": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "timestamp": { "type": "string" },
-                          "message": { "type": "string" }
-                        }
-                      }
-                    }
+                    "log_groups": { "type": "array", "items": { "type": "string" } },
+                    "lines_before": { "type": "array", "items": { "type": "object" } },
+                    "lines_after": { "type": "array", "items": { "type": "object" } },
+                    "lines": { "type": "array", "items": { "type": "object" } },
+                    "activity_all_lines": { "type": "object" },
+                    "message": { "type": "string" }
                   }
                 }
               }

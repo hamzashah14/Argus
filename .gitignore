@@ -1,0 +1,9 @@
+.env
+config.env
+.tmp_*
+.venv/
+__pycache__/
+*.pyc
+.local/
+docs/implementation/evidence/private/
+.DS_Store

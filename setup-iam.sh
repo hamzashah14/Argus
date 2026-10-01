@@ -1,197 +1,126 @@
 #!/usr/bin/env bash
 # =============================================================================
-# AIOps Assistant — IAM Setup Script
+# AIOps Assistant — IAM setup
 #
-# Creates all IAM roles and policies required for the project:
-#   1. aiops-lambda-role       — used by all 3 Lambda functions
-#   2. aiops-bedrock-agent-role — used by the Bedrock Agent
+# Creates/updates:
+#   aiops-lambda-role        — the fetch_logs / fetch_metrics tool Lambdas.
+#                              Log reads are limited to <LOG_GROUP_PREFIX>/*.
+#   aiops-bedrock-agent-role — the Bedrock Agent itself.
+# (The trigger Lambda gets its own role, created by setup-alerts.sh, because
+# its permissions reference the agent alias and SNS topic.)
 #
-# Usage:
-#   chmod +x setup-iam.sh
-#   ./setup-iam.sh
+# Re-run after changing MONITOR_REGION, BEDROCK_REGION or LOG_GROUP_PREFIX.
+# Usage: ./setup-iam.sh
 # =============================================================================
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/common.sh"
 
-set -euo pipefail
-
-REGION="us-east-1"
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+require MONITOR_REGION BEDROCK_REGION
+require_region MONITOR_REGION BEDROCK_REGION
+ACCOUNT_ID="$(aws_account_id)"
 
 echo ""
-echo "============================================="
-echo " AIOps — IAM Setup"
-echo " Account : $ACCOUNT_ID"
-echo " Region  : $REGION"
-echo "============================================="
+echo "AIOps — IAM setup (account $ACCOUNT_ID)"
 echo ""
 
-# =============================================================================
-# ROLE 1: aiops-lambda-roles
-# Used by: aiops-fetch-logs, aiops-fetch-metrics, aiops-fetch-health
-# =============================================================================
-LAMBDA_ROLE_NAME="aiops-lambda-role"
-
-echo "[1/2] Creating IAM role: $LAMBDA_ROLE_NAME"
-
-LAMBDA_TRUST_POLICY=$(cat <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "lambda.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
+ensure_role() { # name trust_json description
+  if aws iam get-role --role-name "$1" >/dev/null 2>&1; then
+    aws iam update-assume-role-policy --role-name "$1" --policy-document "$2"
+    echo "  ✓ Role exists, trust policy refreshed: $1"
+  else
+    aws iam create-role --role-name "$1" --assume-role-policy-document "$2" --description "$3" >/dev/null
+    echo "  ✓ Created role: $1"
+  fi
 }
-EOF
-)
 
-if aws iam get-role --role-name "$LAMBDA_ROLE_NAME" &>/dev/null; then
-  echo "  ✓ Role already exists: $LAMBDA_ROLE_NAME"
-else
-  aws iam create-role \
-    --role-name "$LAMBDA_ROLE_NAME" \
-    --assume-role-policy-document "$LAMBDA_TRUST_POLICY" \
-    --description "Role for AIOps Lambda functions — fetch logs, metrics, and EKS health" \
-    --query 'Role.RoleName' --output text
-  echo "  ✓ Created: $LAMBDA_ROLE_NAME"
-fi
-
-# Attach managed policy for basic Lambda execution (CloudWatch Logs write)
-aws iam attach-role-policy \
-  --role-name "$LAMBDA_ROLE_NAME" \
-  --policy-arn "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-echo "  ✓ Attached: AWSLambdaBasicExecutionRole"
-
-# Inline policy for reading CloudWatch Logs and EKS health
-LAMBDA_INLINE_POLICY=$(cat <<EOF
-{
+# -----------------------------------------------------------------------------
+# Tool Lambdas role
+# -----------------------------------------------------------------------------
+echo "[1/2] $TOOLS_ROLE_NAME"
+ensure_role "$TOOLS_ROLE_NAME" '{
   "Version": "2012-10-17",
-  "Statement": [
+  "Statement": [{"Effect": "Allow", "Principal": {"Service": "lambda.amazonaws.com"}, "Action": "sts:AssumeRole"}]
+}' "AIOps tool Lambdas — read EC2/CWAgent logs and metrics"
+
+aws iam attach-role-policy --role-name "$TOOLS_ROLE_NAME" \
+  --policy-arn "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+
+LOG_GROUPS_ARN="arn:aws:logs:${MONITOR_REGION}:${ACCOUNT_ID}:log-group:${LOG_GROUP_PREFIX}/*"
+aws iam put-role-policy --role-name "$TOOLS_ROLE_NAME" --policy-name "aiops-lambda-inline-policy" --policy-document "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [
     {
-      "Sid": "CloudWatchLogsRead",
-      "Effect": "Allow",
-      "Action": [
-        "logs:FilterLogEvents",
-        "logs:StartQuery",
-        "logs:GetQueryResults",
-        "logs:StopQuery",
-        "logs:DescribeLogGroups",
-        "logs:DescribeLogStreams"
-      ],
-      "Resource": "*"
+      \"Sid\": \"ReadMonitoredLogGroupsOnly\",
+      \"Effect\": \"Allow\",
+      \"Action\": [\"logs:StartQuery\", \"logs:FilterLogEvents\", \"logs:DescribeLogStreams\"],
+      \"Resource\": \"$LOG_GROUPS_ARN\"
     },
     {
-      "Sid": "EKSRead",
-      "Effect": "Allow",
-      "Action": [
-        "eks:DescribeCluster",
-        "eks:ListNodegroups",
-        "eks:DescribeNodegroup"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-EOF
-)
-
-aws iam put-role-policy \
-  --role-name "$LAMBDA_ROLE_NAME" \
-  --policy-name "aiops-lambda-inline-policy" \
-  --policy-document "$LAMBDA_INLINE_POLICY"
-echo "  ✓ Inline policy applied: CloudWatch Logs read + EKS describe"
-
-# =============================================================================
-# ROLE 2: aiops-bedrock-agent-role
-# Used by: Bedrock Agent (aiops-assistant)
-# =============================================================================
-AGENT_ROLE_NAME="aiops-bedrock-agent-role"
-
-echo ""
-echo "[2/2] Creating IAM role: $AGENT_ROLE_NAME"
-
-BEDROCK_TRUST_POLICY=$(cat <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
+      \"Sid\": \"LogsActionsWithoutResourceScoping\",
+      \"Effect\": \"Allow\",
+      \"Action\": [\"logs:GetQueryResults\", \"logs:StopQuery\", \"logs:DescribeLogGroups\"],
+      \"Resource\": \"*\"
+    },
     {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "bedrock.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole",
-      "Condition": {
-        "StringEquals": {
-          "aws:SourceAccount": "$ACCOUNT_ID"
-        }
-      }
+      \"Sid\": \"ReadMetrics\",
+      \"Effect\": \"Allow\",
+      \"Action\": [\"cloudwatch:GetMetricStatistics\", \"cloudwatch:GetMetricData\", \"cloudwatch:ListMetrics\"],
+      \"Resource\": \"*\"
     }
   ]
-}
-EOF
-)
+}"
+echo "  ✓ Log reads limited to $LOG_GROUP_PREFIX/* in $MONITOR_REGION; metrics read-only"
 
-if aws iam get-role --role-name "$AGENT_ROLE_NAME" &>/dev/null; then
-  echo "  ✓ Role already exists: $AGENT_ROLE_NAME"
-else
-  aws iam create-role \
-    --role-name "$AGENT_ROLE_NAME" \
-    --assume-role-policy-document "$BEDROCK_TRUST_POLICY" \
-    --description "Role for Bedrock Agent — AIOps assistant (Kira)" \
-    --query 'Role.RoleName' --output text
-  echo "  ✓ Created: $AGENT_ROLE_NAME"
+# An earlier version granted bedrock:InvokeAgent + sns:Publish on this shared
+# role; that now lives on the trigger Lambda's own role.
+if aws iam delete-role-policy --role-name "$TOOLS_ROLE_NAME" --policy-name "aiops-alerting-inline-policy" 2>/dev/null; then
+  echo "  ✓ Removed old aiops-alerting-inline-policy from $TOOLS_ROLE_NAME"
 fi
 
-# Inline policy for invoking Lambda functions and Bedrock models
-AGENT_INLINE_POLICY=$(cat <<EOF
-{
-  "Version": "2012-10-17",
-  "Statement": [
+# -----------------------------------------------------------------------------
+# Bedrock Agent role
+# -----------------------------------------------------------------------------
+echo ""
+echo "[2/2] $AGENT_ROLE_NAME"
+ensure_role "$AGENT_ROLE_NAME" "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [{
+    \"Effect\": \"Allow\",
+    \"Principal\": {\"Service\": \"bedrock.amazonaws.com\"},
+    \"Action\": \"sts:AssumeRole\",
+    \"Condition\": {
+      \"StringEquals\": {\"aws:SourceAccount\": \"$ACCOUNT_ID\"},
+      \"ArnLike\": {\"aws:SourceArn\": \"arn:aws:bedrock:${BEDROCK_REGION}:${ACCOUNT_ID}:agent/*\"}
+    }
+  }]
+}" "Bedrock Agent — AIOps assistant (Kira)"
+
+# foundation-model/* across regions + inference-profile/*: cross-region
+# inference profiles route requests to the model in other regions.
+aws iam put-role-policy --role-name "$AGENT_ROLE_NAME" --policy-name "aiops-bedrock-agent-inline-policy" --policy-document "{
+  \"Version\": \"2012-10-17\",
+  \"Statement\": [
     {
-      "Sid": "InvokeLambdaFunctions",
-      "Effect": "Allow",
-      "Action": "lambda:InvokeFunction",
-      "Resource": [
-        "arn:aws:lambda:$REGION:$ACCOUNT_ID:function:aiops-fetch-logs",
-        "arn:aws:lambda:$REGION:$ACCOUNT_ID:function:aiops-fetch-metrics",
-        "arn:aws:lambda:$REGION:$ACCOUNT_ID:function:aiops-fetch-health"
+      \"Sid\": \"InvokeToolLambdas\",
+      \"Effect\": \"Allow\",
+      \"Action\": \"lambda:InvokeFunction\",
+      \"Resource\": [
+        \"arn:aws:lambda:${BEDROCK_REGION}:${ACCOUNT_ID}:function:${FETCH_LOGS_FUNC}\",
+        \"arn:aws:lambda:${BEDROCK_REGION}:${ACCOUNT_ID}:function:${FETCH_METRICS_FUNC}\"
       ]
     },
     {
-      "Sid": "InvokeBedrockModels",
-      "Effect": "Allow",
-      "Action": [
-        "bedrock:InvokeModel",
-        "bedrock:InvokeModelWithResponseStream"
-      ],
-      "Resource": "arn:aws:bedrock:$REGION::foundation-model/*"
+      \"Sid\": \"InvokeModel\",
+      \"Effect\": \"Allow\",
+      \"Action\": [\"bedrock:InvokeModel\", \"bedrock:InvokeModelWithResponseStream\", \"bedrock:GetInferenceProfile\", \"bedrock:GetFoundationModel\"],
+      \"Resource\": [
+        \"arn:aws:bedrock:*::foundation-model/*\",
+        \"arn:aws:bedrock:${BEDROCK_REGION}:${ACCOUNT_ID}:inference-profile/*\"
+      ]
     }
   ]
-}
-EOF
-)
-
-aws iam put-role-policy \
-  --role-name "$AGENT_ROLE_NAME" \
-  --policy-name "aiops-bedrock-agent-inline-policy" \
-  --policy-document "$AGENT_INLINE_POLICY"
-echo "  ✓ Inline policy applied: Lambda invoke + Bedrock model invoke"
+}"
+echo "  ✓ Tool Lambda invoke + model invoke"
 
 echo ""
-echo "============================================="
-echo " Done!"
-echo "============================================="
-echo ""
-echo " Roles created:"
-echo "  - $LAMBDA_ROLE_NAME"
-echo "    ARN: arn:aws:iam::$ACCOUNT_ID:role/$LAMBDA_ROLE_NAME"
-echo ""
-echo "  - $AGENT_ROLE_NAME"
-echo "    ARN: arn:aws:iam::$ACCOUNT_ID:role/$AGENT_ROLE_NAME"
-echo ""
-echo " Next step: Create the 3 Lambda functions in AWS Console"
-echo "   and assign '$LAMBDA_ROLE_NAME' as their execution role."
+echo "Done. Next: ./setup-lambdas.sh"
 echo ""

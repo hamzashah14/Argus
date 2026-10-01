@@ -1,0 +1,194 @@
+{
+  "captured_at": "2026-10-01",
+  "parent_commit": "6b91a71e268ce7b0915055fb897073d3379e1ffe",
+  "branch_at_capture": "master",
+  "git_status_at_capture": [
+    " M .env.example",
+    " M README.md",
+    " D aiops_all_lambda_code.py",
+    " M app.py",
+    " M deploy.sh",
+    " D lambda/fetch_health/lambda_function.py",
+    " M lambda/fetch_logs/lambda_function.py",
+    " M lambda/fetch_metrics/lambda_function.py",
+    " M requirements.txt",
+    " D schemas/fetch_health.json",
+    " M schemas/fetch_logs.json",
+    " M schemas/fetch_metrics.json",
+    " M scripts/generate_sample_data.py",
+    " M setup-iam.sh",
+    " M setup-lambdas.sh",
+    "?? .gitignore",
+    "?? IMPLEMENTATION_TRACKER.md",
+    "?? OPEN_SOURCE_PRODUCT_PLAN.md",
+    "?? PRODUCTION_IMPLEMENTATION_PLAN.md",
+    "?? PRODUCTION_READINESS_AUDIT.md",
+    "?? PRODUCT_ROADMAP_TRACKER.md",
+    "?? agent-instruction.txt",
+    "?? config.env.example",
+    "?? cwagent-config.example.json",
+    "?? lambda/trigger_investigation/",
+    "?? scripts/common.sh",
+    "?? scripts/deploy_agent.py",
+    "?? setup-alerts.sh"
+  ],
+  "archive_local_only": ".local/baselines/pre-phase-0-2026-10-01.tar.gz",
+  "archive_sha256": "17246058140c365227342ed1f5d578c5d0aad6f236657e5d6af9871ead1d65d3",
+  "files": [
+    {
+      "path": ".env.example",
+      "sha256": "266f6c201b110f01d8716c529bbe6782aa49e20761f02759e89260f9e5ff7fa7",
+      "bytes": 514,
+      "mode": "0o644"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "046fcb15460c44e827e50a3478abf3f31b1f799b88e8233f8ff0a12ea9718ad9",
+      "bytes": 49,
+      "mode": "0o644"
+    },
+    {
+      "path": "IMPLEMENTATION_TRACKER.md",
+      "sha256": "0ad5d7544d8efa643a0ddf8da1f9647273f53dc5c8fb7b86c65567b3c21af56a",
+      "bytes": 15410,
+      "mode": "0o644"
+    },
+    {
+      "path": "OPEN_SOURCE_PRODUCT_PLAN.md",
+      "sha256": "f5ce5ead8ed02778ed9b29ebe3ebbfb5df1871685e8d0a7b102a7fca9f657789",
+      "bytes": 20477,
+      "mode": "0o644"
+    },
+    {
+      "path": "PRODUCTION_IMPLEMENTATION_PLAN.md",
+      "sha256": "10e4164944eac0f3e65bc3c9f1f9ce654f60cd40d47ef4ae7119501ed8a58a2c",
+      "bytes": 46035,
+      "mode": "0o644"
+    },
+    {
+      "path": "PRODUCTION_READINESS_AUDIT.md",
+      "sha256": "544f21ccac45ab244ce07b4bc4e36c21973cd892310da02cb98f0b96ea0c163a",
+      "bytes": 26014,
+      "mode": "0o644"
+    },
+    {
+      "path": "PRODUCT_ROADMAP_TRACKER.md",
+      "sha256": "c0b385f3219877a01b53630207ed7ea7be06eb9ca4039ce860db963ae9558421",
+      "bytes": 8822,
+      "mode": "0o644"
+    },
+    {
+      "path": "README.md",
+      "sha256": "b779013463c0c0e1df33cbbf8285b785d32b74393b571185d01487681fc91b7f",
+      "bytes": 10987,
+      "mode": "0o644"
+    },
+    {
+      "path": "agent-instruction.txt",
+      "sha256": "e7f3ea033dd77593454adab753a2ff8d9558d47fe208d966ad881156294f3267",
+      "bytes": 2477,
+      "mode": "0o644"
+    },
+    {
+      "path": "app.py",
+      "sha256": "599a767eee662cd11cc12aab2121de271eb0c17dd8d2cee14a3542d5712bce27",
+      "bytes": 10018,
+      "mode": "0o644"
+    },
+    {
+      "path": "config.env.example",
+      "sha256": "bb68dd74b73b399d5ee39be878712d2b824c8480419ea868a09f99254d2cf82c",
+      "bytes": 3166,
+      "mode": "0o644"
+    },
+    {
+      "path": "cwagent-config.example.json",
+      "sha256": "2b793cfceaa20ced5b5dc70fff49b57d2e09d667d9c4162db09972fcc16862be",
+      "bytes": 1264,
+      "mode": "0o644"
+    },
+    {
+      "path": "deploy.sh",
+      "sha256": "6b8cec52b6cc7b0ca5029ce385cad629172e89ab16e9147597362a9f5633f5e0",
+      "bytes": 1248,
+      "mode": "0o755"
+    },
+    {
+      "path": "lambda/fetch_logs/lambda_function.py",
+      "sha256": "195bff6131a74a3d3c9503b4965f9afbdfbd9ce91d4570842082677eb8ab8498",
+      "bytes": 20344,
+      "mode": "0o644"
+    },
+    {
+      "path": "lambda/fetch_metrics/lambda_function.py",
+      "sha256": "1d3584555519b0e10d4c13451b452f2bc6341318cb15e016072b6a0276360e6a",
+      "bytes": 10155,
+      "mode": "0o644"
+    },
+    {
+      "path": "lambda/trigger_investigation/lambda_function.py",
+      "sha256": "dc36fb50fb4235124f45908bc43b09353e10c21eba423daf1947e9baeaf7b8cb",
+      "bytes": 11860,
+      "mode": "0o644"
+    },
+    {
+      "path": "requirements.txt",
+      "sha256": "4170dbedbbb0ea52324bc84e4549adc4fdf8f543a6345534862f57e7ac14c30c",
+      "bytes": 57,
+      "mode": "0o644"
+    },
+    {
+      "path": "schemas/fetch_logs.json",
+      "sha256": "b2ac4596f69135920f2a7d7cc6a4c7f028524c80d06c1b0b765607d8be4abe1f",
+      "bytes": 4264,
+      "mode": "0o644"
+    },
+    {
+      "path": "schemas/fetch_metrics.json",
+      "sha256": "1e18a087b90a79f3d87cf435a0d902e184e2389b488b8400e3b852d562c5e435",
+      "bytes": 3641,
+      "mode": "0o644"
+    },
+    {
+      "path": "scripts/common.sh",
+      "sha256": "35ef8238769e43b2e99a22f84c738f1dd081be939121a51c7de75a5dccc7e256",
+      "bytes": 5268,
+      "mode": "0o644"
+    },
+    {
+      "path": "scripts/deploy_agent.py",
+      "sha256": "1eaa3193bb1a074bec0e34a1b4b1f7552c8ba8e664359cfe60c5f884e8aa0615",
+      "bytes": 8127,
+      "mode": "0o644"
+    },
+    {
+      "path": "scripts/generate_sample_data.py",
+      "sha256": "f5a8d2b43826c43358a5ac14ab70c0bb91179f93f411935ae91755893cc0adeb",
+      "bytes": 2591,
+      "mode": "0o644"
+    },
+    {
+      "path": "setup-alerts.sh",
+      "sha256": "e0d076ac5acbc8019c4282d00f75dcae4b1b82f6acbb73fa3409143bd92374c6",
+      "bytes": 17438,
+      "mode": "0o755"
+    },
+    {
+      "path": "setup-iam.sh",
+      "sha256": "9cbcac1f5af28304a9ae02ee49ea8e89584338407c4a33af134002c4336c22f4",
+      "bytes": 5091,
+      "mode": "0o755"
+    },
+    {
+      "path": "setup-lambdas.sh",
+      "sha256": "2d3b36ac8bfc7858ad2a3bef2ca09feacde6e1d1c90162ea913662825f25f290",
+      "bytes": 1675,
+      "mode": "0o755"
+    }
+  ],
+  "limitations": [
+    "Working-tree snapshot, not yet a release or Git commit.",
+    "Runtime dependencies and private configuration excluded."
+  ],
+  "status_note": "Pre-existing status only; excludes snapshot/evidence folders created by the capture operation."
+}
