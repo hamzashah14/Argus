@@ -40,3 +40,26 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Added README navigation, continuity docs and ignores for local/private records and
   Finder metadata. Next action: preserve the complete baseline in a local branch/
   revision and verify that a fresh checkout reproduces the original checks.
+
+## 2026-10-01 — Baseline saved and reference gate reviewed
+
+- Created local branch `codex/phase-0-baseline` and commit
+  `1ad38ec1aaff96c4872a653885e33e540742519a` with the existing project work and Phase 0
+  records. The broad diff against the old parent includes the user's earlier changes;
+  snapshot hash comparison confirms no application/deployment behavior was edited
+  during Phase 0. Git operations required access to protected Git metadata and were
+  approved. No push or remote operation occurred.
+- Ran a fresh local `git clone --no-hardlinks --no-local`, verified its exact HEAD
+  and clean status, and ran both harnesses using the isolated Python 3.12.14 environment.
+  Result: 21/21 original self-checks, 14 syntax checks and 10/10 defect reproductions.
+  All 18 application/deployment source files matched the pre-change manifest; the
+  clone remained clean. Evidence: `evidence/phase-0/checkout-validation.json`.
+- Reviewed statuses: P0.01/.02/.03/.04/.06 DONE for the approved reference scope.
+  P0.05 remains VERIFYING with live verification deferred by the user's choice.
+  Original G0 NOT_PASSED; no findings closed; Phase 1 NOT_STARTED.
+- Customer owners, account/model/fleet, recipients and live budget remain explicit
+  placeholders. The plan permits subsequent repository work with synthetic fixtures
+  if requested, but no cloud integration can claim those prerequisites passed.
+- Updated tracker and resume instructions. Next action: user selects the next phase
+  or supplies a real target for P0.05. No application/UI/backend changes were made
+  in this phase; those remain in the planned correctness/reliability tasks.

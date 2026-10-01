@@ -4,15 +4,15 @@
 
 Updated: 1 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
 
-Overall implementation: **4/52 tasks DONE (7.7%)**. Phase gates: **0/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_0_IN_PROGRESS**. Reference inventory, targets, decisions and regression records are complete; baseline checkout verification is in progress. Application behavior has not changed. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
+Overall implementation: **5/52 tasks DONE (9.6%)**. Phase gates: **0/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_0_REFERENCE_READY / LIVE_VERIFICATION_DEFERRED**. All five repository/reference deliverables are complete, including fresh-checkout verification; P0.05 live verification remains pending by user choice. Application behavior has not changed. DONE for inventory/targets/decisions refers to the approved synthetic scope, not an actual customer's production requirements. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Current task: **P0.01** baseline revision and clean-checkout verification. The user selected **Phase 0 first**, then each phase in order, and explicitly chose a **synthetic reference deployment with live verification pending**. P0.05 stays VERIFYING; no actual customer account is selected. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Next action: retain **P0.05** as deferred until an actual target is selected. The user selected **Phase 0 first**, then each phase in order, and explicitly chose a **synthetic reference deployment with live verification pending**. Phase 1 has not started. If next requested, P1.01 repository work can use the plan's synthetic-fixture allowance while the live gate remains unresolved. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
 | Phase | Done / total | Status | Gate | Gate evidence |
 |---|---:|---|---|---|
-| 0 — Baseline and production requirements | 4/6 | IN_PROGRESS | G0: NOT_PASSED — live prerequisites deferred | [Phase 0 records](docs/implementation/README.md) |
+| 0 — Baseline and production requirements | 5/6 | VERIFYING — reference ready, live deferred | G0: NOT_PASSED — live prerequisites deferred | [Phase 0 records](docs/implementation/README.md); [clean checkout](docs/implementation/evidence/phase-0/checkout-validation.json) |
 | 1 — Correctness fixes and automated checks | 0/8 | NOT_STARTED | G1: NOT_RUN | — |
 | 2 — Isolated infrastructure and safe release mechanics | 0/6 | NOT_STARTED | G2: NOT_RUN | — |
 | 3 — Durable incident processing and notification | 0/8 | NOT_STARTED | G3: NOT_RUN | — |
@@ -25,7 +25,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P0.01 | Capture the intended project baseline | — | VERIFYING | Codex | Local revision pending | [Source manifest](docs/implementation/evidence/phase-0/baseline-manifest.json); 21/21 baseline checks pass | Create local baseline revision and verify fresh checkout |
+| P0.01 | Capture the intended project baseline | — | DONE | Codex | `1ad38ec1aaff96c4872a653885e33e540742519a`, branch `codex/phase-0-baseline` | [Source manifest](docs/implementation/evidence/phase-0/baseline-manifest.json); [fresh checkout](docs/implementation/evidence/phase-0/checkout-validation.json): 21/21 checks, original source preserved | Keep baseline and evidence; no production release implied |
 | P0.02 | Inventory services and dependencies | — | DONE | Codex, reference scope | Local records | [Inventory](docs/implementation/phase-0/INVENTORY.md); 3 synthetic services with owner roles and explicit coverage gaps | Replace placeholders with private live inventory before cloud integration |
 | P0.03 | Set reliability and capacity targets | — | DONE | Codex, reference proposals | Local records | [Targets](docs/implementation/phase-0/TARGETS.md); latency/load/recovery/budget and operator responsibility recorded | Customer must approve live targets and name notification/budget owners |
 | P0.04 | Record deployment and security decisions | P0.02, P0.03 | DONE | Codex; user scope decisions | Local records | [Decision register](docs/implementation/phase-0/DECISIONS.md); selected options, owner roles and blocked integrations | Resolve customer choices before dependent live tasks |
@@ -164,6 +164,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | V01–V18 | Not implemented | NOT_RUN | — | — |
 | P0-BASELINE | Current source, Python 3.12.14 / boto3 1.43.106 | PASS: 21 self-checks, 14 syntax checks | [Baseline checks](docs/implementation/evidence/phase-0/baseline-checks.json) | Codex / 2026-10-01 |
 | P0-REPRO R01–R10 | Synthetic mocked clients; no cloud calls | 10 known defect cases REPRODUCED; findings remain OPEN | [Observations](docs/implementation/evidence/phase-0/regressions.json) | Codex / 2026-10-01 |
+| P0-CHECKOUT | Clean local clone of `1ad38ec`; isolated Python 3.12.14 environment | PASS: 21 original checks, 14 syntax checks, 10 reproductions; clean before/after | [Checkout evidence](docs/implementation/evidence/phase-0/checkout-validation.json) | Codex / 2026-10-01 |
 
 **Release register.** There is no qualified candidate yet.
 
@@ -177,5 +178,6 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 |---|---|---|---|---|
 | 2026-10-01 | Planning | Created phased plan, dependency graph, task records, finding map, and release gates. No implementation marked complete. | Plan and tracker documents | Start P0.01; draft inventory and targets |
 | 2026-10-01 | P0.01–P0.06 | Preserved existing work; documented synthetic scope, inventory, targets, decisions and deferrals; reproduced 21 checks and 10 defects | [Work log](docs/implementation/WORK_LOG.md) | Finish fresh-checkout baseline verification; do not start Phase 1 |
+| 2026-10-01 | P0.01; G0 review | Baseline saved as `1ad38ec` and reproduced from a clean clone; 5/6 reference tasks DONE; P0.05 deferred; original G0 not passed | [Checkout evidence](docs/implementation/evidence/phase-0/checkout-validation.json) | Await next phase instruction or actual target; no application changes |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.

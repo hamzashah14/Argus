@@ -21,8 +21,10 @@ dependencies and caches are excluded. Keep it local; it is not the release packa
 
 To inspect recovery material, first verify the archive hash, then extract into a
 **new empty directory** and compare files to the manifest. Never extract over the
-working tree. After Phase 0 is committed, a clean checkout of that revision is the
-portable baseline, including all current application and deployment files.
+working tree. The local commit `1ad38ec1aaff96c4872a653885e33e540742519a` on
+`codex/phase-0-baseline` is the portable baseline, including all current application
+and deployment files. It intentionally incorporates the user's pre-existing work;
+the Phase 0 session itself did not change application behavior.
 
 ## Validation and build identity
 
@@ -31,9 +33,13 @@ baseline harness uses Python 3.12.14 and the exact SDK versions in
 `scripts/phase0/requirements.txt`. Commands and evidence links are in the parent
 [implementation README](../README.md).
 
-Application/package hashes in the baseline manifest identify the source even
-before a commit is available. A fresh-checkout result and final branch/revision
-will be recorded in `evidence/phase-0/checkout-validation.json` once verified.
+Application source hashes in the baseline manifest identify the preserved files.
+A clean local clone of `1ad38ec` passed all 21 original self-checks, all 14 original
+syntax checks and all ten defect reproductions, and remained clean before/after.
+All 18 original application/deployment source files matched the snapshot hashes.
+See [checkout-validation.json](../evidence/phase-0/checkout-validation.json).
+Dependencies came from the isolated Python 3.12.14 environment created in this
+session; this is source reproducibility evidence, not a production artifact build.
 
 Existing tests establish preservation only. The known timestamp, SNS size,
 pagination, metric dimension, configuration, contract, deadline and duplicate
