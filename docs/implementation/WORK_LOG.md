@@ -63,3 +63,27 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Updated tracker and resume instructions. Next action: user selects the next phase
   or supplies a real target for P0.05. No application/UI/backend changes were made
   in this phase; those remain in the planned correctness/reliability tasks.
+
+## 2026-10-01 — User clarified a new AWS deployment
+
+- User said no EC2, Bedrock or other project resources exist, and AWS CLI is configured.
+  This clarifies that the baseline is a new deployment, not migration of a live fleet.
+- Inspected the single local `default` profile and configured `eu-central-1` region.
+  STS authentication succeeded with an IAM user. Account ID/principal ARN were saved
+  only in ignored private evidence. No credentials were printed or committed.
+- Nine read-only regional checks succeeded: EC2, Bedrock agents/model metadata,
+  Lambda capacity/functions, SNS topics, CloudWatch alarms, log groups and EventBridge
+  rules. No non-terminated EC2 instances or matching project resources were found.
+  Lambda reports zero functions and a concurrency quota of 10. Bedrock catalog lists
+  text-model metadata; this does not establish invocation access or model-specific quota.
+- Sandbox calls could not reach AWS; approved network-enabled read-only retries worked.
+  No cloud resource changes, model invocation, sample data or notifications occurred.
+- Updated the plan's P0.05/G0 interpretation explicitly for a new deployment:
+  prerequisite assessment records actual capabilities and gaps; it does not require
+  deployed EC2/agents/subscriptions. Earlier 5/6 checkpoint is superseded by 6/6,
+  with later deployment checks assigned to their actual dependent tasks.
+- Recorded the observed Lambda concurrency gap and the need to validate the example's
+  reserved-concurrency setting before deployment. No quota request was submitted.
+- Updated tracker, resume notes, decisions, inventory and sanitized evidence. All
+  audit findings remain open; application source unchanged. Next eligible work is
+  P1.01 when Phase 1 is requested. Final deployment region/model/budget remain unset.

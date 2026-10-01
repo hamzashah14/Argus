@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-01",
+  "task": "P0.05",
+  "assessment_result": "COMPLETE_WITH_RECORDED_GAPS",
+  "starting_point": "New deployment: user reports no project infrastructure exists",
+  "identity": {
+    "sts_result": "PASS",
+    "profile": "default",
+    "principal_type": "IAM user",
+    "account_id": "REDACTED; kept only in ignored private evidence"
+  },
+  "inspected_region": "eu-central-1",
+  "region_is_not_yet_approved_for_deployment": true,
+  "observations": {
+    "non_terminated_ec2_instances": 0,
+    "matching_aiops_bedrock_agents": 0,
+    "bedrock_text_model_metadata_entries": 44,
+    "lambda_regional_concurrency_limit": 10,
+    "lambda_regional_function_count": 0,
+    "matching_project_functions": 0,
+    "matching_project_topics": 0,
+    "matching_project_metric_alarms": 0,
+    "matching_project_log_groups": 0,
+    "matching_project_event_rules": 0
+  },
+  "read_only_checks": [
+    "sts:GetCallerIdentity",
+    "ec2:DescribeInstances",
+    "bedrock:ListAgents",
+    "bedrock:ListFoundationModels",
+    "lambda:GetAccountSettings",
+    "lambda:ListFunctions",
+    "sns:ListTopics",
+    "cloudwatch:DescribeAlarms",
+    "logs:DescribeLogGroups",
+    "events:ListRules"
+  ],
+  "inspection_script_sha256": "8565df236530460edc8c5a879637a8e506fe801d20e3c4e8632dfbcc88a31dc3",
+  "private_evidence": [
+    "docs/implementation/evidence/private/phase-0-caller-identity.json",
+    "docs/implementation/evidence/private/phase-0-account-preflight.json"
+  ],
+  "limitations": [
+    "Configured region only; not an all-region account inventory.",
+    "Project resource matching uses current aiops- names and /aiops/ prefix; unrelated resources are excluded.",
+    "Model catalog listing is not proof of InvokeModel or InvokeAgent permission, entitlement or quota.",
+    "Bedrock model-specific quotas and runtime IAM roles require a selected model and future deployment.",
+    "Global IAM roles/policies and other regions not inventoried.",
+    "No deployment permission simulation, model invocation, telemetry query or notification delivery performed."
+  ],
+  "follow_up_tasks": [
+    "P2.01",
+    "P2.02",
+    "P2.05",
+    "P3.07",
+    "P4.03",
+    "P6.01",
+    "P6.03"
+  ],
+  "resource_writes": 0,
+  "model_invocations": 0,
+  "notifications_sent": 0
+}

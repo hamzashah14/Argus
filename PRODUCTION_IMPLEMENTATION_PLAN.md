@@ -69,6 +69,17 @@ Use read-only inspection to confirm account/regions, model availability and invo
 
 Acceptance: Preflight evidence lists actual capabilities and gaps; accounts and production resources are unambiguously identified.
 
+**New-deployment clarification (1 October 2026).** The user confirmed that this
+project has no deployed AWS infrastructure. For this starting point, P0.05 and G0
+assess readiness to begin engineering: verify the configured account identity,
+inspect regional service access/capacity and existing project resources, and record
+missing capabilities with owners and dependent tasks. Existing EC2 instances,
+Bedrock agents, runtime roles and subscriptions are not prerequisites for completing
+this assessment. Their creation and effective-permission/delivery checks belong to
+P2/P3/P6. An empty inventory or an explicitly recorded capacity gap is an assessment
+result, not a passed deployment test. Final region/model/budget decisions remain
+required before cloud provisioning. This clarification does not qualify production.
+
 **P0.06 — Establish regression fixtures and evidence rules.** Prerequisites: P0.01. Suggested owner: Engineering. Findings: F01, F03, F12, F13, F14, F15, F16, F20.
 
 Preserve the audit reproductions as deterministic fixtures: duplicate records, blocked streams, Unicode reports, timezone offsets, dimensionless metrics, large discovery, minimal config, and invalid schema. Define the evidence folder/CI artifact convention.

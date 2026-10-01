@@ -9,8 +9,10 @@ Read `docs/implementation/WORK_LOG.md` for decisions and previous validation.
 - Operating model: open-source software deployed and operated in the customer's
   own infrastructure. Web UI/alerts/notifications first; local desktop later.
   No maintainer-operated SaaS or managed services.
-- Phase 0 uses a synthetic reference deployment by explicit user choice.
-  Live AWS verification is deferred. Fixtures are not customer infrastructure.
+- Phase 0 uses synthetic service fixtures. The user subsequently confirmed a new
+  AWS deployment with no project infrastructure. Read-only account/region checks
+  completed; deployment-specific verification remains in later phases. Read
+  `docs/implementation/phase-0/PREFLIGHT.md`; fixtures are not live infrastructure.
 - Preserve existing work. The pre-implementation snapshot manifest lives in
   `docs/implementation/evidence/phase-0/baseline-manifest.json`.
 - After meaningful work, update STATE, WORK_LOG, task statuses, evidence, and

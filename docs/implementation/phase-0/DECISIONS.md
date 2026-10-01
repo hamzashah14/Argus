@@ -7,7 +7,7 @@ means an engineering direction from the existing plan, with no deployed behavior
 | ID | Decision / option | Status | Decision owner / evidence | Blocks or follow-up |
 |---|---|---|---|---|
 | D00 | Open-source project; infrastructure, credentials, operations and spend belong to each customer; no managed service | CONFIRMED | User's operating-model instruction | Publication/desktop remain CE roadmap |
-| D01 | Phase 0 synthetic reference only; real account/regions/model/fleet deliberately unset | CONFIRMED | User's answer in this session | P0.05 live check deferred; P2 cloud work/P6/P7 require actual target |
+| D01 | New AWS deployment; synthetic fleet fixtures; configured account verified and current eu-central-1 region inspected | CONFIRMED user context / VERIFIED account basics | User clarification and read-only preflight | Final deployment regions/model/budget and runtime checks remain P2/P3/P6 prerequisites |
 | D02 | Separate staging/production accounts preferred; scoped resources required even with one account | SELECTED_FOR_DESIGN | Existing plan; engineering custodian Codex | Customer selects accounts; P2.01/P2.02 |
 | D03 | AWS SAM/CloudFormation for infrastructure; retain AWS/Bedrock/Streamlit initially | SELECTED_FOR_DESIGN | Existing plan; engineering custodian Codex | Implement in P2; no framework migration in Phase 0 |
 | D04 | Customer-hosted web UI; individual SSO/access boundary before broad production access | SELECTED_FOR_DESIGN / PENDING_CUSTOMER | Customer operator selects host, IdP, domain, TLS and approver | P5.01; existing shared password remains a known gap |
@@ -21,6 +21,7 @@ means an engineering direction from the existing plan, with no deployed behavior
 | D12 | Local desktop client later connects to customer resources; cloud workers provide alerts while desktop is closed | CONFIRMED direction | User's desktop/open-source instruction | CE5; signing, distribution and local credentials later |
 | D13 | UI improvements start with honest connection state, safe failures, bounded sessions and clearer interaction | SELECTED_FOR_DESIGN | User requested UI/backend enhancement; P1.08 | Design/implement/validate in Phase 1; no cosmetic work in Phase 0 |
 | D14 | Public evidence is synthetic; real inventories/logs/contact details stay in private operator records | SELECTED_FOR_DESIGN | Engineering record owner Codex | Maintain sanitized evidence references for all phases |
+| D15 | Complete Phase 0 as a new-deployment prerequisite assessment; deployed services are not an entry requirement | CONTEXT_UPDATED | User confirmed no resources exist; Codex recorded actual capabilities/gaps | Do not equate account metadata access with deployment or model invocation permission |
 
 The roles above are responsibility slots, not claims that a named production owner
 has accepted them. The user/project owner is the reference-scope decision maker;
@@ -29,12 +30,15 @@ security/data, budget and release owners before their dependent live work.
 
 ## Gate interpretation
 
-The user's synthetic selection authorizes repository/reference work and defers
-P0.05 live verification. It does **not** turn that task into DONE or make the
-original G0 production-requirements gate pass. Record reference readiness and the
-live deferral separately. If the user next requests Phase 1, use the plan's allowance
-for repository work with synthetic fixtures and carry these unresolved integrations
-forward. Do not attempt an unconfigured cloud deployment to make a checkbox green.
+The initial synthetic-only checkpoint left P0.05 and G0 open. The user then clarified
+that this is a new deployment and the CLI is configured. Read-only checks now verify
+account identity, regional metadata access, available Lambda capacity and the empty
+project inventory. The plan records an explicit new-deployment clarification: Phase 0
+is complete as a baseline/prerequisite assessment, with gaps assigned to later tasks.
+It does not require creating services to inspect them, and it does not certify model
+invocation, deployment permissions, telemetry or notification delivery. Those checks
+remain open until their resources and configuration exist. Region/model/budget
+selection is still required before cloud provisioning. No cloud write was performed.
 
 The current README is baseline documentation and contains audit-identified
 overstatements (safe reruns, tool release isolation, deadline/email guarantees,

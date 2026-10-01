@@ -1,52 +1,77 @@
-# P0.05 — Prerequisites and live-verification deferral
+# P0.05 — New-deployment prerequisite assessment
 
-Status: **VERIFYING — local assessment complete, live verification deferred by
-the user's explicit synthetic-reference choice**. No AWS API calls were made.
+Status: **DONE as a new-deployment assessment, with deployment gaps recorded**.
+The user clarified that no EC2, Bedrock or project infrastructure has been created.
+The configured CLI account has now been verified through STS and inspected read-only
+in its configured region, `eu-central-1`. The region is an observed CLI setting,
+not a final deployment/model-region decision.
 
-## Observed locally
+The plan now explicitly distinguishes assessment of an empty account from testing
+services that have not been built. Phase 0/G0 is complete for this starting point.
+Model invocation, effective runtime/deployment permissions, telemetry and notification
+delivery remain **unverified** and are assigned to the later tasks below.
 
-| Check | Result | Meaning |
+## Observed evidence on 2026-10-01
+
+[Sanitized capability summary](../evidence/phase-0/account-preflight-summary.json).
+Full account ID and principal ARN are only in ignored local evidence under
+`docs/implementation/evidence/private/`; no credentials are recorded in project files.
+
+| Check | Actual result | Interpretation |
 |---|---|---|
-| Source and examples | Present | All current source/template files captured in the baseline manifest |
-| `config.env` / `.env` | Both absent | No project-specific target selected |
-| AWS CLI executable | Present | Does not establish authentication, permissions or a selected account |
-| AWS profile/region/access-key variables in process environment | Absent at inspection | Other credential providers/profiles were not inspected or ruled out |
-| Target customer/account | Not selected | Synthetic `000000000000` is deliberately non-deployable |
-| Python runtime | 3.12.14 available; default system interpreter 3.14.7 | Use the isolated 3.12 harness for comparable results |
-| Source/dependency validation | See baseline-checks evidence | Tests do not verify cloud permissions or model access |
+| AWS CLI | One configured profile, `default`; region `eu-central-1` | Explicit profile used for inspection |
+| STS GetCallerIdentity | PASS; IAM user principal | Authentication verified; not a claim of deployment permission |
+| EC2 DescribeInstances | 0 non-terminated instances in inspected region | Existing fleet is not available; use synthetic fixtures |
+| Bedrock ListAgents | 0 matching `aiops-` agents | Agent/alias will be provisioned later |
+| Bedrock ListFoundationModels, text output | Metadata listing succeeded; 44 entries | Catalog readable; selected-model entitlement/invocation/quota not verified |
+| Lambda GetAccountSettings | 10 concurrent executions; 0 functions | Small regional quota must inform deployment/capacity design |
+| Lambda ListFunctions | 0 matching `aiops-` functions | No existing project tools/worker in inspected region |
+| SNS ListTopics | 0 matching `aiops-` topics | Topics/subscriptions are future resources; no delivery test possible yet |
+| CloudWatch DescribeAlarms | 0 `aiops-` metric alarms | Detection coverage not deployed |
+| Logs DescribeLogGroups | 0 `/aiops/` groups | Telemetry collection/read access to actual log data not verified |
+| EventBridge ListRules | 0 `aiops-` rules on default event bus | Trigger route not deployed |
+| Project `config.env` / `.env` | Absent | No private deployment/UI configuration generated |
 
-## Live evidence required after a customer selects a target
+Initial sandbox requests failed to reach AWS endpoints. Network-enabled read-only
+retries succeeded. API metadata reads were the only cloud operations: no resource
+creation/configuration changes, paid model calls, sample data or notifications.
 
-Owner: customer infrastructure operator (person not assigned). Store private output
-under `docs/implementation/evidence/private/`; attach sanitized summaries here.
+Inspection scope is **one configured region**, current project-name prefixes and
+the default EventBridge bus. This is not an all-region/all-name/global-IAM audit.
+The user's statement supplies the new-deployment context; metadata independently
+confirms the listed absence. Recheck relevant global names and chosen target regions
+before creating stacks; no legacy migration should be assumed solely from naming.
 
-| Capability | Read-only evidence to collect | Current result |
+## Follow-ups required before their dependent deployment work
+
+| Gap / decision | Owner | Required task and evidence |
 |---|---|---|
-| Identity and environment | Explicit profile/role, expected account, `sts get-caller-identity`, region/partition, staging vs production boundaries | NOT_RUN |
-| Fleet and service ownership | Selected EC2 instances/tags, service owners, health endpoints, static/autoscaled policy | NOT_RUN |
-| Model/agent | Regional model/inference-profile availability, agent/alias routing, policies and access conditions | NOT_RUN |
-| Runtime permissions | Role/policy/trust inspection and available policy simulation for tools/UI/worker | NOT_RUN; inspection alone cannot prove successful invocation |
-| Quotas and capacity | Lambda concurrency, applicable Bedrock model quotas and Logs Insights limits in selected regions | NOT_RUN |
-| Logs and metrics | Groups/retention/subscriptions, exact emitted dimensions, sample timestamps/freshness, bounded read access | NOT_RUN |
-| Notification | Topic attributes/policies, subscription confirmation state, verified recipient owner | NOT_RUN; subscription state is not proof of inbox delivery |
-| Existing resource ownership | Roles, functions/versions/aliases, action groups, rules/targets, alarms/filters, topic subscribers, tags and IaC stacks | NOT_RUN |
-| Migration | Identify import/replace/retain/retire decisions per existing resource, including legacy fetch-health | NOT_RUN; never infer ownership from a name alone |
-| Security/data | UI exposure/IdP, key ownership, data residency, redaction/retention requirements, release and recovery owners | NOT_RUN |
+| Final staging account, monitor/model regions, environment naming and approved spend | User / deployment operator | P2.01: record intended targets and budget before any provisioning |
+| Bedrock model choice, regional support/entitlement and model-specific quotas | User selects model; engineering verifies | P2.04/P2.05/P6.01: inspect chosen model/profile and test invocation in staging |
+| Deployment role, existing global IAM names, runtime trust/policies and workload identity | Deployment/security operator | P2.01/P2.02/P2.05: reviewed resource plan and effective permission checks |
+| Lambda concurrency of 10; current example requests reserved concurrency 2 | Deployment operator | P2.05/P3.07/P6.03: resolve quota/control feasibility and prove bounded execution |
+| EC2 pilot and telemetry sources | User selects future pilot; engineering provisions/configures | P2/P4.03/P6.01: actual dimensions, log access, freshness and health coverage |
+| Notification recipient/owner and fallback route | User / notification operator | P3.04/P4.05/P6.01: confirmed subscriptions and actual delivery evidence |
+| UI host/IdP, named operational roles, evidence residency/retention and recovery requirements | User / future operator | P5/P6/P7: record live choices and prove controls before broad access/rollout |
 
-Do not run `setup-iam.sh`, `setup-lambdas.sh`, `deploy.sh`, `setup-alerts.sh`,
-`generate_sample_data.py` or `set-alarm-state` as a read-only preflight: they write
-resources/data or trigger paid investigations and notifications. The setup scripts
-also lack the Phase 2 isolation guarantees.
+AWS documents that reserved concurrency must leave 100 units for unreserved
+functions. With an observed total of 10, the existing example's positive reservation
+cannot be assumed to work. Record this as a deployment gap; do not silently proceed
+without a paid-work limit or change the account quota in Phase 0.
+[AWS reserved concurrency documentation](https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html).
 
-Real model invocation, end-to-end email, alarm injections and rollback rehearsals
-are integration tests with side effects/cost. Schedule them against the verified
-customer staging target at the appropriate phase. Until then, capability and live
-delivery remain **unverified**, even if local policy inspection looks correct.
+## Reproducing the assessment
 
-## Re-entry requirements
+Use the intended profile and region explicitly. Commands are read-only:
+`aws sts get-caller-identity`, `aws ec2 describe-instances` (exclude terminated),
+`aws bedrock-agent list-agents`, `aws bedrock list-foundation-models --by-output-modality TEXT`,
+`aws lambda get-account-settings`, `aws lambda list-functions`, `aws sns list-topics`,
+`aws cloudwatch describe-alarms --alarm-name-prefix aiops-`,
+`aws logs describe-log-groups --log-group-name-prefix /aiops/`, and
+`aws events list-rules --name-prefix aiops-`. Use pagination, keep raw account output
+private, and summarize only project resources. The private inspection snapshot and
+its script hash are referenced in the sanitized evidence.
 
-Collect the chosen profile/role and expected account; monitor/model regions and
-model; service inventory/owners; approved recipients/fallback; deployment/identity
-constraints; and a live budget. No secret keys need to be pasted into chat or
-committed. Replace the synthetic inventory with a private customer-specific record
-and link a sanitized capability summary before any target-account mutation.
+Do not run setup/deploy scripts, sample-data generation or alarm injections as a
+read-only preflight. New services and their integration checks are later-phase work.
+Nothing needs to be created merely to finish the Phase 0 assessment.

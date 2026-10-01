@@ -1,7 +1,7 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phase 0 uses a synthetic reference deployment; live AWS
-verification is deferred. See [implementation state](docs/implementation/STATE.md)
+Implementation status: Phase 0's new-deployment baseline and read-only account
+assessment are complete; deployment verification is pending. See [implementation state](docs/implementation/STATE.md)
 and the [task tracker](IMPLEMENTATION_TRACKER.md) for progress, known gaps and
 resume instructions. This baseline is not a qualified production release.
 

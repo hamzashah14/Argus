@@ -1,9 +1,13 @@
 # P0.02 — Architecture and reference inventory
 
-Scope approved by the user: **synthetic reference deployment**. There are **zero
-confirmed live accounts and zero confirmed live services** in this record. Example
-names in the existing README (`mobilebff`, `webbff`, `sso`, Render) are not evidence
-that those services are deployed. The current architecture below comes from code.
+Scope: **new AWS deployment with synthetic service fixtures**. The user confirmed
+that no EC2/Bedrock/project infrastructure has been created. The configured account
+identity was subsequently verified and regional metadata inspected in `eu-central-1`;
+no non-terminated EC2 instances or matching project resources were found. Account
+identifiers remain in private local evidence. Other regions and global IAM resources
+were not inventoried. Example names in the README (`mobilebff`, `webbff`, `sso`,
+Render) are not evidence of deployment. The architecture below comes from code;
+see [PREFLIGHT.md](PREFLIGHT.md) for actual capabilities and remaining gaps.
 
 ```mermaid
 flowchart LR

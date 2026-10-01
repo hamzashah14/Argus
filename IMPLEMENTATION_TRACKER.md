@@ -4,15 +4,15 @@
 
 Updated: 1 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
 
-Overall implementation: **5/52 tasks DONE (9.6%)**. Phase gates: **0/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_0_REFERENCE_READY / LIVE_VERIFICATION_DEFERRED**. All five repository/reference deliverables are complete, including fresh-checkout verification; P0.05 live verification remains pending by user choice. Application behavior has not changed. DONE for inventory/targets/decisions refers to the approved synthetic scope, not an actual customer's production requirements. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
+Overall implementation: **6/52 tasks DONE (11.5%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_0_COMPLETE — NEW_DEPLOYMENT_BASELINE**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Application behavior has not changed. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Next action: retain **P0.05** as deferred until an actual target is selected. The user selected **Phase 0 first**, then each phase in order, and explicitly chose a **synthetic reference deployment with live verification pending**. Phase 1 has not started. If next requested, P1.01 repository work can use the plan's synthetic-fixture allowance while the live gate remains unresolved. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Next eligible task: **P1.01** reproducible builds and CI, when the user starts Phase 1. Phase 1 has not started. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
 | Phase | Done / total | Status | Gate | Gate evidence |
 |---|---:|---|---|---|
-| 0 — Baseline and production requirements | 5/6 | VERIFYING — reference ready, live deferred | G0: NOT_PASSED — live prerequisites deferred | [Phase 0 records](docs/implementation/README.md); [clean checkout](docs/implementation/evidence/phase-0/checkout-validation.json) |
+| 0 — Baseline and production requirements | 6/6 | DONE — new-deployment assessment | G0: PASS — deployment qualification remains later | [Preflight](docs/implementation/phase-0/PREFLIGHT.md); [clean checkout](docs/implementation/evidence/phase-0/checkout-validation.json) |
 | 1 — Correctness fixes and automated checks | 0/8 | NOT_STARTED | G1: NOT_RUN | — |
 | 2 — Isolated infrastructure and safe release mechanics | 0/6 | NOT_STARTED | G2: NOT_RUN | — |
 | 3 — Durable incident processing and notification | 0/8 | NOT_STARTED | G3: NOT_RUN | — |
@@ -29,7 +29,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | P0.02 | Inventory services and dependencies | — | DONE | Codex, reference scope | Local records | [Inventory](docs/implementation/phase-0/INVENTORY.md); 3 synthetic services with owner roles and explicit coverage gaps | Replace placeholders with private live inventory before cloud integration |
 | P0.03 | Set reliability and capacity targets | — | DONE | Codex, reference proposals | Local records | [Targets](docs/implementation/phase-0/TARGETS.md); latency/load/recovery/budget and operator responsibility recorded | Customer must approve live targets and name notification/budget owners |
 | P0.04 | Record deployment and security decisions | P0.02, P0.03 | DONE | Codex; user scope decisions | Local records | [Decision register](docs/implementation/phase-0/DECISIONS.md); selected options, owner roles and blocked integrations | Resolve customer choices before dependent live tasks |
-| P0.05 | Verify target-account prerequisites | P0.02, P0.04 | VERIFYING | Customer operator required | User deferred live verification | [Preflight](docs/implementation/phase-0/PREFLIGHT.md); local assessment complete; no AWS calls | Await actual account/profile, regions/model, fleet/owners, recipients and budget |
+| P0.05 | Verify target-account prerequisites | P0.02, P0.04 | DONE | Codex assessment; user account owner | Read-only new-deployment assessment | [Preflight](docs/implementation/phase-0/PREFLIGHT.md); STS + 9 regional checks; capabilities/gaps recorded | Deployment identity/model/quotas/telemetry/delivery verification assigned to P2/P3/P6 |
 | P0.06 | Establish regression fixtures and evidence rules | P0.01 | DONE | Codex | Baseline source hashes | [Regression evidence](docs/implementation/evidence/phase-0/regressions.json); 10 synthetic cases reproduced | Move corrected expectations into tests in P1/P3; retain baseline history |
 
 **Phase 1 task records — Correctness fixes and automated checks.** Details and acceptance criteria are in the plan under the matching ID.
@@ -142,7 +142,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Decision | Proposed direction / required input | Owner | Status | Blocks |
 |---|---|---|---|---|
-| D01 | Synthetic reference now; AWS accounts, regions, model, actual fleet, endpoints, named owners later | User selected reference; customer operator pending | REFERENCE_CONFIRMED / LIVE_DEFERRED | P0.05; live staging |
+| D01 | New deployment; configured account verified; eu-central-1 inspected; final deployment/model/fleet decisions pending | User account owner; future operator roles pending | ACCOUNT_ASSESSED / DEPLOYMENT_PENDING | Live P2/P6/P7 |
 | D02 | Separate staging/production accounts preferred; scoped resources always | Unassigned | PROPOSED | P0.04, P2.01 |
 | D03 | SAM/CloudFormation unless organization already standardizes another tool | Unassigned | PROPOSED | P2.01 |
 | D04 | Identity provider, UI hosting/origin protection, workload credentials | Unassigned | TO_CONFIRM | P5.01; broad UI access |
@@ -151,11 +151,12 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | D07 | Evidence classification, allowed model region, retention/deletion policy | Unassigned | TO_CONFIRM | P3.06, P5.03; real-data evaluation |
 | D08 | Production release owner, window, rollback/abort thresholds | Unassigned | TO_CONFIRM | P7.01 and production cutover |
 
-**Blocker / deferral register.** Repository baseline work proceeds with synthetic fixtures. The user's live-verification deferral is recorded separately from implementation failures.
+**Blocker / deferral register.** Phase 0's assessment is complete. The following gaps affect later cloud deployment, not local Phase 1 work.
 
 | ID | Affected tasks | Issue | Owner | Required action | Review date | Status |
 |---|---|---|---|---|---|---|
-| B01 | P0.05; live P2/P6/P7 | No customer target selected; user explicitly requested synthetic reference and deferred live verification | Customer operator | Provide verified target/inventory/owners and approved live budget before cloud work | On next live-integration request | DEFERRED_BY_USER |
+| B01 | Live P2/P6/P7 | No deployed resources; final regions/model, deployment-role permissions, owners and live budget still required | User / future deployment operator | Complete [deployment follow-ups](docs/implementation/phase-0/PREFLIGHT.md) before provisioning | Before P2 cloud writes | OPEN — FUTURE_DEPENDENCY |
+| B02 | P2.05, P3.07, P6.03 | Observed Lambda regional concurrency is 10; do not assume reserved concurrency of 2 can be configured | Deployment operator | Resolve capacity/limits and test bounded processing before staging acceptance | Before staging deployment | OPEN — CAPACITY_GAP |
 
 **Validation evidence register.** Add entries as validation occurs; the audit's 21 passing self-checks are baseline evidence only.
 
@@ -165,6 +166,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | P0-BASELINE | Current source, Python 3.12.14 / boto3 1.43.106 | PASS: 21 self-checks, 14 syntax checks | [Baseline checks](docs/implementation/evidence/phase-0/baseline-checks.json) | Codex / 2026-10-01 |
 | P0-REPRO R01–R10 | Synthetic mocked clients; no cloud calls | 10 known defect cases REPRODUCED; findings remain OPEN | [Observations](docs/implementation/evidence/phase-0/regressions.json) | Codex / 2026-10-01 |
 | P0-CHECKOUT | Clean local clone of `1ad38ec`; isolated Python 3.12.14 environment | PASS: 21 original checks, 14 syntax checks, 10 reproductions; clean before/after | [Checkout evidence](docs/implementation/evidence/phase-0/checkout-validation.json) | Codex / 2026-10-01 |
+| P0-ACCOUNT | Configured default profile, eu-central-1; read-only metadata | STS and 9 regional checks succeeded; empty project inventory; Lambda concurrency 10 | [Sanitized evidence](docs/implementation/evidence/phase-0/account-preflight-summary.json); private identity retained locally | Codex / 2026-10-01 |
 
 **Release register.** There is no qualified candidate yet.
 
@@ -179,5 +181,6 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | 2026-10-01 | Planning | Created phased plan, dependency graph, task records, finding map, and release gates. No implementation marked complete. | Plan and tracker documents | Start P0.01; draft inventory and targets |
 | 2026-10-01 | P0.01–P0.06 | Preserved existing work; documented synthetic scope, inventory, targets, decisions and deferrals; reproduced 21 checks and 10 defects | [Work log](docs/implementation/WORK_LOG.md) | Finish fresh-checkout baseline verification; do not start Phase 1 |
 | 2026-10-01 | P0.01; G0 review | Baseline saved as `1ad38ec` and reproduced from a clean clone; 5/6 reference tasks DONE; P0.05 deferred; original G0 not passed | [Checkout evidence](docs/implementation/evidence/phase-0/checkout-validation.json) | Await next phase instruction or actual target; no application changes |
+| 2026-10-01 | P0.05; G0 new-deployment review | User clarified empty AWS starting point; verified account and 9 regional capabilities; recorded capacity gap and later deployment checks; P0 complete under explicit plan clarification | [Preflight](docs/implementation/phase-0/PREFLIGHT.md) | P1.01 next; no resources created |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
