@@ -7,7 +7,7 @@ performed during Phase 2. No Phase 3 runtime was implemented.
 
 | Check | Result | Scope |
 |---|---|---|
-| Pytest | 204 passed | 147 previous tests plus 57 infrastructure/release tests; AWS clients and sockets blocked by default |
+| Pytest | 205 passed | 147 previous tests plus 58 infrastructure/release tests; AWS clients and sockets blocked by default |
 | CloudFormation lint | 12 templates PASS | Six stages in same-region and split-region configurations; warnings fail the check |
 | Complete reference render | PASS | All six stages, 47 resources; actual local packages with explicitly synthetic cloud bindings |
 | Python / shell / OpenAPI | PASS | Ruff lint/format, five ShellCheck files, both OpenAPI schemas, Git whitespace |

@@ -681,3 +681,18 @@ def test_candidate_checks_deployed_contracts(spec, drift):
     else:
         result = release.verify_candidate(bundle, lambda key, region: clients[key])
         assert result["agent_version"] == "1" and len(result["functions"]) == 3
+
+
+def test_changed_dependency_lock_requires_rebuild(spec, tmp_path):
+    (tmp_path / "manifest.json").write_text(
+        json.dumps(
+            {
+                "python": "3.12",
+                "architecture": "x86_64",
+                "lock_sha256": "old-lock",
+                "functions": {key: {} for key in ("fetch_logs", "fetch_metrics", "trigger_investigation")},
+            }
+        )
+    )
+    with pytest.raises(VerificationError, match="Dependency lock changed"):
+        release.checked_build(tmp_path, spec)

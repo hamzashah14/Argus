@@ -20,7 +20,7 @@ clarifies why deployed services are not prerequisites for assessing a new accoun
 Actual deployment, model invocation, runtime authorization and delivery tests are
 still pending in their later phases. All 20 audit findings remain OPEN.
 
-- Branch: `codex/phase-2-release-isolation`; Phase 2 parent `16a523d`; Phase 1 implementation `ea8a079`.
+- Branch: `codex/phase-2-release-isolation`; Phase 2 implementation checkpoint `13db959`; parent `16a523d`; Phase 1 implementation `ea8a079`.
 - Original parent: `6b91a71e268ce7b0915055fb897073d3379e1ffe`.
 - Verified source baseline: `1ad38ec1aaff96c4872a653885e33e540742519a`.
 - Phase 0 reference checkpoint: `d1cb3a9`; Phase 1 now changes application/deployment source.
@@ -51,7 +51,7 @@ review passed; the synthetic preview server is stopped.
 Next: run the configured `quality-and-build` GitHub Actions workflow on the reviewed
 branch and retain its result, then close P1.01/G1 if successful. No remote push or
 CI dispatch has occurred. The user explicitly requested Phase 2. P2.01–P2.06 repository implementation now passes local checks:
-**204 tests**, 12 CloudFormation templates, six-stage/47-resource synthetic render,
+**205 tests**, 12 CloudFormation templates, six-stage/47-resource synthetic render,
 93 dependencies with zero known vulnerabilities, deterministic packages and no
 unreviewed secret candidates. See [Phase 2 validation](phase-2/VALIDATION.md),
 [operator guide](phase-2/GUIDE.md) and [checkpoint](phase-2/NOTES.md).

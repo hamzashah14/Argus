@@ -26,7 +26,7 @@ synthetic fixtures alone. G1 hosted CI remains pending.
 
 ## Validation / remaining work
 
-204 tests pass, including 57 new Phase 2 tests. All 12 generated same/split-region
+205 tests pass, including 58 new Phase 2 tests. All 12 generated same/split-region
 templates pass cfn-lint. Six-stage reference render contains 47 resources. Ruff,
 format, ShellCheck, schema, pip, secret and whitespace checks pass. All three Lambda
 ZIP pairs reproduce and import their bundled SDK; inventory-specific packages

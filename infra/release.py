@@ -39,6 +39,9 @@ def checked_build(directory, spec):
         raise VerificationError("Release requires all three Lambda artifacts")
     if manifest["python"] != "3.12" or manifest["architecture"] != "x86_64":
         raise VerificationError("Unsupported build runtime/architecture")
+    lock_hash = hashlib.sha256((ROOT / "requirements/lambda.lock").read_bytes()).hexdigest()
+    if manifest.get("lock_sha256") != lock_hash:
+        raise VerificationError("Dependency lock changed after build; rebuild before rendering")
     for function, item in manifest["functions"].items():
         if item["artifact"] != f"{function}.zip":
             raise VerificationError("Invalid artifact path")
@@ -46,6 +49,8 @@ def checked_build(directory, spec):
         if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
             raise VerificationError("Artifact hash differs from build manifest")
         with zipfile.ZipFile(path) as archive:
+            if hashlib.sha256(archive.read("requirements/lambda.lock")).hexdigest() != lock_hash:
+                raise VerificationError("Packaged dependency lock differs from current source")
             if json.loads(archive.read("config/metric-catalog.json")) != metric_catalog(spec):
                 raise VerificationError("Packaged metric catalog differs from deployment inventory")
             if json.loads(archive.read("config/log-scope.json")) != log_groups(spec):

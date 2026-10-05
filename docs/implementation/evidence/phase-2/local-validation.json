@@ -6,9 +6,9 @@
   "python": "3.12.14",
   "sdk": "1.43.106",
   "tests": {
-    "passed": 204,
+    "passed": 205,
     "previous": 147,
-    "phase2": 57
+    "phase2": 58
   },
   "cfn_templates": {
     "passed": 12,
@@ -73,7 +73,7 @@
     "infra/deployment.example.json": "d1620b67585a14504ac2cef1fc28ebe00cd2ab03d110f653999e861c6c85b420",
     "infra/deployment.schema.json": "79fe40f4afce828d716d527b11015ed8655444d27e4aa81243b93864cbb4702a",
     "infra/reconcile.py": "6ec83482c22670f9805e12dace5666e93abbe760823900fefe24532845d353a6",
-    "infra/release.py": "eea9e4f942acd9ffc40421b8b36328fae518297fbc355647f97b7cfb550313bb",
+    "infra/release.py": "3bfbe552043f4afcaffddd653395f763f86f70995afeccbf7224541ad55bb15c",
     "infra/spec.py": "863ed4c0732f4e12a22d9a2ee15adc7a3eba047860bc14db54425eb2e8939740",
     "infra/templates.py": "16e07944eb3b0fe8858e952d6e4d492181db1106ed6d555d194f6dd01e9b89ba",
     "infra/verify.py": "2d9b30c094fe4f116718d198de4696989d83f881765c4c2f59ddad56303a8408",
@@ -84,7 +84,7 @@
     "scripts/build_lambdas.py": "10891064a9a3a17b2b893de0db760b17cd61feb7694c06b5432b17e4e5dd8a9c",
     "scripts/common.sh": "4043cf5d977adbfb167c881690a282777a7c8d0f7be3ec713e73c4e1a4eb584c",
     "scripts/validate_infrastructure.py": "388bcb846bc1c1fcca0006916469d2eb217c375338e1d48881e508c08dabcec9",
-    "tests/test_infrastructure.py": "a05e827bf80612defc5709c9c985be49eb3cf0ea2927f350c53eec83aac220e8"
+    "tests/test_infrastructure.py": "53e01dfec21ccf417d95062465a3e430e08882586364fb7ccf95b37be91b3771"
   },
   "pending": [
     "Hosted Linux CI",
@@ -96,5 +96,6 @@
   "gates": {
     "G1": "PENDING_HOSTED_CI",
     "G2": "PENDING_LIVE_STAGING"
-  }
+  },
+  "implementation_checkpoint": "13db959"
 }
