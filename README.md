@@ -1,17 +1,18 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phase 0's new-deployment baseline and read-only account
-assessment are complete; deployment verification is pending. See [implementation state](docs/implementation/STATE.md)
-and the [task tracker](IMPLEMENTATION_TRACKER.md) for progress, known gaps and
-resume instructions. This baseline is not a qualified production release.
+Implementation status: Phase 1 correctness and UI changes pass local validation; hosted CI is pending.
+See [implementation state](docs/implementation/STATE.md), the
+[task tracker](IMPLEMENTATION_TRACKER.md), and [Phase 1 guide](docs/implementation/phase-1/GUIDE.md).
+This is not a qualified production release. Customers deploy and operate their own
+infrastructure; the project provides no managed service. Desktop packaging is planned later.
 
 A Bedrock Agent that investigates EC2 production incidents from CloudWatch logs and metrics, and reports root cause, evidence and a fix. Two ways in, one agent:
 
-- **Chat** — an engineer asks in a password-protected Streamlit UI (hosted on Render).
+- **Chat** — an engineer asks in a password-protected Streamlit UI (run locally or in your infrastructure).
 - **Automatic** — a CloudWatch alarm or EC2 stop/terminate triggers an investigation at the exact incident time, and the result is emailed.
 
 ```
-Chat UI (Render) ───────────────────────────────┐
+Customer web UI ───────────────────────────────┐
                                                 ▼
 EventBridge: EC2 stopped/terminated ─┐     Bedrock Agent (BEDROCK_REGION)
 Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-trigger-investigation ─┘   │
@@ -20,7 +21,7 @@ Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-tri
                                                                    ─► email
 ```
 
-**What fetch_logs gives the agent:** a list of every log group an instance has (Nginx, each container, …); the lines just before and just after the incident time; and per-minute log activity across the window with silent gaps called out. A hung process usually logs nothing, not an error, so the gap is often the main evidence.
+**What fetch_logs gives the agent:** paginated discovery of an instance’s log groups (Nginx, each container, …); the lines just before and just after the incident time; and per-minute log activity across the window with silent gaps called out. A log gap requires corroborating telemetry; quiet traffic or a collector failure can also cause silence.
 
 ---
 
@@ -28,25 +29,30 @@ Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-tri
 
 ```bash
 cp config.env.example config.env     # read by every setup script
-pip install -r requirements.txt      # deploy.sh needs boto3 locally
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements/app.lock
 ```
 
 Fill in `config.env`. Every script reads it and nothing region-, account- or instance-specific is hard-coded anywhere else. The file is git-ignored.
 
 | Setting | Needed by | What to put |
 |---|---|---|
+| `EXPECTED_ACCOUNT_ID` | all | Your 12-digit AWS account; compared to STS before writes |
+| `ENVIRONMENT` | all | `development`, `staging`, or `production` |
+| `LOG_CURSOR_SECRET` | setup-lambdas.sh | Unique 32–256 byte secret; generate locally and keep private |
+| `METRIC_CATALOG_FILE` | all | Valid JSON descriptor catalog; defaults to the empty committed catalog |
 | `MONITOR_REGION` | all | Region your EC2 instances run in |
 | `BEDROCK_REGION` | all | Region with Bedrock Agents + your model (can equal `MONITOR_REGION`) |
 | `BEDROCK_MODEL_ID` | deploy.sh | Model or inference-profile ID supported by Bedrock Agents in that region |
 | `BEDROCK_AGENT_ID` | setup-alerts.sh | Printed by `deploy.sh` |
 | `BEDROCK_AGENT_ALIAS_ID` | setup-alerts.sh | The versioned alias you create (step 3) |
 | `ALERT_EMAIL` | setup-alerts.sh | Where incident reports go |
-| `INSTANCE_IDS` | setup-alerts.sh | **All** monitored instances, comma-separated, every run |
+| `INSTANCE_IDS` | setup-lambdas.sh, setup-alerts.sh | **All** monitored instances, comma-separated, every run |
 | `CONTAINER_NAMES` | optional | e.g. `mobilebff,webbff,sso` — pre-creates their log groups |
 
-Everything else has working defaults — see the comments in `config.env.example`.
+Configuration is validated before cloud changes. Unknown keys are rejected; defaults are explicitly exported. Files use literal `KEY=VALUE` entries, not executable shell. See `config.env.example` and the Phase 1 guide. Validate locally with `.venv/bin/python -m kira.config config.env --purpose tools`. Check regional quotas before choosing concurrency; the inspected new account cannot use the example reservation without a quota change.
 
-## 2. Deploy (in this order; each is safe to re-run)
+## 2. Deploy (current development workflow)
 
 ```bash
 ./setup-iam.sh        # roles: tool Lambdas (log reads limited to /aiops/*), Bedrock Agent
@@ -60,7 +66,7 @@ Everything else has working defaults — see the comments in `config.env.example
 
 1. Test the DRAFT in the agent's test pane.
 2. **Create an alias** (e.g. `live`). This snapshots the prepared DRAFT as a numbered version. Put the alias ID in `config.env` (`BEDROCK_AGENT_ALIAS_ID`) and in the chat UI's environment, and put the agent ID in both too.
-3. **After every later `./deploy.sh`**, edit the alias and choose "Create a new version and associate it to this alias". Until you do, production keeps running the previous version. This is deliberate: nobody's edit reaches production by accident.
+3. **After every later `./deploy.sh`**, edit the alias and choose "Create a new version and associate it to this alias". The agent alias retains its version, but tool Lambda code is still mutable in this workflow. Full release isolation and rollback are Phase 2 work.
 4. If `deploy.sh` says the old `aiops-fetch-health` Lambda still exists, delete it with the command it prints.
 
 Don't use `TSTALIASID` in production: it follows the editable DRAFT.
@@ -128,17 +134,25 @@ aws logs test-metric-filter --region <MONITOR_REGION> \
 
 Exactly the 504 line should match. If your `log_format` adds or removes fields, edit `NGINX_ACCESS_FILTER_PATTERN` so the field positions line up, then re-run `setup-alerts.sh`.
 
-## 6. Chat UI on Render
+## 6. Customer-operated chat UI
 
-1. Create an IAM user for the UI with only this policy, and use its keys, never admin keys:
-   ```json
-   {"Version": "2012-10-17", "Statement": [{"Effect": "Allow", "Action": "bedrock:InvokeAgent",
-     "Resource": "arn:aws:bedrock:<BEDROCK_REGION>:<account>:agent-alias/<agent-id>/<alias-id>"}]}
-   ```
-2. Render → New → Web Service → this repo. Build: `pip install -r requirements.txt`. Start: `streamlit run app.py --server.port $PORT --server.address 0.0.0.0`.
-3. Environment variables: `BEDROCK_REGION`, `BEDROCK_AGENT_ID`, `BEDROCK_AGENT_ALIAS_ID`, `APP_PASSWORD` (12+ characters; the UI refuses to start without it), `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+Copy `.env.example` to the ignored `.env`. Set `APP_PASSWORD` (12–256 characters),
+`ENVIRONMENT`, `BEDROCK_REGION`, `BEDROCK_AGENT_ID`, and a versioned
+`BEDROCK_AGENT_ALIAS_ID`. Use your AWS profile/SSO session locally or a workload
+role when hosting it. The credential provider chain stays on the server running
+Streamlit; opening the web page does not connect to the browser user's AWS profile.
+The identity needs `bedrock:InvokeAgent` on the intended agent-alias ARN.
 
-Render's free tier sleeps after about 15 minutes idle, so the first request after that takes about a minute. Alerting doesn't depend on the UI at all.
+```bash
+.venv/bin/streamlit run app.py --server.address 127.0.0.1
+```
+
+The setup screen works before an agent exists. Opening it creates no cloud resources.
+The connection shows “configured” until a request succeeds. Errors expose a short
+reference; partial responses remain visible. See the Phase 1 guide for session limits.
+Shared-password authentication and browser-local work limits are development controls;
+individual identity, authorization and shared budgets remain Phase 5 work. Do not
+expose this baseline to the public internet as a production service.
 
 ## 7. Test end to end
 
@@ -154,13 +168,14 @@ You should get an email within a few minutes. In chat, ask about the gap time th
 
 ## Cost
 
-- **Fixed:** CloudWatch alarms at about $0.10 each per month (first 10 free); CWAgent's custom metrics at about $0.30 each per month (first 10 free — the example config publishes about 4 per instance); new Nginx log ingestion at about $0.50/GB. For a few instances that's a few dollars a month.
-- **Variable:** Bedrock tokens per investigation and chat question, and Logs Insights at about $0.005 per GB scanned.
-- Lambda, SNS and EventBridge stay inside the free tier at this volume. Render's free tier costs $0.
+The deploying customer pays their AWS costs. Set a budget before provisioning and
+check regional pricing for Bedrock, CloudWatch, Lambda, SNS and EventBridge for the
+chosen model and traffic. Local tests use mocks and do not invoke AWS. Browser
+request limits are not an account-wide spend cap.
 
 ## Troubleshooting
 
-- **No incident emails:** first, did you confirm the SNS subscription? Then check the alarm really went to `ALARM`, then the `aiops-trigger-investigation` logs. An agent failure still sends an email; if nothing arrives at all, the watcher alarm `aiops-kira-trigger-failing` should have emailed you.
+- **No incident emails:** first, did you confirm the SNS subscription? Then check the alarm really went to `ALARM`, then the `aiops-trigger-investigation` logs. Handled agent failures attempt a fallback email. A timeout or delivery failure can still lose a report; durable processing and independent notifications remain Phase 3 work.
 - **Kira says a log group doesn't exist or finds none:** the instance isn't shipping to `/aiops/<instance-id>/…` yet (step 5), or `MONITOR_REGION` is wrong.
 - **A `setup-alerts.sh` warning keeps coming back:** CWAgent isn't publishing that metric with the expected dimensions. Check with `aws cloudwatch list-metrics --namespace CWAgent --metric-name mem_used_percent --region <MONITOR_REGION>`.
 - **`deploy.sh` fails at prepare:** read the printed `failureReasons`. Most often the model isn't enabled in Bedrock → Model access, or isn't supported for Agents in that region.
@@ -181,4 +196,7 @@ schemas/                      OpenAPI schemas for the two tools
 app.py                        chat UI
 ```
 
-Each Lambda file runs its own tests: `python3 lambda/<name>/lambda_function.py`.
+Tests now run with `.venv/bin/python -m pytest`. The original 21 checks are in
+`tests/legacy`; additional tests cover contracts, timestamps, metric dimensions,
+pagination, payload boundaries and Streamlit flows. See the Phase 1 guide for
+hashed installs, scans, deterministic package builds and CI commands.

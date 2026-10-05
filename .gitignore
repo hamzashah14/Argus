@@ -7,3 +7,6 @@ __pycache__/
 .local/
 docs/implementation/evidence/private/
 .DS_Store
+.build/
+.pytest_cache/
+.ruff_cache/

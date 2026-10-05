@@ -15,7 +15,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/scripts/common.sh"
 
 require BEDROCK_REGION BEDROCK_MODEL_ID
 require_region BEDROCK_REGION
-python3 -c "import boto3" 2>/dev/null || die "boto3 isn't installed locally — run: pip install -r requirements.txt"
+"$KIRA_PYTHON" -c "import boto3" 2>/dev/null || die "boto3 isn't installed locally — run: pip install -r requirements.txt"
 ACCOUNT_ID="$(aws_account_id)"
 
 echo ""
@@ -23,4 +23,4 @@ echo "AIOps — Bedrock Agent '$AGENT_NAME' in $BEDROCK_REGION, model $BEDROCK_M
 echo ""
 ACCOUNT_ID="$ACCOUNT_ID" AGENT_ROLE_NAME="$AGENT_ROLE_NAME" \
   FETCH_LOGS_FUNC="$FETCH_LOGS_FUNC" FETCH_METRICS_FUNC="$FETCH_METRICS_FUNC" \
-  python3 "$ROOT_DIR/scripts/deploy_agent.py"
+  "$KIRA_PYTHON" "$ROOT_DIR/scripts/deploy_agent.py"

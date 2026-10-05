@@ -53,7 +53,7 @@ RULE_ARN="arn:aws:events:${MONITOR_REGION}:${ACCOUNT_ID}:rule/${EC2_DOWN_RULE_NA
 # Replaces the topic policy: keeps AWS's default owner-only statement, and lets
 # only THIS account's EventBridge rule and CloudWatch alarms publish. Without
 # the source conditions, any account could publish here and run up Bedrock cost.
-ALARMS_POLICY="$(python3 - "$ALARMS_TOPIC_ARN" "$ACCOUNT_ID" "$RULE_ARN" "$MONITOR_REGION" <<'PY'
+ALARMS_POLICY="$("$KIRA_PYTHON" - "$ALARMS_TOPIC_ARN" "$ACCOUNT_ID" "$RULE_ARN" "$MONITOR_REGION" <<'PY'
 import json, sys
 topic, account, rule, region = sys.argv[1:]
 print(json.dumps({"Version": "2012-10-17", "Statement": [
@@ -110,7 +110,7 @@ echo "  ✓ bedrock:InvokeAgent on the configured alias + sns:Publish on $REPORT
 echo ""
 echo "[3/6] Trigger Lambda"
 # -----------------------------------------------------------------------------
-TRIGGER_ENV="$(python3 -c 'import json, sys; k = ["BEDROCK_REGION", "BEDROCK_AGENT_ID", "BEDROCK_AGENT_ALIAS_ID", "REPORTS_TOPIC_ARN"]; print(json.dumps({"Variables": dict(zip(k, sys.argv[1:]))}))' \
+TRIGGER_ENV="$("$KIRA_PYTHON" -c 'import json, sys; k = ["BEDROCK_REGION", "BEDROCK_AGENT_ID", "BEDROCK_AGENT_ALIAS_ID", "REPORTS_TOPIC_ARN"]; print(json.dumps({"Variables": dict(zip(k, sys.argv[1:]))}))' \
   "$BEDROCK_REGION" "$BEDROCK_AGENT_ID" "$BEDROCK_AGENT_ALIAS_ID" "$REPORTS_TOPIC_ARN")"
 # 600s: an investigation is ~10 tool calls plus model time. The function
 # itself stops reading 45s before this to always publish something.
@@ -147,7 +147,7 @@ echo "  ✓ Subscribed to $ALARMS_TOPIC_NAME"
 echo ""
 echo "[4/6] EventBridge rule (monitored instances only)"
 # -----------------------------------------------------------------------------
-EVENT_PATTERN="$(python3 -c 'import json, sys; print(json.dumps({"source": ["aws.ec2"], "detail-type": ["EC2 Instance State-change Notification"], "detail": {"state": ["stopped", "terminated"], "instance-id": sys.argv[1:]}}))' "${IDS[@]}")"
+EVENT_PATTERN="$("$KIRA_PYTHON" -c 'import json, sys; print(json.dumps({"source": ["aws.ec2"], "detail-type": ["EC2 Instance State-change Notification"], "detail": {"state": ["stopped", "terminated"], "instance-id": sys.argv[1:]}}))' "${IDS[@]}")"
 aws events put-rule --name "$EC2_DOWN_RULE_NAME" --event-pattern "$EVENT_PATTERN" "${R[@]}" >/dev/null
 aws events put-targets --rule "$EC2_DOWN_RULE_NAME" --targets "Id=aiops-alarms-topic,Arn=$ALARMS_TOPIC_ARN" "${R[@]}" >/dev/null
 echo "  ✓ Stop/terminate of: ${IDS[*]}"
@@ -167,7 +167,7 @@ metric_exists() { # namespace metric Name=Value...
   local ns="$1" metric="$2"
   shift 2
   aws cloudwatch list-metrics --namespace "$ns" --metric-name "$metric" "${R[@]}" --output json |
-    python3 -c '
+    "$KIRA_PYTHON" -c '
 import json, sys
 want = dict(arg.split("=", 1) for arg in sys.argv[1:])
 metrics = json.load(sys.stdin).get("Metrics", [])
@@ -175,13 +175,13 @@ sys.exit(0 if any({d["Name"]: d["Value"] for d in m["Dimensions"]} == want for m
 }
 
 put_alarm() { # name namespace metric statistic period evaluations datapoints threshold comparison missing dims...
-  local name="$1" ns="$2" metric="$3" stat="$4" period="$5" evals="$6" dta="$7" threshold="$8" cmp="$9" missing="${10}"
+  local name="$1" ns="$2" metric="$3" stat="$4" period="$5" evals="$6" dta="$7" threshold="$8" cmp="$9" missing_policy="${10}"
   shift 10
   local dims=()
   (($# == 0)) || dims=(--dimensions "$@")
   aws cloudwatch put-metric-alarm --alarm-name "$name" --namespace "$ns" --metric-name "$metric" \
     --statistic "$stat" --period "$period" --evaluation-periods "$evals" --datapoints-to-alarm "$dta" \
-    --threshold "$threshold" --comparison-operator "$cmp" --treat-missing-data "$missing" \
+    --threshold "$threshold" --comparison-operator "$cmp" --treat-missing-data "$missing_policy" \
     --alarm-actions "$ALARMS_TOPIC_ARN" ${dims[@]+"${dims[@]}"} "${R[@]}"
 }
 

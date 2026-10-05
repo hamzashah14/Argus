@@ -1,0 +1,9 @@
+-r app.in
+pytest>=9,<10
+ruff>=0.15,<1
+pip-tools>=7.6,<8
+pip-audit>=2.10,<3
+detect-secrets>=1.5,<2
+openapi-spec-validator>=0.7,<1
+jsonschema>=4.26,<5
+shellcheck-py>=0.11,<0.12

@@ -1,6 +1,6 @@
 # Resume here
 
-Updated: 2026-10-01. **Phase 0 complete for a new deployment; Phase 1 not started.**
+Updated: 2026-10-05. **Phase 1 VERIFYING — implementation and local checks complete; hosted CI pending.**
 
 ## User decisions and current context
 
@@ -20,12 +20,11 @@ clarifies why deployed services are not prerequisites for assessing a new accoun
 Actual deployment, model invocation, runtime authorization and delivery tests are
 still pending in their later phases. All 20 audit findings remain OPEN.
 
-- Branch: `codex/phase-0-baseline`.
+- Branch: `codex/phase-1-correctness`; starting revision `badc15e`.
 - Original parent: `6b91a71e268ce7b0915055fb897073d3379e1ffe`.
 - Verified source baseline: `1ad38ec1aaff96c4872a653885e33e540742519a`.
-- Reference checkpoint: `d1cb3a9`; subsequent changes are documentation/evidence only.
-- Original 25-file snapshot and SHA-256 manifest preserved; all 18 application/
-  deployment source files remain unchanged from that snapshot.
+- Phase 0 reference checkpoint: `d1cb3a9`; Phase 1 now changes application/deployment source.
+- Original 25-file snapshot and SHA-256 manifest preserved; retrieve unchanged Phase 0 source at `badc15e`.
 - Fresh checkout: 21/21 original self-checks, 14 syntax checks and ten reproduced
   defect cases. Runtime Python 3.12.14 with exact audit SDK versions in `.venv`.
 - Cloud preflight: STS plus nine regional checks succeeded. No non-terminated EC2
@@ -41,8 +40,17 @@ Evidence: [baseline manifest](evidence/phase-0/baseline-manifest.json),
 
 ## Next action
 
-Next eligible task: **P1.01 reproducible builds and CI**, when the user starts
-Phase 1. Continue P1.02–P1.08 in dependency order; UI enhancement is P1.08.
+User authorized all of Phase 1. **7/8 tasks DONE; P1.01 VERIFYING** solely for the
+hosted CI acceptance run. Local result: **147 tests passed** (21 migrated checks,
+11 UI flows), lint/format/shell/schema/pip checks pass, 86 dependencies scanned with
+zero known vulnerabilities, no unreviewed secret candidates. Three Lambda builds
+reproduce byte-for-byte and import with their bundled SDK. Browser review passed.
+
+Next: run the configured `quality-and-build` GitHub Actions workflow on the reviewed
+branch and retain its result, then close P1.01/G1 if successful. No remote push or
+CI dispatch has occurred. Phase 2 requires the user's next phase instruction.
+See [validation](phase-1/VALIDATION.md) and [operator guide](phase-1/GUIDE.md).
+
 Keep Streamlit and the existing AWS/Bedrock architecture for now.
 
 Before later provisioning, select final regions/model, environment/account boundaries,

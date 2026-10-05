@@ -2,18 +2,18 @@
 
 **Scope clarification (1 October 2026).** Production work targets customer-owned cloud deployments of the open-source project. Customers operate their environments; maintainers supply code, releases and documentation. Web chat/automatic alerts/notifications come first, local desktop later. This changes no task status or acceptance evidence. Follow-on publication/desktop work is tracked in [PRODUCT_ROADMAP_TRACKER.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCT_ROADMAP_TRACKER.md).
 
-Updated: 1 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
+Updated: 5 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
 
-Overall implementation: **6/52 tasks DONE (11.5%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_0_COMPLETE — NEW_DEPLOYMENT_BASELINE**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Application behavior has not changed. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
+Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_1_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Next eligible task: **P1.01** reproducible builds and CI, when the user starts Phase 1. Phase 1 has not started. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Active task: **P1.01 hosted CI verification**; Phase 1 implementation and local checks complete. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
 | Phase | Done / total | Status | Gate | Gate evidence |
 |---|---:|---|---|---|
 | 0 — Baseline and production requirements | 6/6 | DONE — new-deployment assessment | G0: PASS — deployment qualification remains later | [Preflight](docs/implementation/phase-0/PREFLIGHT.md); [clean checkout](docs/implementation/evidence/phase-0/checkout-validation.json) |
-| 1 — Correctness fixes and automated checks | 0/8 | NOT_STARTED | G1: NOT_RUN | — |
+| 1 — Correctness fixes and automated checks | 7/8 | VERIFYING | G1: PENDING hosted CI; local checks PASS | [Evidence](docs/implementation/phase-1/VALIDATION.md) |
 | 2 — Isolated infrastructure and safe release mechanics | 0/6 | NOT_STARTED | G2: NOT_RUN | — |
 | 3 — Durable incident processing and notification | 0/8 | NOT_STARTED | G3: NOT_RUN | — |
 | 4 — Detection coverage and operational visibility | 0/6 | NOT_STARTED | G4: NOT_RUN | — |
@@ -36,14 +36,14 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P1.01 | Create reproducible builds and CI | P0.01, P0.06 | NOT_STARTED | — | — | — | — |
-| P1.02 | Repair and validate tool contracts | P1.01 | NOT_STARTED | — | — | — | — |
-| P1.03 | Centralize and validate configuration | P1.01 | NOT_STARTED | — | — | — | — |
-| P1.04 | Normalize timestamps and retain uncertainty | P1.01 | NOT_STARTED | — | — | — | — |
-| P1.05 | Resolve metrics using exact dimensions | P0.02, P1.02 | NOT_STARTED | — | — | — | — |
-| P1.06 | Bound log discovery and all tool responses | P1.02 | NOT_STARTED | — | — | — | — |
-| P1.07 | Make report payloads byte-safe | P1.01 | NOT_STARTED | — | — | — | — |
-| P1.08 | Handle UI failures and bound sessions | P1.01, P1.03 | NOT_STARTED | — | — | — | — |
+| P1.01 | Create reproducible builds and CI | P0.01, P0.06 | VERIFYING | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Hosted CI run pending |
+| P1.02 | Repair and validate tool contracts | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.03 | Centralize and validate configuration | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.04 | Normalize timestamps and retain uncertainty | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.05 | Resolve metrics using exact dimensions | P0.02, P1.02 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.06 | Bound log discovery and all tool responses | P1.02 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.07 | Make report payloads byte-safe | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.08 | Handle UI failures and bound sessions | P1.01, P1.03 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
 
 **Phase 2 task records — Isolated infrastructure and safe release mechanics.** Details and acceptance criteria are in the plan under the matching ID.
 
@@ -184,3 +184,5 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | 2026-10-01 | P0.05; G0 new-deployment review | User clarified empty AWS starting point; verified account and 9 regional capabilities; recorded capacity gap and later deployment checks; P0 complete under explicit plan clarification | [Preflight](docs/implementation/phase-0/PREFLIGHT.md) | P1.01 next; no resources created |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
+
+| 2026-10-05 | P1.01–P1.08 | Implemented correctness/build/UI changes; 147 tests, schema/lint/scans and deterministic packaging pass locally | [Validation](docs/implementation/phase-1/VALIDATION.md) | P1.01 VERIFYING for hosted CI; Phase 2 not started |

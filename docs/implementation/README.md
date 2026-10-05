@@ -17,7 +17,11 @@ the evidence and preserve context between sessions.
 | [REGRESSIONS.md](phase-0/REGRESSIONS.md) | Reproductions, expected fixes and evidence rules |
 | [fixtures.json](phase-0/fixtures.json) | Synthetic inputs used by the diagnostic runner |
 
-## Reproduce the baseline locally
+## Reproduce the historical Phase 0 baseline
+
+Run these historical commands from a separate checkout at `badc15e`, not from
+the updated Phase 1 working tree. Embedded checks were migrated to pytest in Phase 1.
+For current commands, use the [Phase 1 guide](phase-1/GUIDE.md).
 
 Use Python **3.12** (verified with 3.12.14). The system Python on the original
 workstation was 3.14; do not accidentally use it for the recorded comparison.
@@ -38,8 +42,8 @@ it never runs a setup/deploy script. Neither runner exercises the real Streamlit
 
 `scripts/phase0/requirements.txt` freezes the audit SDK environment solely for
 reproduction. It is not a production lock, application dependency scan, deployable
-artifact or implementation of P1.01. Production CI, application/dev lockfiles,
-dependency hashes and packaged Lambda dependencies remain Phase 1 work.
+artifact or implementation of P1.01. Phase 1 now provides CI, separate application/dev lockfiles, dependency hashes and
+packaged Lambda dependencies. Historical evidence remains unchanged.
 
 ## Evidence convention
 

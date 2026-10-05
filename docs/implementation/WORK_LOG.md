@@ -87,3 +87,53 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Updated tracker, resume notes, decisions, inventory and sanitized evidence. All
   audit findings remain open; application source unchanged. Next eligible work is
   P1.01 when Phase 1 is requested. Final deployment region/model/budget remain unset.
+
+## 2026-10-01 — Phase 1 authorized
+
+- User requested Phase 1. Created `codex/phase-1-correctness` from `badc15e` with a clean working tree.
+- Scope: P1.01–P1.08, local code/tests/UI/build work; no AWS deployment.
+- Active task P1.01; original 21 checks will migrate into pytest, with new acceptance tests for corrected behavior.
+- Account concurrency 10 and later-phase security/durability gaps remain open.
+
+## 2026-10-05 — Phase 1 resumed, implementation checkpoint
+
+- Implemented shared configuration, UTC parsing, exact metric descriptors, signed
+  discovery cursors, bounded tool/SNS payloads and chat error handling. Migrated all
+  21 embedded checks; added contract/configuration/boundary/UI regression tests.
+- Added separate hashed dependency locks, bundled SDK builds, CI workflow and
+  deterministic ZIP verification. Local result before this checkpoint: 134 tests
+  passing, both OpenAPI documents valid, lint/shell checks passing, all three
+  packaged handlers import without site packages.
+- Dependency scan reports no known vulnerabilities across 85 package records.
+  Secret candidate triage, browser review, final edge-case checks and documentation
+  remain. No hosted CI, deployment, model call or notification was performed.
+- Phase 1 implementation is not production qualification; later phase gates remain
+  open. Original Phase 0 harness results refer to its preserved source revision.
+
+## 2026-10-05 — Phase 1 final local acceptance
+
+- Fixed review edge cases: malformed catalog field types/size, relative config
+  paths, validation before log client creation, UTF-8 decoder finalization at the
+  output limit, conservative outer JSON sizing and exact custom alarm/catalog ID
+  matching. Added six built-in alarm descriptor checks and related regressions.
+- Final pytest: **147 passed**, including 21 migrated checks and 11 UI flows.
+  Ruff lint/format (48 files), ShellCheck, both OpenAPI schemas, pip check and
+  `git diff --check` pass. Tests deny AWS clients/socket connections by default.
+- Found the macOS lock omitted Streamlit's Linux watchdog dependency; made it
+  explicit, regenerated app/dev locks and reinstalled with `--require-hashes`.
+  Linux dependency metadata closure passes; Linux execution remains unverified.
+- `pip-audit` updated lock: 86 packages, zero known vulnerabilities. Secret scan:
+  reviewed synthetic test values and checksum fingerprints only. A new synthetic
+  credential candidate correctly failed the scanner; the probe was removed.
+- `scripts/verify_build.py`: three deterministic ZIP pairs and three isolated
+  imports pass with bundled boto3 1.43.106. Source, dependency and artifact hashes
+  recorded in public Phase 1 evidence; raw local output stays ignored in `.build`.
+- Browser review used only synthetic localhost settings and disabled profile
+  files. Sign-in and workspace layout inspected; fixed clipped header spacing.
+  Preview screenshot saved in `.local/phase1/workspace.jpg`.
+- Updated setup/migration/testing docs, catalog example, prompt pagination and
+  evidence uncertainty guidance. Removed stale claims of guaranteed notification
+  delivery, immutable releases, free-tier costs and maintainer-hosted UI.
+- P1.02–P1.08 DONE for local acceptance. P1.01 VERIFYING and G1 PENDING until the
+  configured hosted CI workflow passes. No push, cloud deployment, model call,
+  notification or Phase 2 work. All cross-phase audit findings remain open.

@@ -1,0 +1,5 @@
+-r lambda.in
+streamlit>=1.64,<2
+python-dotenv>=1.2,<2
+# Explicit across platforms so macOS-generated locks also install on Linux.
+watchdog>=2.1.5,<7

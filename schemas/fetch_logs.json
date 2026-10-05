@@ -2,14 +2,14 @@
   "openapi": "3.0.0",
   "info": {
     "title": "CloudWatch Logs Fetcher",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "Lists an EC2 instance's log groups, or searches one around an incident time"
   },
   "paths": {
     "/fetch_cloudwatch_logs": {
       "get": {
         "summary": "Discover an instance's log groups, or search one for log lines and activity gaps",
-        "description": "Two modes. DISCOVERY: pass only instance_id (no log_group_name) to list every log group that instance has, e.g. its Nginx access/error logs and each application container. Never guess a log group name; discover it first. SEARCH: pass log_group_name (from discovery) plus instance_id. With time_string, returns lines_before and lines_after that exact moment; without it, the most recent lines. Every search also returns activity_all_lines: how many lines were logged per time bin across the whole window, ignoring filter_text, with silent_gaps listing periods where nothing at all was logged. A silent gap at the incident time with a normal line just before it is strong evidence of a hang, even when no error line exists.",
+        "description": "Discover log groups using instance_id. Results are paginated: continue with next_token until complete=true, keeping the same instance. Never guess group names. Search a discovered log_group_name around time_string for logs and activity. Partial results explicitly state complete=false. A silent gap alone does not establish a cause; check traffic and telemetry freshness.",
         "operationId": "fetch_cloudwatch_logs",
         "parameters": [
           {
@@ -17,67 +17,312 @@
             "in": "query",
             "required": false,
             "description": "EC2 instance ID, e.g. i-0123456789abcdef0. Alone, it lists that instance's log groups.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "log_group_name",
             "in": "query",
             "required": false,
             "description": "Exact log group name returned by discovery. Omit it to run discovery instead.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "filter_text",
             "in": "query",
             "required": false,
-            "description": "Case-insensitive text the returned lines must contain. Separate alternatives with |, e.g. error|timeout|exception. Leave empty to see every line — do that when investigating a hang, since a frozen process often logs no error at all.",
-            "schema": { "type": "string" }
+            "description": "Case-insensitive text the returned lines must contain. Separate alternatives with |, e.g. error|timeout|exception. Leave empty to see every line \u2014 do that when investigating a hang, since a frozen process often logs no error at all.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "time_string",
             "in": "query",
             "required": false,
-            "description": "Exact UTC incident time, YYYY-MM-DD HH:MM:SS. Whenever an incident time is known (from an alarm or the user), pass it: the search centres on that moment instead of the current time.",
-            "schema": { "type": "string" }
+            "description": "Incident timestamp: ISO-8601 with UTC/offset, or YYYY-MM-DD HH:MM:SS interpreted as UTC. Offsets normalize to UTC.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "window_minutes",
             "in": "query",
             "required": false,
             "description": "With time_string: minutes before and after the incident to cover (1-180).",
-            "schema": { "type": "string", "default": "30" }
+            "schema": {
+              "type": "string",
+              "default": "30"
+            }
           },
           {
             "name": "hours_back",
             "in": "query",
             "required": false,
             "description": "Without time_string: hours back from now to search (1-24).",
-            "schema": { "type": "string", "default": "1" }
+            "schema": {
+              "type": "string",
+              "default": "1"
+            }
           },
           {
             "name": "lines",
             "in": "query",
             "required": false,
             "description": "Maximum lines to return on each side of the incident (1-50).",
-            "schema": { "type": "string", "default": "20" }
+            "schema": {
+              "type": "string",
+              "default": "20"
+            }
+          },
+          {
+            "name": "next_token",
+            "in": "query",
+            "required": false,
+            "description": "Opaque continuation from discovery; valid for the same instance/environment for one hour. Omit for search.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Discovery result, or log lines plus an activity summary",
+            "description": "Successful, empty or explicitly partial evidence",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string" },
-                    "log_groups": { "type": "array", "items": { "type": "string" } },
-                    "lines_before": { "type": "array", "items": { "type": "object" } },
-                    "lines_after": { "type": "array", "items": { "type": "object" } },
-                    "lines": { "type": "array", "items": { "type": "object" } },
-                    "activity_all_lines": { "type": "object" },
-                    "message": { "type": "string" }
-                  }
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "partial",
+                        "log_groups_found",
+                        "no_log_groups_found",
+                        "no_matching_lines"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    },
+                    "instance_id": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "log_groups": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "next_token": {
+                      "type": "string"
+                    },
+                    "log_group": {
+                      "type": "string"
+                    },
+                    "filter_text": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "window_start": {
+                      "type": "string"
+                    },
+                    "window_end": {
+                      "type": "string"
+                    },
+                    "incident_time": {
+                      "type": "string"
+                    },
+                    "activity_all_lines": {
+                      "type": "object",
+                      "properties": {
+                        "bin_minutes": {
+                          "type": "integer"
+                        },
+                        "total_lines": {
+                          "type": "integer"
+                        },
+                        "silent_gaps": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "from": {
+                                "type": "string"
+                              },
+                              "to": {
+                                "type": "string"
+                              },
+                              "minutes": {
+                                "type": "integer"
+                              },
+                              "note": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "from",
+                              "to",
+                              "minutes"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "lines_per_bin": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "bin_minutes",
+                        "total_lines",
+                        "silent_gaps",
+                        "lines_per_bin"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "lines_before": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "timestamp",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "lines_after": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "timestamp",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "timestamp",
+                          "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "complete",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unauthorized input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error_code",
+                    "request_id",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream access, query or response-budget failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error_code",
+                    "request_id",
+                    "message"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }

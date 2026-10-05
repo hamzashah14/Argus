@@ -1,4 +1,5 @@
 """Create or update the Bedrock Agent and its action groups. Run via ./deploy.sh."""
+
 import os
 import sys
 import time
@@ -83,7 +84,9 @@ def upsert_agent(instruction):
 
 def existing_action_groups(agent_id):
     groups = {}
-    for page in bedrock.get_paginator("list_agent_action_groups").paginate(agentId=agent_id, agentVersion="DRAFT"):
+    for page in bedrock.get_paginator("list_agent_action_groups").paginate(
+        agentId=agent_id, agentVersion="DRAFT"
+    ):
         for summary in page["actionGroupSummaries"]:
             groups[summary["actionGroupName"]] = summary["actionGroupId"]
     return groups
@@ -101,7 +104,9 @@ def sync_action_groups(agent_id):
             "agentVersion": "DRAFT",
             "actionGroupName": group["name"],
             "description": group["description"],
-            "actionGroupExecutor": {"lambda": f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:function:{group['function']}"},
+            "actionGroupExecutor": {
+                "lambda": f"arn:aws:lambda:{REGION}:{ACCOUNT_ID}:function:{group['function']}"
+            },
             "apiSchema": {"payload": schema},
             "actionGroupState": "ENABLED",
         }
@@ -117,19 +122,26 @@ def sync_action_groups(agent_id):
     for name, group_id in existing.items():
         if name in wanted:
             continue
-        group = bedrock.get_agent_action_group(agentId=agent_id, agentVersion="DRAFT", actionGroupId=group_id)["agentActionGroup"]
+        group = bedrock.get_agent_action_group(
+            agentId=agent_id, agentVersion="DRAFT", actionGroupId=group_id
+        )["agentActionGroup"]
         executor = group.get("actionGroupExecutor", {}).get("lambda", "")
         if OUR_FUNCTION_MARKER not in executor:
             print(f"  - Left action group {name} alone (not created by this project)")
             continue
         if group.get("actionGroupState") == "ENABLED":
             bedrock.update_agent_action_group(
-                agentId=agent_id, agentVersion="DRAFT", actionGroupId=group_id, actionGroupName=name,
-                actionGroupExecutor=group["actionGroupExecutor"], apiSchema=group["apiSchema"],
+                agentId=agent_id,
+                agentVersion="DRAFT",
+                actionGroupId=group_id,
+                actionGroupName=name,
+                actionGroupExecutor=group["actionGroupExecutor"],
+                apiSchema=group["apiSchema"],
                 actionGroupState="DISABLED",
             )
         bedrock.delete_agent_action_group(
-            agentId=agent_id, agentVersion="DRAFT", actionGroupId=group_id, skipResourceInUseCheck=True)
+            agentId=agent_id, agentVersion="DRAFT", actionGroupId=group_id, skipResourceInUseCheck=True
+        )
         print(f"  ✓ Removed stale action group {name} (was calling {executor.split(':')[-1]})")
 
 
@@ -146,8 +158,12 @@ def grant_lambda_permissions(agent_id):
                 if e.response["Error"]["Code"] != "ResourceNotFoundException":
                     raise
         lambda_client.add_permission(
-            FunctionName=fn, StatementId="AllowBedrockAgentInvoke", Action="lambda:InvokeFunction",
-            Principal="bedrock.amazonaws.com", SourceArn=agent_arn, SourceAccount=ACCOUNT_ID,
+            FunctionName=fn,
+            StatementId="AllowBedrockAgentInvoke",
+            Action="lambda:InvokeFunction",
+            Principal="bedrock.amazonaws.com",
+            SourceArn=agent_arn,
+            SourceAccount=ACCOUNT_ID,
         )
         print(f"  ✓ {fn}: invocable only by agent {agent_id}")
 

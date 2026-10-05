@@ -1,330 +1,205 @@
-"""
-AIOps Assistant — Streamlit Chat UI
-Connects to AWS Bedrock Agent for root cause analysis.
-
-Setup:
-    1. pip install -r requirements.txt
-    2. cp .env.example .env
-    3. Fill in your values in .env (or set them as environment variables on Render)
-    4. streamlit run app.py
-"""
+"""Customer-operated Kira web client. Run with: streamlit run app.py."""
 
 import hmac
-import os
 import time
 import uuid
 
-import boto3
 import streamlit as st
-from botocore.config import Config
 from dotenv import load_dotenv
 
+from kira import chat
+from kira.config import AppConfig
+
 load_dotenv()
-
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_SESSION_TOKEN = os.getenv("AWS_SESSION_TOKEN")
-AWS_REGION = os.getenv("BEDROCK_REGION") or os.getenv("AWS_REGION")
-AGENT_ID = os.getenv("BEDROCK_AGENT_ID")
-AGENT_ALIAS_ID = os.getenv("BEDROCK_AGENT_ALIAS_ID")
-APP_PASSWORD = os.getenv("APP_PASSWORD", "")
-
-
-# --- Page Config ---
-st.set_page_config(
-    page_title="Kira — AIOps Assistant",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="collapsed",
+settings = AppConfig.from_env()
+st.set_page_config(page_title="Kira · Infrastructure investigations", page_icon="◈", layout="wide")
+st.markdown(
+    """<style>
+.block-container { max-width: 1120px; padding-top: 4.5rem; padding-bottom: 5rem; }
+[data-testid="stSidebar"] { border-right: 1px solid #243140; }
+[data-testid="stChatMessage"] { border: 1px solid #243140; border-radius: 14px; }
+.kira-label { color: #5eead4; font-size: .73rem; font-weight: 700; letter-spacing: .18em; margin-bottom: .6rem; }
+.kira-title { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.12; font-weight: 650; letter-spacing: -.04em; margin-bottom: .8rem; }
+.kira-subtitle { color: #9fafc2; line-height: 1.6; max-width: 670px; margin-bottom: 1.7rem; }
+.kira-brand { font-size: 1.7rem; font-weight: 750; letter-spacing: .1em; margin-bottom: .2rem; }
+</style>""",
+    unsafe_allow_html=True,
 )
 
-# --- Custom CSS ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap');
 
-    .stApp {
-        background-color: #0a0e14;
-        color: #c5c8c6;
-    }
-
-    .main-header {
-        padding: 1.5rem 0 1rem 0;
-        border-bottom: 1px solid #1a1f2e;
-        margin-bottom: 1.5rem;
-    }
-    .main-header h1 {
-        font-family: 'JetBrains Mono', monospace;
-        color: #22d3ee;
-        font-size: 1.6rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.5px;
-    }
-    .main-header p {
-        font-family: 'DM Sans', sans-serif;
-        color: #5a6270;
-        font-size: 0.85rem;
-        margin: 0.3rem 0 0 0;
-    }
-
-    .status-bar {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: #0d1117;
-        border: 1px solid #1a1f2e;
-        border-radius: 6px;
-        margin-bottom: 1rem;
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.75rem;
-    }
-    .status-dot {
-        width: 8px;
-        height: 8px;
-        background: #22d3ee;
-        border-radius: 50%;
-        box-shadow: 0 0 6px #22d3ee;
-        animation: pulse 2s infinite;
-    }
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.4; }
-    }
-
-    .status-dot-error {
-        width: 8px;
-        height: 8px;
-        background: #ef4444;
-        border-radius: 50%;
-        box-shadow: 0 0 6px #ef4444;
-    }
-
-    .stChatMessage {
-        background: #0d1117 !important;
-        border: 1px solid #1a1f2e !important;
-        border-radius: 8px !important;
-        font-family: 'DM Sans', sans-serif !important;
-    }
-
-    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-        background: #111820 !important;
-        border-left: 3px solid #22d3ee !important;
-    }
-
-    [data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-        background: #0d1117 !important;
-        border-left: 3px solid #f97316 !important;
-    }
-
-    .stChatInput textarea {
-        font-family: 'DM Sans', sans-serif !important;
-        background: #0d1117 !important;
-        color: #c5c8c6 !important;
-    }
-
-    [data-testid="stSidebar"] {
-        background: #0d1117;
-        border-right: 1px solid #1a1f2e;
-    }
-
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #0a0e14; }
-    ::-webkit-scrollbar-thumb { background: #1a1f2e; border-radius: 3px; }
-
-    .stButton > button {
-        background: #111820 !important;
-        border: 1px solid #1a1f2e !important;
-        color: #8b95a5 !important;
-        font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.75rem !important;
-        padding: 0.4rem 0.8rem !important;
-        border-radius: 4px !important;
-        transition: all 0.2s !important;
-    }
-    .stButton > button:hover {
-        border-color: #22d3ee !important;
-        color: #22d3ee !important;
-        background: #0d1117 !important;
-    }
-
-    #MainMenu { visibility: hidden; }
-    footer { visibility: hidden; }
-    header { visibility: hidden; }
-</style>
-""", unsafe_allow_html=True)
-
-
-# --- Access control ---
-# The UI is reachable from the internet and Kira can read production logs, so it
-# refuses to run at all without a password rather than defaulting to open.
-def require_login():
-    if st.session_state.get("authenticated"):
-        return
-    if len(APP_PASSWORD) < 12:
-        st.error("APP_PASSWORD is not set (or is shorter than 12 characters). Kira won't start without it.")
-        st.stop()
-    with st.form("login"):
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in")
-    if submitted:
-        if hmac.compare_digest(password.encode(), APP_PASSWORD.encode()):
-            st.session_state.authenticated = True
-            st.rerun()
-        time.sleep(2)
-        st.error("Wrong password.")
-    st.stop()
-
-
-require_login()
-
-# --- Validate Config ---
-# Access keys optional: boto3 uses ~/.aws/credentials, SSO, env, or IAM role if unset.
-config_ok = bool(AGENT_ID and AGENT_ALIAS_ID and AWS_REGION)
-
-
-# --- Initialize Session State ---
-if "messages" not in st.session_state:
+def clear_conversation():
     st.session_state.messages = []
-if "session_id" not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())
+    st.session_state.last_prompt = ""
+    st.session_state.connection_state = "Configured · not yet verified"
 
 
-# --- Bedrock Agent Client ---
-@st.cache_resource
-def get_bedrock_client():
-    # An investigation can run several minutes of tool calls with no bytes streamed.
-    kwargs = {"service_name": "bedrock-agent-runtime", "region_name": AWS_REGION,
-              "config": Config(connect_timeout=10, read_timeout=600, retries={"max_attempts": 2, "mode": "standard"})}
-    if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY:
-        kwargs["aws_access_key_id"] = AWS_ACCESS_KEY_ID
-        kwargs["aws_secret_access_key"] = AWS_SECRET_ACCESS_KEY
-        if AWS_SESSION_TOKEN:
-            kwargs["aws_session_token"] = AWS_SESSION_TOKEN
-    return boto3.client(**kwargs)
+def sign_out():
+    st.session_state.authenticated = False
+    st.session_state.pop("auth_at", None)
+    clear_conversation()
 
 
-def invoke_agent(prompt: str) -> str:
-    """Send a message to the Bedrock Agent and get the response."""
-    client = get_bedrock_client()
+def authenticate():
+    password = st.session_state.get("workspace_password", "")
+    accepted = hmac.compare_digest(password.encode(), settings.password.encode())
+    st.session_state.authenticated = accepted
+    st.session_state.login_error = not accepted
+    st.session_state.pop("workspace_password", None)
+    if accepted:
+        st.session_state.auth_at = time.monotonic()
+    else:
+        time.sleep(1)
 
-    try:
-        response = client.invoke_agent(
-            agentId=AGENT_ID,
-            agentAliasId=AGENT_ALIAS_ID,
-            sessionId=st.session_state.session_id,
-            inputText=prompt,
+
+if "messages" not in st.session_state:
+    clear_conversation()
+if "attempts" not in st.session_state:
+    st.session_state.attempts = []
+if (
+    st.session_state.get("authenticated")
+    and time.monotonic() - st.session_state.get("auth_at", 0) > chat.SESSION_SECONDS
+):
+    sign_out()
+    st.session_state.session_expired = True
+
+with st.sidebar:
+    st.markdown('<div class="kira-brand">◈ KIRA</div>', unsafe_allow_html=True)
+    st.caption("Your cloud. Your investigation.")
+    st.divider()
+    st.markdown("**Workspace**")
+    st.caption("Customer-operated · AWS / CloudWatch")
+    if st.session_state.get("authenticated"):
+        st.button("New conversation", on_click=clear_conversation, width="stretch")
+        st.button("Sign out", on_click=sign_out, width="stretch")
+        st.divider()
+        st.markdown("**Connection**")
+        st.caption(st.session_state.connection_state if not settings.problems() else "Setup required")
+        st.caption(f"Region: {settings.region or 'Not configured'}")
+        st.caption(f"Environment: {settings.environment}")
+    st.divider()
+    st.caption(
+        "Investigations read the cloud resources allowed by your deployment. Review recommendations before making changes."
+    )
+
+st.markdown('<div class="kira-label">INFRASTRUCTURE INTELLIGENCE</div>', unsafe_allow_html=True)
+st.markdown('<div class="kira-title">Investigate with context.</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="kira-subtitle">Connect an incident, its logs and its metrics. Kira helps you work from evidence toward an explanation—inside your own cloud.</div>',
+    unsafe_allow_html=True,
+)
+
+if len(settings.password) < 12:
+    with st.container(border=True):
+        st.subheader("Set up your workspace")
+        st.info("Set APP_PASSWORD to at least 12 characters in your private .env file before signing in.")
+        st.code(
+            "cp .env.example .env\n# Set APP_PASSWORD and your Bedrock agent connection settings.",
+            language="bash",
         )
-
-        full_response = ""
-        for event in response["completion"]:
-            if "chunk" in event:
-                chunk = event["chunk"]
-                if "bytes" in chunk:
-                    full_response += chunk["bytes"].decode("utf-8")
-
-        return full_response
-
-    except Exception as e:
-        return f"⚠️ Error: {str(e)}"
-
-
-# --- Header ---
-st.markdown("""
-<div class="main-header">
-    <h1>⚡ KIRA</h1>
-    <p>AIOps Assistant — Root Cause Analysis Engine</p>
-</div>
-""", unsafe_allow_html=True)
-
-
-# --- Config Error ---
-if not config_ok:
-    st.markdown(f"""
-    <div class="status-bar">
-        <div class="status-dot-error"></div>
-        <span style="color: #ef4444;">NOT CONFIGURED</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.error("Missing Bedrock agent settings. Set these (in .env locally, or as Render environment variables):")
-    st.code("""BEDROCK_REGION=<region the agent runs in>
-BEDROCK_AGENT_ID=<agent id printed by deploy.sh>
-BEDROCK_AGENT_ALIAS_ID=<id of the versioned alias you created>
-APP_PASSWORD=<12+ characters>
-
-# Optional (omit to use AWS CLI profile / SSO / role):
-# AWS_ACCESS_KEY_ID=...
-# AWS_SECRET_ACCESS_KEY=...""", language="bash")
+        st.caption(
+            "No cloud resources are created by opening this app. Deployment instructions are in the project README."
+        )
     st.stop()
 
+if not st.session_state.get("authenticated"):
+    if st.session_state.pop("session_expired", False):
+        st.info("Your session expired. Sign in again to continue.")
+    with st.container(border=True):
+        st.subheader("Sign in to your workspace")
+        st.caption("Use the access password configured by the deployment operator.")
+        with st.form("sign_in", clear_on_submit=True):
+            st.text_input("Workspace password", type="password", max_chars=256, key="workspace_password")
+            st.form_submit_button("Open workspace", type="primary", on_click=authenticate)
+        if st.session_state.get("login_error"):
+            st.error("The workspace password did not match.")
+    st.stop()
 
-# --- Status Bar ---
-st.markdown(f"""
-<div class="status-bar">
-    <div class="status-dot"></div>
-    <span style="color: #22d3ee;">ONLINE</span>
-    <span style="color: #2a3040;">|</span>
-    <span style="color: #5a6270;">Session: {st.session_state.session_id[:8]}</span>
-    <span style="color: #2a3040;">|</span>
-    <span style="color: #5a6270;">Region: {AWS_REGION}</span>
-    <span style="color: #2a3040;">|</span>
-    <span style="color: #5a6270;">Agent: {AGENT_ID}</span>
-</div>
-""", unsafe_allow_html=True)
+problems = settings.problems()
+if problems:
+    with st.container(border=True):
+        st.subheader("Connect your Bedrock agent")
+        st.info("Your workspace is ready for configuration. Agent connectivity has not been checked.")
+        for problem in problems:
+            st.markdown(f"- {problem}")
+        st.code("BEDROCK_REGION=\nBEDROCK_AGENT_ID=\nBEDROCK_AGENT_ALIAS_ID=", language="bash")
+        st.caption(
+            "Use your AWS profile, SSO session or workload role. The first investigation verifies that the configured agent can respond."
+        )
+    st.chat_input("Complete the connection settings to investigate", disabled=True)
+    st.stop()
 
+with st.expander("Connection details", expanded=False):
+    st.write(
+        {
+            "Region": settings.region,
+            "Agent": settings.agent_id,
+            "Alias": settings.alias_id,
+            "Environment": settings.environment,
+            "Status": st.session_state.connection_state,
+        }
+    )
+    st.caption(
+        "Configured does not mean connected. A successful response verifies only that request, not overall cloud health."
+    )
 
-# --- Chat History ---
+if not st.session_state.messages:
+    st.markdown("**Start with a question**")
+    cols = st.columns(3)
+    for column, title, detail in zip(
+        cols,
+        ["Investigate an alert", "Explore a log gap", "Check resource pressure"],
+        [
+            "Include the instance, alarm and exact time.",
+            "Compare activity before and after the incident.",
+            "Correlate CPU, memory and disk with symptoms.",
+        ],
+    ):
+        with column, st.container(border=True):
+            st.markdown(f"**{title}**")
+            st.caption(detail)
+    st.caption("Example: What changed on i-0123456789abcdef0 around 2026-09-24T15:00:00+05:00?")
+
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["content"]:
+            st.markdown(message["content"])
+        if message.get("status") in {"error", "partial"}:
+            st.warning(message["message"])
+            st.caption(f"{message['code']} · Reference {message['reference']}")
+            if message["status"] == "partial":
+                st.caption("Partial result · the investigation did not complete.")
 
-
-# --- Chat Input ---
-prompt = st.chat_input("Name the instance and time, e.g. 'What went wrong on i-0abc… around 21:05 UTC?'")
-
-if prompt:
-    # Show user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
-
-    # Get agent response
-    with st.chat_message("assistant"):
-        with st.spinner("🔍 Kira is investigating..."):
-            response = invoke_agent(prompt)
-        st.markdown(response)
-
-    st.session_state.messages.append({"role": "assistant", "content": response})
-
-
-# --- Sidebar ---
-with st.sidebar:
-    st.markdown("""
-    <div style="font-family: 'JetBrains Mono', monospace; padding: 1rem 0;">
-        <h3 style="color: #22d3ee; font-size: 1rem;">⚡ KIRA</h3>
-        <p style="color: #5a6270; font-size: 0.8rem;">AIOps Assistant v1.0</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("**Tools Available:**")
-    st.markdown("- 📋 `fetch_logs` — CloudWatch / CWAgent Logs")
-    st.markdown("- 📊 `fetch_metrics` — CloudWatch EC2 / CWAgent Metrics")
-
-    st.markdown("---")
-    st.markdown("**Sample Questions:**")
-    st.markdown("""
-    - Check what went wrong on instance i-0123456789abcdef0 around 14:35 UTC
-    - Why are we seeing 503 errors on that instance in the last hour?
-    - Is CPU or memory usage high on i-0123456789abcdef0?
-    - What are the most frequent errors in the last 2 hours?
-    - Is there a memory leak on that instance?
-    """)
-
-    st.markdown("---")
-    if st.button("🔄 New Session"):
-        st.session_state.messages = []
-        st.session_state.session_id = str(uuid.uuid4())
-        st.rerun()
+now = time.monotonic()
+st.session_state.attempts = chat.recent_attempts(st.session_state.attempts, now)
+work_limit = len(st.session_state.attempts) >= chat.MAX_REQUESTS_PER_HOUR
+history_limit = len(st.session_state.messages) >= chat.MAX_HISTORY_MESSAGES
+if work_limit:
+    st.info(
+        "This browser session has reached its hourly investigation limit. Try again after earlier requests leave the one-hour window."
+    )
+if history_limit:
+    st.info(
+        "This conversation reached its history limit. Start a new conversation to reset the agent context."
+    )
+retry = False
+if st.session_state.messages and st.session_state.messages[-1].get("status") in {"error", "partial"}:
+    retry = st.button("Retry in a new conversation", disabled=work_limit)
+prompt = st.chat_input(
+    "Describe the incident. Include an instance ID and timestamp…",
+    max_chars=chat.MAX_PROMPT_CHARS,
+    disabled=work_limit or history_limit,
+)
+if retry:
+    prompt = st.session_state.last_prompt
+    clear_conversation()
+if prompt and prompt.strip():
+    st.session_state.attempts.append(time.monotonic())
+    st.session_state.last_prompt = prompt
+    with st.spinner("Reading evidence from your cloud…"):
+        result = chat.invoke(prompt, st.session_state.session_id, settings)
+    st.session_state.messages = chat.append_exchange(st.session_state.messages, prompt, result)
+    st.session_state.connection_state = (
+        "Last request succeeded" if result.status == "ok" else "Last request incomplete"
+    )
+    st.rerun()

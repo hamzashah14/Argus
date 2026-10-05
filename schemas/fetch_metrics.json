@@ -2,14 +2,14 @@
   "openapi": "3.0.0",
   "info": {
     "title": "CloudWatch / CWAgent Metrics Fetcher",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "description": "Fetches one CloudWatch metric for one EC2 instance"
   },
   "paths": {
     "/fetch_cloudwatch_metrics": {
       "get": {
         "summary": "Fetch one metric for one EC2 instance",
-        "description": "Returns datapoints and a summary for a single metric on a single instance. AWS/EC2 metrics (no agent needed): CPUUtilization, CPUCreditBalance, CPUCreditUsage, StatusCheckFailed, StatusCheckFailed_Instance, StatusCheckFailed_System, NetworkIn, NetworkOut, EBSReadOps, EBSWriteOps, EBSIOBalance%. CloudWatch-agent metrics: mem_used_percent, swap_used_percent, disk_used_percent (pass path, e.g. /), procstat_lookup_pid_count. The namespace is picked automatically. Pass time_string whenever an incident time is known.",
+        "description": "Fetch an allowlisted metric for an authorized instance. Built-ins cover AWS/EC2, CWAgent memory/swap/disk/process aggregate and dimensionless AIOpsNginx nginx-upstream-errors-<instance>. Use metric_id for configured exact process, volume or custom dimensions. Arbitrary namespace overrides are rejected. No-data differs from access failure.",
         "operationId": "fetch_cloudwatch_metrics",
         "parameters": [
           {
@@ -17,71 +17,333 @@
             "in": "query",
             "required": true,
             "description": "EC2 instance ID, e.g. i-0123456789abcdef0.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "metric_name",
             "in": "query",
             "required": false,
             "description": "Metric to fetch (see the list above).",
-            "schema": { "type": "string", "default": "CPUUtilization" }
+            "schema": {
+              "type": "string",
+              "default": "CPUUtilization"
+            }
           },
           {
             "name": "path",
             "in": "query",
             "required": false,
             "description": "Filesystem mount path for disk_used_percent, e.g. /. Omit for other metrics.",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "time_string",
             "in": "query",
             "required": false,
-            "description": "Exact UTC incident time, YYYY-MM-DD HH:MM:SS. The query centres on it.",
-            "schema": { "type": "string" }
+            "description": "Incident timestamp: ISO-8601 with UTC/offset, or YYYY-MM-DD HH:MM:SS interpreted as UTC. Offsets normalize to UTC.",
+            "schema": {
+              "type": "string"
+            }
           },
           {
             "name": "window_minutes",
             "in": "query",
             "required": false,
             "description": "With time_string: minutes before and after the incident (1-180).",
-            "schema": { "type": "string", "default": "30" }
+            "schema": {
+              "type": "string",
+              "default": "30"
+            }
           },
           {
             "name": "hours_back",
             "in": "query",
             "required": false,
             "description": "Without time_string: hours back from now (1-72).",
-            "schema": { "type": "string", "default": "1" }
+            "schema": {
+              "type": "string",
+              "default": "1"
+            }
           },
           {
             "name": "statistic",
             "in": "query",
             "required": false,
             "description": "Statistic per datapoint.",
-            "schema": { "type": "string", "default": "Average", "enum": ["Average", "Maximum", "Minimum", "Sum", "SampleCount"] }
+            "schema": {
+              "type": "string",
+              "default": "Average",
+              "enum": [
+                "Average",
+                "Maximum",
+                "Minimum",
+                "Sum",
+                "SampleCount"
+              ]
+            }
           },
           {
             "name": "namespace",
             "in": "query",
             "required": false,
-            "description": "Only to override the automatic choice. Leave unset.",
-            "schema": { "type": "string" }
+            "description": "Namespace matching a built-in or configured metric; arbitrary namespaces are rejected.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metric_id",
+            "in": "query",
+            "required": false,
+            "description": "ID of a deployment-configured descriptor with exact namespace, name, statistic, unit and dimensions.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "period_minutes",
+            "in": "query",
+            "required": false,
+            "description": "Requested period in minutes (1\u20131440); retention and point-budget constraints may increase it.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Metric datapoints and summary",
+            "description": "Successful, empty or explicitly partial evidence",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "status": { "type": "string" },
-                    "summary": { "type": "object" },
-                    "datapoints": { "type": "array", "items": { "type": "array" } },
-                    "message": { "type": "string" }
-                  }
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "no_data"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "complete": {
+                      "type": "boolean"
+                    },
+                    "metric": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "instance_id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "statistic": {
+                      "type": "string"
+                    },
+                    "period_seconds": {
+                      "type": "integer"
+                    },
+                    "descriptor": {
+                      "type": "object",
+                      "properties": {
+                        "metric_id": {
+                          "type": "string"
+                        },
+                        "instance_id": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "metric_name": {
+                          "type": "string"
+                        },
+                        "statistic": {
+                          "type": "string"
+                        },
+                        "unit": {
+                          "type": "string"
+                        },
+                        "dimensions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "Name": {
+                                "type": "string"
+                              },
+                              "Value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "Name",
+                              "Value"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "metric_id",
+                        "instance_id",
+                        "namespace",
+                        "metric_name",
+                        "statistic",
+                        "dimensions"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "window_start": {
+                      "type": "string"
+                    },
+                    "window_end": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "first": {
+                          "type": "number"
+                        },
+                        "last": {
+                          "type": "number"
+                        },
+                        "average": {
+                          "type": "number"
+                        },
+                        "maximum": {
+                          "type": "number"
+                        },
+                        "minimum": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "first",
+                        "last",
+                        "average",
+                        "maximum",
+                        "minimum"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "datapoints": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "timestamp": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "value": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "timestamp",
+                          "value"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "complete",
+                    "metric",
+                    "namespace",
+                    "instance_id",
+                    "statistic",
+                    "period_seconds",
+                    "descriptor",
+                    "window_start",
+                    "window_end"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unauthorized input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error_code",
+                    "request_id",
+                    "message"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Upstream access, query or response-budget failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "error"
+                      ]
+                    },
+                    "error_code": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "error_code",
+                    "request_id",
+                    "message"
+                  ],
+                  "additionalProperties": false
                 }
               }
             }
