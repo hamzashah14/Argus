@@ -6,6 +6,10 @@ import hmac
 import json
 import os
 import time
+from functools import lru_cache
+
+import boto3
+from botocore.config import Config
 
 from kira.transport import dumps
 
@@ -20,8 +24,24 @@ def scope(instance_id, prefix, region):
     }
 
 
+@lru_cache(maxsize=8)
+def secret_version(arn, version):
+    if not version or not arn.startswith("arn:aws:secretsmanager:"):
+        raise ValueError("A pinned cursor secret ARN and version are required.")
+    client = boto3.client(
+        "secretsmanager",
+        region_name=arn.split(":")[3],
+        config=Config(connect_timeout=3, read_timeout=5, retries={"total_max_attempts": 2}),
+    )
+    return client.get_secret_value(SecretId=arn, VersionId=version)["SecretString"]
+
+
 def key():
     secret = os.getenv("LOG_CURSOR_SECRET", "")
+    if os.getenv("LOG_CURSOR_SECRET_ARN"):
+        secret = secret_version(
+            os.environ["LOG_CURSOR_SECRET_ARN"], os.getenv("LOG_CURSOR_SECRET_VERSION", "")
+        )
     if len(secret.encode()) < 32:
         raise ValueError("LOG_CURSOR_SECRET must contain at least 32 bytes to paginate discovery.")
     return secret.encode()

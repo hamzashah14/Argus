@@ -1,0 +1,100 @@
+{
+  "date": "2026-10-05",
+  "scope": "Synthetic local validation only; no AWS calls or resources",
+  "branch": "codex/phase-2-release-isolation",
+  "implementation_parent": "16a523d",
+  "python": "3.12.14",
+  "sdk": "1.43.106",
+  "tests": {
+    "passed": 204,
+    "previous": 147,
+    "phase2": 57
+  },
+  "cfn_templates": {
+    "passed": 12,
+    "modes": [
+      "same-region",
+      "split-region"
+    ]
+  },
+  "reference_resources": {
+    "foundation-tools": 4,
+    "foundation-monitor": 12,
+    "tools": 12,
+    "alias": 1,
+    "worker": 7,
+    "routing": 11
+  },
+  "checks": {
+    "ruff": "PASS",
+    "ruff_format": "PASS",
+    "shellcheck": "PASS",
+    "openapi": "PASS",
+    "pip_check": "PASS",
+    "git_diff_check": "PASS",
+    "complete_reference_render": "PASS",
+    "sensitive_data_scan": "PASS"
+  },
+  "dependency_audit": {
+    "packages": 93,
+    "known_vulnerabilities": 0
+  },
+  "deterministic_builds": "PASS",
+  "isolated_imports": [
+    {
+      "function": "fetch_logs",
+      "sdk_version": "1.43.106",
+      "result": "PASS"
+    },
+    {
+      "function": "fetch_metrics",
+      "sdk_version": "1.43.106",
+      "result": "PASS"
+    },
+    {
+      "function": "trigger_investigation",
+      "sdk_version": "1.43.106",
+      "result": "PASS"
+    }
+  ],
+  "default_artifact_sha256": {
+    "fetch_logs": "75733a7bd53d8260607771989954f71ca3c97ee9d794f07e6157af96333662b2",
+    "fetch_metrics": "2ca38f2c69990f6d27a1e0e8a8b1028b2e59671ee848f13f85543283d031473e",
+    "trigger_investigation": "4d7ac70565a3d49930f13fe52091fce3ee77acd2534d93f87c9a49eb03c94bdf"
+  },
+  "reference_inventory_artifact_sha256": {
+    "fetch_logs": "50c9c934171595a0c87d65347f59622df792fd38c1a373bf712871db0b7692e2",
+    "fetch_metrics": "533c83d8cf9388a21191f12d08b294a87a316ad9dc59ab89353f4ba7895d99bf",
+    "trigger_investigation": "9390d1e8840ca22eb88b727e5ca2aa53b1967dfbe521cca6e35694077be4932c"
+  },
+  "source_sha256": {
+    "infra/__init__.py": "573ca79c3b40e50a999b5c1429276a5809e0533e82600d0662a0a02c846393cd",
+    "infra/__main__.py": "bdc84dc5be050ec4d6b22ab6b334e57cdd9b52cbdf4502366ae46027d42097ee",
+    "infra/deployment.example.json": "d1620b67585a14504ac2cef1fc28ebe00cd2ab03d110f653999e861c6c85b420",
+    "infra/deployment.schema.json": "79fe40f4afce828d716d527b11015ed8655444d27e4aa81243b93864cbb4702a",
+    "infra/reconcile.py": "6ec83482c22670f9805e12dace5666e93abbe760823900fefe24532845d353a6",
+    "infra/release.py": "eea9e4f942acd9ffc40421b8b36328fae518297fbc355647f97b7cfb550313bb",
+    "infra/spec.py": "863ed4c0732f4e12a22d9a2ee15adc7a3eba047860bc14db54425eb2e8939740",
+    "infra/templates.py": "16e07944eb3b0fe8858e952d6e4d492181db1106ed6d555d194f6dd01e9b89ba",
+    "infra/verify.py": "2d9b30c094fe4f116718d198de4696989d83f881765c4c2f59ddad56303a8408",
+    "kira/cursor.py": "90eb6194bdd6521f02caa7bd26fa0eee4cf52da04ee69cdac2b9c8c42a1d5f61",
+    "lambda/fetch_logs/lambda_function.py": "873dc62dfb550a92c43f52e86001cb4489911003e041916a34e2ba8b375db60a",
+    "lambda/trigger_investigation/lambda_function.py": "06d8801f2bed92ebf5795cfcac6fa9af80d94220d17fbfbc7dea4c4736e20a7c",
+    "requirements/dev.lock": "02fcddf95330186d18b9b3f2cb898dabe1370f0262631341023f602a73c47003",
+    "scripts/build_lambdas.py": "10891064a9a3a17b2b893de0db760b17cd61feb7694c06b5432b17e4e5dd8a9c",
+    "scripts/common.sh": "4043cf5d977adbfb167c881690a282777a7c8d0f7be3ec713e73c4e1a4eb584c",
+    "scripts/validate_infrastructure.py": "388bcb846bc1c1fcca0006916469d2eb217c375338e1d48881e508c08dabcec9",
+    "tests/test_infrastructure.py": "a05e827bf80612defc5709c9c985be49eb3cf0ea2927f350c53eec83aac220e8"
+  },
+  "pending": [
+    "Hosted Linux CI",
+    "Customer deployment inputs and bootstrap identities",
+    "AWS staging and IAM negative calls",
+    "Bedrock qualified executor canary",
+    "Live retirement/delivery/rollback"
+  ],
+  "gates": {
+    "G1": "PENDING_HOSTED_CI",
+    "G2": "PENDING_LIVE_STAGING"
+  }
+}

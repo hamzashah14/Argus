@@ -20,7 +20,7 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def build(functions, output, catalog_path, wheelhouse):
+def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Lambda builds require Python 3.12.")
     catalog = json.dumps(
@@ -68,6 +68,12 @@ def build(functions, output, catalog_path, wheelhouse):
         for path in sorted((ROOT / "kira").glob("*.py")):
             entries[str(path.relative_to(ROOT))] = path.read_bytes()
         entries["config/metric-catalog.json"] = catalog
+        scope = json.loads(log_scope_path.read_text()) if log_scope_path else []
+        if not isinstance(scope, list) or any(
+            not isinstance(group, str) or not group.startswith("/") for group in scope
+        ):
+            raise ValueError("Log scope must be an explicit list of log group names")
+        entries["config/log-scope.json"] = json.dumps(sorted(set(scope)), separators=(",", ":")).encode()
         entries["requirements/lambda.lock"] = lock.read_bytes()
         manifest = {
             "python": "3.12",
@@ -95,7 +101,7 @@ def build(functions, output, catalog_path, wheelhouse):
                     name: digest(data)
                     for name, data in files.items()
                     if name.startswith("kira/")
-                    or name in {"lambda_function.py", "config/metric-catalog.json"}
+                    or name in {"lambda_function.py", "config/metric-catalog.json", "config/log-scope.json"}
                 },
             }
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -108,8 +114,9 @@ def main():
     parser.add_argument("--output", type=Path, default=ROOT / ".build/lambda")
     parser.add_argument("--catalog", type=Path, default=ROOT / "config/metric-catalog.json")
     parser.add_argument("--wheelhouse", type=Path)
+    parser.add_argument("--log-scope", type=Path)
     args = parser.parse_args()
-    build(args.function or FUNCTIONS, args.output, args.catalog, args.wheelhouse)
+    build(args.function or FUNCTIONS, args.output, args.catalog, args.wheelhouse, args.log_scope)
 
 
 if __name__ == "__main__":

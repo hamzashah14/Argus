@@ -30,7 +30,9 @@ SAFETY_MARGIN_S = 45
 MAX_MESSAGE_BYTES = SNS_MESSAGE_BYTES
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 DOWN_STATES = {"stopped", "terminated"}
-ALARM_NAME_INSTANCE_RE = re.compile(r"^aiops-(i-[0-9a-f]+)-")
+ALARM_NAME_INSTANCE_RE = re.compile(
+    r"^" + re.escape(os.getenv("ALARM_NAME_PREFIX", "aiops")) + r"-(i-[0-9a-f]+)-"
+)
 
 
 def _utc_now():
@@ -182,6 +184,9 @@ def handle_record(message_body, remaining_s, received_at=None, notification_time
     instance_id, time_str, reason = extract_incident(message_body)
     if not instance_id:
         return
+    allowed = os.getenv("ALLOWED_INSTANCE_IDS", "")
+    if allowed and instance_id not in allowed.split(","):
+        raise ValueError("Incident instance is outside this deployment's inventory.")
     context = incident_context(message_body, received_at, notification_time)
     if not REPORTS_TOPIC_ARN:
         raise RuntimeError("REPORTS_TOPIC_ARN is not set; cannot deliver incident reports.")

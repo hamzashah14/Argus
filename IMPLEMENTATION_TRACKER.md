@@ -4,9 +4,9 @@
 
 Updated: 5 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
 
-Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_1_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
+Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_2_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Active task: **P1.01 hosted CI verification**; Phase 1 implementation and local checks complete. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Active tasks: **P2.01–P2.06 local implementation verified; live acceptance pending**, explicitly authorized by the user. P1.01 hosted CI remains pending. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
@@ -14,7 +14,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 |---|---:|---|---|---|
 | 0 — Baseline and production requirements | 6/6 | DONE — new-deployment assessment | G0: PASS — deployment qualification remains later | [Preflight](docs/implementation/phase-0/PREFLIGHT.md); [clean checkout](docs/implementation/evidence/phase-0/checkout-validation.json) |
 | 1 — Correctness fixes and automated checks | 7/8 | VERIFYING | G1: PENDING hosted CI; local checks PASS | [Evidence](docs/implementation/phase-1/VALIDATION.md) |
-| 2 — Isolated infrastructure and safe release mechanics | 0/6 | NOT_STARTED | G2: NOT_RUN | — |
+| 2 — Isolated infrastructure and safe release mechanics | 0/6 | VERIFYING | G2: PENDING live staging; local checks PASS | [Evidence](docs/implementation/phase-2/VALIDATION.md) |
 | 3 — Durable incident processing and notification | 0/8 | NOT_STARTED | G3: NOT_RUN | — |
 | 4 — Detection coverage and operational visibility | 0/6 | NOT_STARTED | G4: NOT_RUN | — |
 | 5 — Identity, evidence safety, and diagnostic quality | 0/6 | NOT_STARTED | G5: NOT_RUN | — |
@@ -49,12 +49,12 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P2.01 | Define infrastructure as code and migration ownership | P0.04, P0.05, P1.03 | NOT_STARTED | — | — | — | — |
-| P2.02 | Separate roles, secrets, and resource access | P2.01 | NOT_STARTED | — | — | — | — |
-| P2.03 | Build immutable Lambda releases | P1.01, P2.01 | NOT_STARTED | — | — | — | — |
-| P2.04 | Bind agent releases to exact tool versions | P1.02, P2.02, P2.03 | NOT_STARTED | — | — | — | — |
-| P2.05 | Make deployment verification fail accurately | P2.01, P1.03 | NOT_STARTED | — | — | — | — |
-| P2.06 | Reconcile retired alarms and subscribers | P0.02, P2.01, P2.05 | NOT_STARTED | — | — | — | — |
+| P2.01 | Define infrastructure as code and migration ownership | P0.04, P0.05, P1.03 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Deploy isolated staging from clean source; review resource ownership |
+| P2.02 | Separate roles, secrets, and resource access | P2.01 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Bootstrap customer roles; exercise intended/denied AWS calls |
+| P2.03 | Build immutable Lambda releases | P1.01, P2.01 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Prove active versions/config stay unchanged across candidates |
+| P2.04 | Bind agent releases to exact tool versions | P1.02, P2.02, P2.03 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Run paid staging canary and failed-grant isolation test |
+| P2.05 | Make deployment verification fail accurately | P2.01, P1.03 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Run real coverage and AWS failure injection checks |
+| P2.06 | Reconcile retired alarms and subscribers | P0.02, P2.01, P2.05 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-2-release-isolation` | [Local validation](docs/implementation/phase-2/VALIDATION.md) | Verify live retirements, former-recipient exclusion and rollback |
 
 **Phase 3 task records — Durable incident processing and notification.** Details and acceptance criteria are in the plan under the matching ID.
 
@@ -182,7 +182,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | 2026-10-01 | P0.01–P0.06 | Preserved existing work; documented synthetic scope, inventory, targets, decisions and deferrals; reproduced 21 checks and 10 defects | [Work log](docs/implementation/WORK_LOG.md) | Finish fresh-checkout baseline verification; do not start Phase 1 |
 | 2026-10-01 | P0.01; G0 review | Baseline saved as `1ad38ec` and reproduced from a clean clone; 5/6 reference tasks DONE; P0.05 deferred; original G0 not passed | [Checkout evidence](docs/implementation/evidence/phase-0/checkout-validation.json) | Await next phase instruction or actual target; no application changes |
 | 2026-10-01 | P0.05; G0 new-deployment review | User clarified empty AWS starting point; verified account and 9 regional capabilities; recorded capacity gap and later deployment checks; P0 complete under explicit plan clarification | [Preflight](docs/implementation/phase-0/PREFLIGHT.md) | P1.01 next; no resources created |
+| 2026-10-05 | P1.01–P1.08 | Implemented correctness/build/UI changes; 147 tests, schema/lint/scans and deterministic packaging pass locally | [Validation](docs/implementation/phase-1/VALIDATION.md) | P1.01 VERIFYING for hosted CI; Phase 2 not started |
+| 2026-10-05 | P2.01–P2.06 | Local release/infrastructure implementation: 204 tests, 12 templates, deterministic builds and scans pass | [Validation](docs/implementation/phase-2/VALIDATION.md) | VERIFYING: hosted CI and live G2 pending; Phase 3 not started |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
-
-| 2026-10-05 | P1.01–P1.08 | Implemented correctness/build/UI changes; 147 tests, schema/lint/scans and deterministic packaging pass locally | [Validation](docs/implementation/phase-1/VALIDATION.md) | P1.01 VERIFYING for hosted CI; Phase 2 not started |

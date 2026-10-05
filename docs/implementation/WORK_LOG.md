@@ -149,3 +149,53 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Evidence: `evidence/phase-1/clean-checkout.json`. Local preview server stopped;
   screenshot retained. The only Phase 1 acceptance step left is hosted CI, not
   cloud provisioning. Resume by validating that workflow on the saved source.
+
+## 2026-10-05 — Phase 2 authorized
+
+- User requested Phase 2. Created `codex/phase-2-release-isolation` from `16a523d`.
+- Read saved state, Phase 2 acceptance criteria, prior decisions and deployment
+  scripts. G1 remains pending hosted CI; proceeding is explicitly user-directed.
+- Implement CloudFormation resource plans, environment/role boundaries, immutable
+  releases, candidate/promote verification and owned-resource reconciliation.
+  Use synthetic inputs until target model, deployment identities and live budget
+  are selected. No staging deployment or production qualification is implied.
+
+## 2026-10-05 — Phase 2 infrastructure/release checkpoint
+
+- Added strict inventory and six CloudFormation stage generators; 12 same/split
+  region synthetic templates pass cfn-lint. Locked and installed cfn-lint in dev
+  dependencies. Original 147 tests pass after runtime scope/secret integration.
+- Added versioned build/upload/render and explicit change-set review/execution
+  commands. Candidate stacks are create-only; routing is separately gated.
+- Added exact metric/region/account/quota checks and owned-resource retirement
+  plans. New infrastructure tests cover failures and environment isolation.
+- User said “Go ahead” during implementation. Live inputs remain unspecified;
+  no cloud calls were made. Continue review and local evidence, keeping staging
+  acceptance and G1 hosted CI explicitly pending. See phase-2/NOTES.md.
+
+## 2026-10-05 — Phase 2 local acceptance checkpoint
+
+- Completed P2.01–P2.06 repository work: strict regional inventory/templates,
+  separate role scopes, pinned secret versions, qualified Lambda snapshots,
+  release-specific agents, reviewed change sets, sealed release stacks, candidate
+  canary receipts, telemetry coverage, routing validation and owned retirement.
+- Added create-only candidate protections, exact source/artifact/config/schema
+  verification, stale-plan checks and explicit synthetic-reference cloud refusal.
+  Fixed already-disabled retired alarms blocking future promotion. Retained roles
+  and invoke grants with old versions so rollback dependencies remain available.
+- Validation: 204 tests (147 previous + 57 new), 12 cfn-lint templates, complete
+  six-stage/47-resource reference render, Ruff lint/format, five ShellCheck files,
+  both OpenAPI schemas, pip check, Git whitespace and secret scan pass locally.
+  System PATH did not expose ShellCheck; used the pinned .venv/bin/shellcheck.
+- Updated hash-locked dev dependencies for cfn-lint; pip-audit scanned 93 packages
+  with zero known vulnerabilities. Three Lambda ZIP pairs match byte-for-byte;
+  all isolated SDK imports pass. Inventory-specific packages also built/verified.
+- Published sanitized evidence, operator bootstrap/deployment/sealing/promotion/
+  rollback instructions and ownership/import-versus-replace decisions. Raw logs
+  and generated synthetic plans remain ignored under .build/ and .local/phase2/.
+- No AWS calls, deployment, model invocation, notification, push or CI dispatch.
+  P2 tasks VERIFYING; live G2 and hosted G1 remain pending. Roles for future
+  ingestion/dispatch/notification are boundaries only; Phase 3 runtime not started.
+- Reviewed 23 additional detector fingerprints as generated SHA-256 integrity
+  identifiers, verified against source/build evidence; baseline remains exact-match
+  only. No real credential was found or added to the baseline.

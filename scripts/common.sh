@@ -69,6 +69,8 @@ aws_account_id() {
   actual="$(aws sts get-caller-identity --query Account --output text 2>/dev/null)" \
     || die "AWS identity check failed. Authenticate the intended profile first."
   [[ "$actual" == "$EXPECTED_ACCOUNT_ID" ]] || die "AWS identity differs from EXPECTED_ACCOUNT_ID; no cloud changes were made."
+  [[ "$ENVIRONMENT" == "development" && "${ALLOW_LEGACY_DEVELOPMENT_DEPLOY:-false}" == "true" ]] \
+    || die "Legacy mutable deployment is disabled. Use python -m infra and the Phase 2 guide. Development-only opt-in: ALLOW_LEGACY_DEVELOPMENT_DEPLOY=true."
   echo "$actual"
 }
 

@@ -1,10 +1,12 @@
 """Bedrock Agent tool: list an instance's log groups, or search one around an incident."""
 
+import json
 import math
 import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import boto3
 from botocore.config import Config
@@ -140,6 +142,9 @@ def discover_log_groups(client, instance_id, continuation=None, event=None):
         kwargs["nextToken"] = cursor.decode(continuation, bound_scope)
     response = client.describe_log_groups(**kwargs)
     names = [group["logGroupName"] for group in response.get("logGroups", [])]
+    allowed_groups = configured_log_scope()
+    if allowed_groups is not None:
+        names = [group for group in names if group in allowed_groups]
     token = response.get("nextToken")
     result = {
         "status": "log_groups_found" if names or token else "no_log_groups_found",
@@ -242,9 +247,27 @@ def _format_lines(rows):
     return lines
 
 
+def configured_log_scope():
+    path = os.getenv("LOG_SCOPE_FILE")
+    if not path:
+        return None  # Legacy workflow only; Phase 2 always sets a packaged scope.
+    value = json.loads(Path(path).read_text())
+    if not isinstance(value, list) or not value or any(not isinstance(item, str) for item in value):
+        raise BadInput("Deployment log scope is invalid.")
+    return set(value)
+
+
 def search(params, deadline, event=None):
     instance_id = parse_instance_id(params.get("instance_id"))
     log_group = parse_log_group(params.get("log_group_name"))
+    scope = configured_log_scope()
+    if scope is not None:
+        if instance_id not in os.getenv("ALLOWED_INSTANCE_IDS", "").split(","):
+            raise BadInput("Instance is outside the deployment inventory.")
+        if log_group and (
+            log_group not in scope or not log_group.startswith(f"{LOG_GROUP_PREFIX}/{instance_id}/")
+        ):
+            raise BadInput("Log group is outside this instance's authorized inventory.")
 
     if not log_group:
         if not instance_id:

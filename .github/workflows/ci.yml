@@ -27,6 +27,7 @@ jobs:
           ruff format --check .
           shellcheck setup-iam.sh setup-lambdas.sh deploy.sh setup-alerts.sh scripts/common.sh
           python scripts/validate_schemas.py
+          python scripts/validate_infrastructure.py
       - name: Unit, contract and UI regression tests (no AWS access)
         run: python -m pytest --junitxml=.build/tests.xml
       - name: Secret candidate scan
@@ -37,11 +38,13 @@ jobs:
         run: python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
       - name: Independent deterministic builds and isolated package imports
         run: python scripts/verify_build.py
+      - name: Build the synthetic inventory release without AWS access
+        run: python -m infra build --spec infra/deployment.example.json --output .build/reference-lambda --wheelhouse .build/wheels
       - name: Save validation and artifact evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: phase-1-validation
+          name: implementation-validation
           path: |
             .build/tests.xml
             .build/dependency-audit.json

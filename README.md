@@ -1,8 +1,8 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phase 1 correctness and UI changes pass local validation; hosted CI is pending.
+Implementation status: Phase 2 infrastructure and release controls are implemented locally; hosted CI and AWS staging validation remain pending.
 See [implementation state](docs/implementation/STATE.md), the
-[task tracker](IMPLEMENTATION_TRACKER.md), and [Phase 1 guide](docs/implementation/phase-1/GUIDE.md).
+[task tracker](IMPLEMENTATION_TRACKER.md), and [Phase 1 guide](docs/implementation/phase-1/GUIDE.md), and [Phase 2 deployment guide](docs/implementation/phase-2/GUIDE.md).
 This is not a qualified production release. Customers deploy and operate their own
 infrastructure; the project provides no managed service. Desktop packaging is planned later.
 
@@ -25,7 +25,28 @@ Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-tri
 
 ---
 
-## 1. Configure
+## Current deployment path
+
+Use the [Phase 2 CloudFormation workflow](docs/implementation/phase-2/GUIDE.md)
+for new deployments. It creates separate candidate releases and requires reviewed
+change sets and verification before routing alerts to them. Start locally:
+
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements/dev.lock
+.venv/bin/python -m infra render --spec infra/deployment.example.json --output .local/phase2/reference-plan
+```
+
+The example is synthetic and cloud commands refuse it. Customer deployment files
+belong in ignored private storage. No account-wide managed service is provided.
+See the [ownership/migration plan](docs/implementation/phase-2/OWNERSHIP.md).
+
+The shell instructions below are retained as a **legacy development reference**.
+They are disabled by default and cannot deploy staging/production. A development
+operator must explicitly set `ALLOW_LEGACY_DEVELOPMENT_DEPLOY=true` to use them;
+that workflow still edits mutable functions. Prefer the CloudFormation path.
+
+## 1. Legacy configuration
 
 ```bash
 cp config.env.example config.env     # read by every setup script
@@ -66,7 +87,7 @@ Configuration is validated before cloud changes. Unknown keys are rejected; defa
 
 1. Test the DRAFT in the agent's test pane.
 2. **Create an alias** (e.g. `live`). This snapshots the prepared DRAFT as a numbered version. Put the alias ID in `config.env` (`BEDROCK_AGENT_ALIAS_ID`) and in the chat UI's environment, and put the agent ID in both too.
-3. **After every later `./deploy.sh`**, edit the alias and choose "Create a new version and associate it to this alias". The agent alias retains its version, but tool Lambda code is still mutable in this workflow. Full release isolation and rollback are Phase 2 work.
+3. **After every later `./deploy.sh`**, edit the alias and choose "Create a new version and associate it to this alias". The agent alias retains its version, but tool Lambda code is still mutable in this workflow. Use the Phase 2 workflow for release isolation and reviewed rollback. Its live staging gate remains pending.
 4. If `deploy.sh` says the old `aiops-fetch-health` Lambda still exists, delete it with the command it prints.
 
 Don't use `TSTALIASID` in production: it follows the editable DRAFT.

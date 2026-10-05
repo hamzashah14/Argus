@@ -1,0 +1,176 @@
+"""Fail-closed cloud verification. Read operations never become empty-success results."""
+
+import base64
+import json
+from datetime import datetime, timezone
+
+from botocore.exceptions import ClientError
+
+from infra.spec import alarm_descriptors, digest, name, topic_arn
+
+
+class VerificationError(RuntimeError):
+    pass
+
+
+def assert_account(sts, spec):
+    if spec["reference_only"]:
+        raise VerificationError("Synthetic reference inputs cannot be used for cloud operations")
+    if sts.get_caller_identity()["Account"] != spec["account_id"]:
+        raise VerificationError("Wrong AWS account; no writes permitted")
+
+
+def assert_stack_absent(client, stack_name):
+    try:
+        client.describe_stacks(StackName=stack_name)
+    except ClientError as exc:
+        # AccessDenied, throttling and arbitrary ValidationError must never be interpreted as absent.
+        error = exc.response.get("Error", {})
+        if error.get("Code") == "ValidationError" and "does not exist" in error.get("Message", ""):
+            return
+        raise
+    raise VerificationError("Release stack already exists; use a new release_id, never update a candidate")
+
+
+def assert_concurrency(client, requested):
+    if requested is None or requested == 0:
+        return
+    settings = client.get_account_settings()
+    unreserved = settings["AccountLimit"]["UnreservedConcurrentExecutions"]
+    if requested > max(0, unreserved - 100):
+        raise VerificationError("Reserved concurrency would consume Lambda's required unreserved capacity")
+
+
+def put_targets_checked(events, **kwargs):
+    result = events.put_targets(**kwargs)
+    if result.get("FailedEntryCount", 0) or result.get("FailedEntries"):
+        raise VerificationError("EventBridge rejected one or more targets")
+    if "FailedEntryCount" not in result:
+        raise VerificationError("EventBridge response omitted its per-entry outcome")
+    return result
+
+
+def exact_metric_exists(client, descriptor):
+    token = None
+    while True:
+        request = {"Namespace": descriptor["namespace"], "MetricName": descriptor["metric_name"]}
+        if token:
+            request["NextToken"] = token
+        response = client.list_metrics(**request)
+        for metric in response["Metrics"]:
+            if {d["Name"]: d["Value"] for d in metric.get("Dimensions", [])} == descriptor["dimensions"]:
+                return True
+        token = response.get("NextToken")
+        if not token:
+            return False
+
+
+def coverage(spec, clients):
+    """All required telemetry and filter fixtures must succeed before promotion."""
+    checks = []
+    assert_account(clients("sts", spec["monitor_region"]), spec)
+    assert_concurrency(clients("lambda", spec["monitor_region"]), spec["reserved_concurrency"])
+    ec2 = clients("ec2", spec["monitor_region"])
+    expected = {item["id"] for item in spec["instances"]}
+    response = ec2.describe_instances(InstanceIds=sorted(expected))
+    actual = {
+        i["InstanceId"]
+        for reservation in response["Reservations"]
+        for i in reservation["Instances"]
+        if i["State"]["Name"] not in {"terminated", "shutting-down"}
+    }
+    if expected != actual:
+        raise VerificationError("Inventory includes missing or terminated instances")
+    cw = clients("cloudwatch", spec["monitor_region"])
+    for descriptor in alarm_descriptors(spec):
+        if not exact_metric_exists(cw, descriptor):
+            raise VerificationError(f"Required metric unavailable: {descriptor['id']}")
+        checks.append({"id": descriptor["id"], "status": "present"})
+    logs = clients("logs", spec["monitor_region"])
+    if any(i["nginx_alarm"] for i in spec["instances"]):
+        for kind, fixture in spec["nginx_filters"].items():
+            result = logs.test_metric_filter(
+                filterPattern=fixture["pattern"], logEventMessages=[fixture["match"], fixture["miss"]]
+            )
+            if [item["eventNumber"] for item in result["matches"]] != [1]:
+                raise VerificationError(
+                    f"Required {kind} metric filter failed its positive/negative fixtures"
+                )
+    return {
+        "spec_hash": digest(spec),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "status": "PASS",
+        "metrics": checks,
+        "limit": "Descriptor existence and filter fixtures; not end-to-end detection or notification delivery",
+    }
+
+
+def verify_function(client, arn, artifact):
+    if not arn.rsplit(":", 1)[-1].isdigit():
+        raise VerificationError("Expected a qualified numeric Lambda version")
+    result = client.get_function(FunctionName=arn)["Configuration"]
+    wanted = base64.b64encode(bytes.fromhex(artifact["sha256"])).decode()
+    if result["CodeSha256"] != wanted or result["Runtime"] != "python3.12" or result["State"] != "Active":
+        raise VerificationError("Candidate Lambda code/runtime/state mismatch")
+    if result.get("LastUpdateStatus") not in (None, "Successful"):
+        raise VerificationError("Candidate Lambda update did not complete")
+    return {
+        "arn": arn,
+        "code_sha256": artifact["sha256"],
+        "configuration": result.get("Environment", {}).get("Variables", {}),
+    }
+
+
+def routing_health(spec, clients, worker_arn):
+    from infra.templates import routing
+
+    expected = routing(spec, worker_arn, "ABCDEFGHIJ", "KLMNOPQRST")["Resources"]
+    events = clients("events", spec["monitor_region"])
+    rule = events.describe_rule(Name=name(spec, "ec2-down"))
+    if rule["State"] != ("DISABLED" if spec["maintenance_mode"] else "ENABLED"):
+        raise VerificationError("EC2 state rule enablement differs from the intended mode")
+    if json.loads(rule["EventPattern"]) != expected["Ec2Down"]["Properties"]["EventPattern"]:
+        raise VerificationError("EC2 state rule inventory or event selection differs from the plan")
+    result = events.list_targets_by_rule(Rule=name(spec, "ec2-down"))
+    if result.get("NextToken") or result["Targets"] != [{"Id": "alarms", "Arn": topic_arn(spec, "alarms")}]:
+        raise VerificationError("EC2 rule target differs from desired routing")
+    sns = clients("sns", spec["monitor_region"])
+    for topic, protocol, endpoint in (
+        ("alarms", "lambda", worker_arn),
+        ("reports", "email", spec["notification_email"]),
+    ):
+        subs = []
+        for page in sns.get_paginator("list_subscriptions_by_topic").paginate(
+            TopicArn=topic_arn(spec, topic)
+        ):
+            subs.extend(page["Subscriptions"])
+        if (
+            len(subs) != 1
+            or subs[0]["Protocol"] != protocol
+            or subs[0]["Endpoint"] != endpoint
+            or not subs[0]["SubscriptionArn"].startswith("arn:")
+        ):
+            raise VerificationError("Routing includes an unexpected or unconfirmed subscriber")
+    desired = {
+        r["Properties"]["AlarmName"]: r["Properties"]
+        for r in expected.values()
+        if r["Type"] == "AWS::CloudWatch::Alarm"
+    }
+    alarms = clients("cloudwatch", spec["monitor_region"]).describe_alarms(AlarmNames=sorted(desired))
+    actual = {a["AlarmName"]: a for a in alarms.get("MetricAlarms", [])}
+    if alarms.get("NextToken") or set(actual) != set(desired):
+        raise VerificationError("Required alarm registrations are missing or incomplete")
+    for alarm_name, properties in desired.items():
+        registered = actual[alarm_name]
+        for key, value in properties.items():
+            if key == "Tags":
+                continue
+            current = registered.get(key)
+            if key == "Dimensions":
+                current = sorted(current or [], key=lambda d: d["Name"])
+                value = sorted(value, key=lambda d: d["Name"])
+            if current != value:
+                raise VerificationError(f"Required alarm configuration differs: {alarm_name}/{key}")
+        if registered.get("OKActions") or registered.get("InsufficientDataActions"):
+            raise VerificationError("Required alarm has unexpected additional notification actions")
+    return {"status": "PASS", "scope": "routing registration only; delivery requires a live canary"}

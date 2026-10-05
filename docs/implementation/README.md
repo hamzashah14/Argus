@@ -60,3 +60,10 @@ referencing private evidence from this folder.
 After a code fix, preserve these historical observations. Add positive regression
 tests to the discovered suite in the responsible phase. A diagnostic changing to
 `NO_LONGER_REPRODUCED` requires investigation; it is not proof of a correct fix.
+
+## Phase 2 records
+
+- [Operator guide](phase-2/GUIDE.md): local preparation and explicit AWS commands.
+- [Ownership and migration](phase-2/OWNERSHIP.md): retain/import/replace decisions.
+- [Implementation checkpoint](phase-2/NOTES.md): resume context and open gates.
+- [Local validation](phase-2/VALIDATION.md): results, reproduction and live acceptance work.

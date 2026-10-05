@@ -1,0 +1,203 @@
+"""Strict, secret-free deployment inventory shared by plans and verification."""
+
+import hashlib
+import json
+from pathlib import Path
+
+from jsonschema import Draft202012Validator
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def load(path):
+    value = json.loads(Path(path).read_text())
+    schema = json.loads((ROOT / "infra/deployment.schema.json").read_text())
+    errors = sorted(Draft202012Validator(schema).iter_errors(value), key=lambda e: str(e.path))
+    if errors:
+        # No submitted values (which may contain secrets) in diagnostics.
+        raise ValueError(f"Invalid deployment field: {'.'.join(map(str, errors[0].path)) or 'root'}")
+    ids = [item["id"] for item in value["instances"]]
+    if len(set(ids)) != len(ids):
+        raise ValueError("Duplicate instance IDs")
+    if value["reserved_concurrency"] == 0 and not value["maintenance_mode"]:
+        raise ValueError("Zero concurrency requires maintenance mode")
+    account = value["account_id"]
+    for field in ("ui_principal_arn", "ci_principal_arn", "deployment_role_arn"):
+        if f":{account}:role/" not in value[field]:
+            raise ValueError(f"{field} must be an explicit role in the target account")
+    if len({value[f] for f in ("ui_principal_arn", "ci_principal_arn", "deployment_role_arn")}) != 3:
+        raise ValueError("UI, CI and deployment identities must be distinct")
+    for arn in value["model_arns"]:
+        if ":foundation-model/" not in arn and f":{account}:" not in arn:
+            raise ValueError("Model profile must belong to the target account")
+    if value["model_id"].startswith("arn:") and value["model_id"] not in value["model_arns"]:
+        raise ValueError("Model ARN must be included in model_arns")
+    return value
+
+
+def prefix(spec):
+    return f"{spec['project']}-{spec['environment']}"
+
+
+def log_prefix(spec):
+    segment = spec["log_segment"]
+    return f"/{spec['project']}/{spec['environment']}" + (f"/{segment}" if segment else "")
+
+
+def tags(spec, release=False):
+    value = {
+        "Project": spec["project"],
+        "Environment": spec["environment"],
+        "ManagedBy": "kira-cloudformation",
+    }
+    if release:
+        value["Release"] = spec["release_id"]
+    return value
+
+
+def name(spec, suffix, release=False):
+    value = f"{prefix(spec)}-{spec['release_id']}-" if release else f"{prefix(spec)}-"
+    value += suffix
+    if len(value) > 64:
+        raise ValueError("Resource name exceeds 64 characters")
+    return value
+
+
+def topic_arn(spec, topic):
+    return f"arn:aws:sns:{spec['monitor_region']}:{spec['account_id']}:{name(spec, topic)}"
+
+
+def alarm_descriptors(spec):
+    output = []
+    for instance in spec["instances"]:
+        iid = instance["id"]
+        dimensions = {"InstanceId": iid}
+        definitions = [
+            ("status", "AWS/EC2", "StatusCheckFailed", "Maximum", dimensions, 0, "GreaterThanThreshold", 60)
+        ]
+        if instance["resource_alarms"]:
+            definitions += [
+                ("cpu", "AWS/EC2", "CPUUtilization", "Average", dimensions, 90, "GreaterThanThreshold", 300),
+                (
+                    "memory",
+                    "CWAgent",
+                    "mem_used_percent",
+                    "Average",
+                    dimensions,
+                    90,
+                    "GreaterThanThreshold",
+                    300,
+                ),
+                (
+                    "disk",
+                    "CWAgent",
+                    "disk_used_percent",
+                    "Average",
+                    {**dimensions, "path": instance["disk_path"]},
+                    85,
+                    "GreaterThanThreshold",
+                    300,
+                ),
+            ]
+        if instance["process_exe"]:
+            definitions.append(
+                (
+                    "process",
+                    "CWAgent",
+                    "procstat_lookup_pid_count",
+                    "Minimum",
+                    {**dimensions, "exe": instance["process_exe"], "pid_finder": "native"},
+                    1,
+                    "LessThanThreshold",
+                    60,
+                )
+            )
+        if instance["nginx_alarm"]:
+            definitions.append(
+                (
+                    "nginx",
+                    f"{spec['project']}/{spec['environment']}/Nginx",
+                    f"nginx-upstream-errors-{iid}",
+                    "Sum",
+                    {},
+                    5,
+                    "GreaterThanOrEqualToThreshold",
+                    60,
+                )
+            )
+        for suffix, namespace, metric, statistic, dims, threshold, comparison, period in definitions:
+            output.append(
+                {
+                    "id": f"{iid}-{suffix}",
+                    "instance_id": iid,
+                    "namespace": namespace,
+                    "metric_name": metric,
+                    "statistic": statistic,
+                    "dimensions": dims,
+                    "threshold": threshold,
+                    "comparison": comparison,
+                    "period": period,
+                    "alarm_name": name(spec, f"{iid}-{suffix}"),
+                }
+            )
+    return output
+
+
+def metric_catalog(spec):
+    return [
+        {
+            key: item[key]
+            for key in ("id", "instance_id", "namespace", "metric_name", "statistic", "dimensions")
+        }
+        for item in alarm_descriptors(spec)
+    ]
+
+
+def log_groups(spec):
+    return sorted(
+        {
+            f"{log_prefix(spec)}/{item['id']}/{suffix}"
+            for item in spec["instances"]
+            for suffix in set(item["log_groups"])
+            | ({"nginx-access", "nginx-error"} if item["nginx_alarm"] else set())
+        }
+    )
+
+
+def cwagent(spec, instance):
+    metrics = {
+        "mem": {"measurement": ["mem_used_percent"]},
+        "swap": {"measurement": ["swap_used_percent"]},
+        "disk": {"measurement": ["used_percent"], "resources": [instance["disk_path"]], "drop_device": True},
+    }
+    if instance["process_exe"]:
+        metrics["procstat"] = [{"exe": instance["process_exe"], "measurement": ["pid_count"]}]
+    return {
+        "agent": {"metrics_collection_interval": 60},
+        "metrics": {
+            "namespace": "CWAgent",
+            "append_dimensions": {"InstanceId": "${aws:InstanceId}"},
+            "aggregation_dimensions": [["InstanceId"], ["InstanceId", "path"]],
+            "metrics_collected": metrics,
+        },
+        "logs": {
+            "logs_collected": {
+                "files": {
+                    "collect_list": [
+                        {
+                            "file_path": f"/var/log/nginx/{kind}.log",
+                            "log_group_name": f"{log_prefix(spec)}/{instance['id']}/nginx-{kind}",
+                            "log_stream_name": instance["id"],
+                            "retention_in_days": spec["log_retention_days"],
+                        }
+                        for kind in ("access", "error")
+                        if instance["nginx_alarm"]
+                    ]
+                }
+            }
+        },
+    }
