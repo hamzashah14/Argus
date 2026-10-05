@@ -18,6 +18,7 @@ runs successfully against this source. No Phase 2 work has started.
 | Secret candidate scan | PASS | Reviewed synthetic values/checksums only; new synthetic candidate negative control rejected |
 | Lambda build | PASS | Three independently rebuilt ZIPs identical; bundled boto3 1.43.106 imports under Python -S |
 | Browser review | PASS | Synthetic local login and workspace inspected at 874×954; header spacing corrected; connection remains unverified |
+| Clean source checkout | PASS | `ea8a079`: 147 tests, lint/format/schema/secret checks; identical packages; clean before/after |
 | Hosted CI / Linux runtime | NOT RUN | Workflow configured; no remote push or CI dispatch in this session |
 | AWS / production qualification | NOT RUN | No deployment, model call or notification; later phase gates remain open |
 
@@ -49,7 +50,9 @@ was then removed. No real secret was found or added to the baseline.
 
 ## Acceptance limitations and next action
 
-The branch is `codex/phase-1-correctness`, based on `badc15e`. Publish/review the
+The branch is `codex/phase-1-correctness`, based on `badc15e`; implementation checkpoint `ea8a079`.
+A fresh local clone reproduced checks/builds using the hash-installed Python
+environment and verified wheelhouse. This was not a fresh Linux install. Publish/review the
 branch through the repository's normal process and retain a successful
 `quality-and-build` run before setting P1.01 DONE and G1 PASS. Local test success
 does not establish Linux CI, Bedrock compatibility or production readiness.

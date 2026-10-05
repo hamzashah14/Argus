@@ -137,3 +137,15 @@ Append entries; retain previous outcomes when later work supersedes them.
 - P1.02–P1.08 DONE for local acceptance. P1.01 VERIFYING and G1 PENDING until the
   configured hosted CI workflow passes. No push, cloud deployment, model call,
   notification or Phase 2 work. All cross-phase audit findings remain open.
+
+## 2026-10-05 — Saved checkpoint and clean-checkout verification
+
+- Saved local implementation commit `ea8a079` on `codex/phase-1-correctness`.
+  No push. Git metadata mutations required sandbox escalation and were approved.
+- Cloned that revision with `--no-hardlinks --no-local` into ignored local storage.
+  Reused the hash-installed Python 3.12.14 environment and verified Lambda wheels;
+  all 147 tests, Ruff lint/format, OpenAPI, secret scan and independent package
+  builds pass. ZIP hashes match the original checkout. Clone clean before/after.
+- Evidence: `evidence/phase-1/clean-checkout.json`. Local preview server stopped;
+  screenshot retained. The only Phase 1 acceptance step left is hosted CI, not
+  cloud provisioning. Resume by validating that workflow on the saved source.

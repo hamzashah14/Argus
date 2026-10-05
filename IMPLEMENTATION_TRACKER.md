@@ -36,14 +36,14 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P1.01 | Create reproducible builds and CI | P0.01, P0.06 | VERIFYING | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Hosted CI run pending |
-| P1.02 | Repair and validate tool contracts | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.03 | Centralize and validate configuration | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.04 | Normalize timestamps and retain uncertainty | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.05 | Resolve metrics using exact dimensions | P0.02, P1.02 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.06 | Bound log discovery and all tool responses | P1.02 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.07 | Make report payloads byte-safe | P1.01 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
-| P1.08 | Handle UI failures and bound sessions | P1.01, P1.03 | DONE | Codex | `codex/phase-1-correctness` | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.01 | Create reproducible builds and CI | P0.01, P0.06 | VERIFYING | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Hosted CI run pending |
+| P1.02 | Repair and validate tool contracts | P1.01 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.03 | Centralize and validate configuration | P1.01 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.04 | Normalize timestamps and retain uncertainty | P1.01 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.05 | Resolve metrics using exact dimensions | P0.02, P1.02 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.06 | Bound log discovery and all tool responses | P1.02 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.07 | Make report payloads byte-safe | P1.01 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
+| P1.08 | Handle UI failures and bound sessions | P1.01, P1.03 | DONE | Codex | `ea8a079` (`codex/phase-1-correctness`) | [Local validation](docs/implementation/phase-1/VALIDATION.md) | Local acceptance passed; live integration remains later |
 
 **Phase 2 task records — Isolated infrastructure and safe release mechanics.** Details and acceptance criteria are in the plan under the matching ID.
 
