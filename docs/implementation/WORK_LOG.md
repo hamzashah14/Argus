@@ -529,3 +529,17 @@ Append entries; retain previous outcomes when later work supersedes them.
   calls, cloud resources, live probes, inference, notifications, push or CI run.
   Next is checkpoint verification, then customer-budgeted staging or explicitly
   chosen Floci harness; Phase 5 needs separate user direction.
+
+
+- Saved corrective implementation checkpoint `99695cf` locally, including the
+  preserved earlier review records. No push. From its clean tree, complete old
+  6/8 and extended 9/11-stage renders reran PASS with source_dirty false; synthetic
+  seed-health CLI operations refused all four bundles before AWS client creation.
+  Added that public checkpoint checksum to evidence and the exact reviewed secret
+  baseline: 35 additions total since 342, final 377. Documentation follow-up
+  records this result without runtime changes. Live gates remain unchanged.
+
+- Evidence metadata correction: the checksum-generation helper initially recorded
+  its system Python 3.14.7. Actual tests/builds/validators used `.venv` Python
+  3.12.14 throughout. Corrected the evidence field after checking that runtime;
+  all recorded source hashes still match. This changes no implementation/result.

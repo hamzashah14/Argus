@@ -27,6 +27,11 @@ path/boundary and deployed-template checks. It strengthens the standalone comman
 and removes duplicate promotion checks; it does not imply prior promotion ignored
 all IAM. Historical observations and source checksums are preserved.
 
+Local checkpoint `99695cf`: **410 tests (61 new), 64 templates and 13
+deterministic ZIP pairs/import checks PASS**. Both 6/8 and 9/11-stage release
+layouts reran from clean source; synthetic cloud commands remained refused.
+This records local implementation, not a live gate.
+
 Current tests live in `tests/test_review_corrections.py` plus the updated existing
 runtime, incident and observation suites. SDK/account calls are denied in the
 parent test process. Socket regressions use a local HTTP server, dummy credentials

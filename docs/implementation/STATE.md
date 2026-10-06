@@ -1,7 +1,8 @@
 # Resume here
 
 Updated: 2026-10-06. **User-authorized Phases 1–4 corrective batches A–C are
-implemented locally; R01–R08 VERIFYING pending live qualification.** **410 tests**, 64 templates and 13 deterministic package pairs/import checks
+implemented locally; R01–R08 VERIFYING pending live qualification.**
+**410 tests**, 64 templates and 13 deterministic package pairs/import checks
 pass; both old and extended owned releases render with actual local hashes. Read the
 [corrective checkpoint](review-phases-1-4/CORRECTIONS.md). Phase 5 is not started.
 No AWS project calls/resources, live probes, inference or notifications occurred.
@@ -26,6 +27,16 @@ Floci integration remains proposed, not installed.
 
 ## Current checkpoint and evidence
 
+- Corrective implementation checkpoint **`99695cf`** on the existing Phase 4
+  branch. **410 tests (61 new)**, 64 templates, 13 deterministic ZIP pairs/imports,
+  schemas/lint/format/shell/pip/whitespace PASS. Old 6/8 and extended 9/11-stage
+  releases reran successfully from clean checkpoint (`source_dirty: false`);
+  synthetic cloud seeding denied before clients for all four bundles. No cloud
+  qualification is implied. Secret scan: 377 exact reviewed entries, zero new;
+  35 public checksum entries added without widened exclusions.
+- Current records: [corrective checkpoint](review-phases-1-4/CORRECTIONS.md),
+  [sanitized validation](evidence/review-phases-1-4/corrections-validation.json).
+
 - Branch `codex/phase-4-detection-observability`, parent `c3297e2` (Phase 3 docs),
   Phase 3 code `d215bfd`, Phase 3 parent `01e4ce8`.
 - Phase 2 code `13db959`, parent `16a523d`; Phase 1 code `ea8a079`.
@@ -36,7 +47,7 @@ Floci integration remains proposed, not installed.
   R01–R08 (local fixes are not production qualification). G0 PASS as a new-deployment prerequisite
   assessment, not deployed runtime qualification. P1.01 hosted CI and live G2/G3/G4
   remain pending. Tests cannot close them.
-- Phase 4: **349 tests**, 12 prior + 20 owned + 32 extended CloudFormation templates
+- Historical Phase 4: **349 tests**, 12 prior + 20 owned + 32 extended CloudFormation templates
   pass; 13 deterministic package pairs/import checks; standalone nine-stage and
   AgentCore eleven-stage complete observation renders verify actual local hashes.
   Previous six/eight-stage releases also render. Lint/format/shell/schema/pip/secret
@@ -58,10 +69,11 @@ Floci integration remains proposed, not installed.
 
 ## Next authorized work
 
-The user said “Continue with the Project” after review. Continue corrective
-batches A–C in the existing phases; do not interpret that as Phase 5 or live AWS
-deployment. All eight have repository fixes and positive tests; final local validation passes.
-Save/verify the local checkpoint and preserve current evidence. Read
+The user said “Continue with the Project” after review. Authorized scope was
+corrective batches A–C within existing phases, now complete locally. This did
+not authorize Phase 5 or live AWS deployment. All eight have repository fixes
+and positive tests; final local validation and clean-source checkpoint pass. Preserve current evidence. Batches
+A–C need customer acceptance to close findings; no additional phase is authorized. Read
 [CORRECTIONS.md](review-phases-1-4/CORRECTIONS.md), tracker and WORK_LOG.
 
 R01 scope correction: full promotion already verified six pipeline role grants;
@@ -109,7 +121,8 @@ remain in each phase's VALIDATION.md and WORK_LOG. Keep Streamlit for now.
 
 1. Read this file, WORK_LOG and git status.
 2. Read the matching task in PRODUCTION_IMPLEMENTATION_PLAN and IMPLEMENTATION_TRACKER.
-3. Use the Phase 4 notes/guide/validation for current reproduction and next steps.
+3. Use CORRECTIONS.md and the corrected Phase 3/4 guides for current behavior,
+   reproduction, bootstrap/recovery and pending qualification.
 4. Record meaningful work, commands, evidence, limits and blockers without secrets.
    Private customer evidence stays in ignored docs/implementation/evidence/private/.
 

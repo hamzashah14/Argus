@@ -3,7 +3,7 @@
   "scope": "User-authorized corrective batches A-C within Phases 1-4",
   "base_revision": "175d7e9858b40aa2e5fa68ab7d163fde6bab1fd2",
   "source_dirty_at_initial_validation": true,
-  "python": "3.14.7",
+  "python": "3.12.14",
   "source_sha256": {
     "infra/durable.py": "fe2ba93a1c2f253aa447fe363c7ef31f856e111f37c3f04b272887f4598abe3b",
     "infra/durable_ops.py": "6f0bb57bfc94c428ef142c524235d301ef8f43ed6ec5b2f5e8b015d11618531b",
@@ -154,11 +154,11 @@
     },
     {
       "command": ".venv/bin/python scripts/verify_durable_render.py",
-      "result": "PASS: standalone six/AgentCore eight stages, actual local artifact hashes, synthetic only, dirty source before checkpoint"
+      "result": "PASS: standalone six/AgentCore eight stages, actual local artifact hashes, synthetic only, also rerun from clean checkpoint with source_dirty false"
     },
     {
       "command": ".venv/bin/python scripts/verify_durable_render.py --observations --tool-build-dir .build/observation-tools",
-      "result": "PASS: standalone nine/AgentCore eleven stages, actual local hashes, synthetic only, dirty source before checkpoint"
+      "result": "PASS: standalone nine/AgentCore eleven stages, actual local hashes, synthetic only, also rerun from clean checkpoint with source_dirty false"
     },
     {
       "command": "git diff --check",
@@ -166,7 +166,7 @@
     },
     {
       "command": ".venv/bin/python scripts/check_secrets.py",
-      "result": "PASS: zero new candidates, 376 exact reviewed entries; 34 public checksums added, no widened exclusions"
+      "result": "PASS: zero new candidates, 377 exact reviewed entries; 35 public checksums added, no widened exclusions"
     }
   ],
   "finding_status": {
@@ -214,9 +214,24 @@
   ],
   "secret_baseline_review": {
     "prior_candidates": 342,
-    "added": 34,
-    "final_candidates": 376,
+    "added": 35,
+    "final_candidates": 377,
     "exclusions_widened": false,
     "values": "Public git/source/lock/artifact checksums independently recomputed and matched to detector SHA1 hashes"
+  },
+  "checkpoint_revision": "99695cfd1337b699337053d97837b07667bef1a5",
+  "post_checkpoint_validation": {
+    "source_dirty": false,
+    "previous_stages": {
+      "standalone": 6,
+      "agentcore": 8
+    },
+    "observation_stages": {
+      "standalone": 9,
+      "agentcore": 11
+    },
+    "result": "PASS",
+    "reference_cloud_seed_denial": "PASS for all four bundles before AWS client construction",
+    "actual_aws_qualification": "NOT_RUN"
   }
 }
