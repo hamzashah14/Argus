@@ -235,6 +235,7 @@ def test_reconciler_resends_pending_and_fences_expired_lease(monkeypatch):
     monkeypatch.setenv("WORK_QUEUE_URL", "work")
     monkeypatch.setenv("REPORT_QUEUE_URL", "report")
     store, sqs = MagicMock(), MagicMock()
+    store.dispatch.return_value = "SENT"
     intent = Ledger.intent("a" * 32, "INITIAL", "2026-10-05T10:00:00Z", 1000)
     store.pending.return_value = ([intent], None)
     store.expired.return_value = ([{"PK": "INCIDENT#" + "b" * 32}], None)
@@ -779,6 +780,7 @@ def test_ingress_queue_delay_does_not_reset_incident_deadline(monkeypatch):
         monkeypatch.setenv(key, value)
     sent = datetime(2026, 10, 5, 10, 0, tzinfo=timezone.utc)
     store = MagicMock()
+    store.accept.return_value = "ACCEPTED"
     with patch.object(pipeline, "ledger", return_value=store):
         result = pipeline.ingest(
             {

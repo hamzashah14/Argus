@@ -7,6 +7,7 @@ import re
 import time
 
 from kira.runtime import LambdaTools, Limits, MemoryBudget, RuntimeStop, run
+from kira.telemetry import correlate
 
 
 def required(name):
@@ -93,20 +94,21 @@ def execute(payload, *, store=None, checkpoint=None):
             f"Window allowance: {policy.window_minutes} minutes per side. "
             "Return evidence, uncertainty, remediation and follow-up."
         )
-        result = run(
-            prompt,
-            model_id=required("BEDROCK_MODEL_ID"),
-            region=required("BEDROCK_REGION"),
-            tools=executor,
-            reserve=reserve,
-            limits=policy,
-            deadline=deadline,
-            checkpoint=checkpoint,
-            require_evidence=True,
-            record_usage=lambda input_tokens, output_tokens: store.record_usage(
-                claim, input_tokens, output_tokens
-            ),
-        )
+        with correlate(payload["incident_id"], payload["fence"]):
+            result = run(
+                prompt,
+                model_id=required("BEDROCK_MODEL_ID"),
+                region=required("BEDROCK_REGION"),
+                tools=executor,
+                reserve=reserve,
+                limits=policy,
+                deadline=deadline,
+                checkpoint=checkpoint,
+                require_evidence=True,
+                record_usage=lambda input_tokens, output_tokens: store.record_usage(
+                    claim, input_tokens, output_tokens
+                ),
+            )
     elif mode == "chat":
         if set(payload) != {"version", "release", "mode", "prompt", "history"}:
             raise RuntimeStop("INVALID_EXECUTION_REQUEST")

@@ -22,6 +22,7 @@ PIPELINE_FUNCTIONS = (
     "incident_report",
     "incident_reconcile",
 )
+OBSERVATION_FUNCTIONS = ("observation_probe", "observation_canary", "observation_receipt")
 
 
 def digest(data):
@@ -136,7 +137,9 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None, arch
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--function", choices=FUNCTIONS + PIPELINE_FUNCTIONS, action="append")
+    parser.add_argument(
+        "--function", choices=FUNCTIONS + PIPELINE_FUNCTIONS + OBSERVATION_FUNCTIONS, action="append"
+    )
     parser.add_argument("--output", type=Path, default=ROOT / ".build/lambda")
     parser.add_argument("--catalog", type=Path, default=ROOT / "config/metric-catalog.json")
     parser.add_argument("--wheelhouse", type=Path)

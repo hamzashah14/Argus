@@ -75,6 +75,11 @@ def environment(spec, config, bindings):
         "METRICS_TOOL_ARN": bindings["tools"]["MetricsVersionArn"],
         "RUNTIME_LIMITS": json.dumps(config["runtime_limits"], sort_keys=True, separators=(",", ":")),
         "RUNTIME_RELEASE": fingerprint(spec, config, bindings),
+        **(
+            {"OBS_NAMESPACE": f"{spec['project']}/{spec['environment']}/Pipeline"}
+            if "observability" in spec
+            else {}
+        ),
     }
 
 

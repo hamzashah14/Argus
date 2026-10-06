@@ -11,6 +11,7 @@ from pathlib import Path
 import boto3
 from botocore.config import Config
 
+from kira.telemetry import emit
 from kira.time import iso_utc, parse_utc
 from kira.transport import clip_utf8
 
@@ -261,15 +262,23 @@ def run(
             request = {"messages": messages, "system": system, "toolConfig": tool_configuration()}
             if len(json.dumps(request).encode()) > limits.context_bytes:
                 raise RuntimeStop("CONTEXT_LIMIT")
-            count = client.count_tokens(modelId=model_id, input={"converse": request}).get("inputTokens")
+            try:
+                count = client.count_tokens(modelId=model_id, input={"converse": request}).get("inputTokens")
+            except Exception:
+                emit("model", "COUNT_FAILED", metrics={"Failure": 1})
+                raise
             if type(count) is not int or count < 1:
                 raise RuntimeStop("TOKEN_COUNT_UNAVAILABLE")
             reserve({"tokens_reserved": count + limits.output_tokens, "model_steps": 1})
             if deadline - time.time() < 25:
                 raise RuntimeStop("DEADLINE")
-            response = client.converse(
-                modelId=model_id, **request, inferenceConfig={"maxTokens": limits.output_tokens}
-            )
+            try:
+                response = client.converse(
+                    modelId=model_id, **request, inferenceConfig={"maxTokens": limits.output_tokens}
+                )
+            except Exception:
+                emit("model", "INFERENCE_FAILED", metrics={"Failure": 1})
+                raise
             charged = response.get("usage", {})
             if (
                 type(charged.get("inputTokens")) is not int
@@ -284,6 +293,15 @@ def run(
             usage["output_tokens"] += charged["outputTokens"]
             if record_usage:
                 record_usage(charged["inputTokens"], charged["outputTokens"])
+            emit(
+                "model",
+                "RESPONSE",
+                metrics={
+                    "ModelCalls": 1,
+                    "InputTokens": charged["inputTokens"],
+                    "OutputTokens": charged["outputTokens"],
+                },
+            )
             message = response["output"]["message"]
             if message.get("role") != "assistant" or not isinstance(message.get("content"), list):
                 raise RuntimeStop("INVALID_MODEL_RESPONSE")
@@ -325,7 +343,11 @@ def run(
                 ):
                     raise RuntimeStop("INVALID_MODEL_TOOL_REQUEST")
                 seen.add(call["toolUseId"])
-                result, valid = tools.invoke(call["name"], call["input"], deadline)
+                try:
+                    result, valid = tools.invoke(call["name"], call["input"], deadline)
+                except Exception:
+                    emit("tool", "INVOCATION_FAILED", metrics={"ToolFailure": 1})
+                    raise
                 if checkpoint:
                     checkpoint(
                         clip_utf8(
@@ -333,6 +355,16 @@ def run(
                         )
                     )
                 complete_evidence = complete_evidence and valid
+                emit(
+                    "tool",
+                    "COMPLETE" if valid else "PARTIAL",
+                    metrics={
+                        "ToolFailure": int(not valid),
+                        "ToolNoData": int(
+                            result.get("status") in {"no_data", "no_matching_lines", "no_log_groups_found"}
+                        ),
+                    },
+                )
                 if valid:
                     successful_tools.add(call["name"])
                     if (
@@ -353,6 +385,7 @@ def run(
             messages.append({"role": "user", "content": results})
         raise RuntimeStop("STEP_LIMIT")
     except RuntimeStop as exc:
+        emit("model", "LIMIT_REACHED", metrics={"Deadline": int(str(exc) == "DEADLINE")})
         return {
             "version": 1,
             "text": clip_utf8(text, 64000) or "Investigation stopped; operator review required.",

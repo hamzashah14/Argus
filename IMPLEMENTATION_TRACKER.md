@@ -4,9 +4,9 @@
 
 Updated: 6 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_IMPLEMENTATION_PLAN.md). Audit: [PRODUCTION_READINESS_AUDIT.md](/Users/hamzashoaib/Documents/Side-hustles/AIOps-Agent/PRODUCTION_READINESS_AUDIT.md).
 
-Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_3_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
+Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_4_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Active tasks: **P3.01–P3.08 live verification; shared Python orchestration and both execution targets pass local checks**; P2.01–P2.06 local implementation remains verified with live acceptance pending, explicitly authorized by the user. P1.01 hosted CI remains pending. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Active tasks: **P4.01–P4.06 detection coverage and observability; prior live gates remain pending**; P2.01–P2.06 local implementation remains verified with live acceptance pending, explicitly authorized by the user. P1.01 hosted CI remains pending. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
@@ -16,7 +16,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | 1 — Correctness fixes and automated checks | 7/8 | VERIFYING | G1: PENDING hosted CI; local checks PASS | [Evidence](docs/implementation/phase-1/VALIDATION.md) |
 | 2 — Isolated infrastructure and safe release mechanics | 0/6 | VERIFYING | G2: PENDING live staging; local checks PASS | [Evidence](docs/implementation/phase-2/VALIDATION.md) |
 | 3 — Durable incident processing and notification | 0/8 | VERIFYING | G3: NOT_RUN | [Checkpoint](docs/implementation/phase-3/NOTES.md) |
-| 4 — Detection coverage and operational visibility | 0/6 | NOT_STARTED | G4: NOT_RUN | — |
+| 4 — Detection coverage and operational visibility | 0/6 | VERIFYING | G4: NOT_RUN | [Local validation](docs/implementation/phase-4/VALIDATION.md) |
 | 5 — Identity, evidence safety, and diagnostic quality | 0/6 | NOT_STARTED | G5: NOT_RUN | — |
 | 6 — Integration, capacity, and release qualification | 0/6 | NOT_STARTED | G6: NOT_RUN | — |
 | 7 — Controlled production rollout and handover | 0/6 | NOT_STARTED | G7: NOT_RUN | — |
@@ -73,12 +73,12 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P4.01 | Add availability and dependency probes | P0.02, P2.05, P3.04 | NOT_STARTED | — | — | — | — |
-| P4.02 | Detect stale or absent telemetry | P0.02, P2.06 | NOT_STARTED | — | — | — | — |
-| P4.03 | Validate complete alarm-to-evidence coverage | P1.05, P2.05, P4.01, P4.02 | NOT_STARTED | — | — | — | — |
-| P4.04 | Add structured telemetry and dashboards | P3.08 | NOT_STARTED | — | — | — | — |
-| P4.05 | Add independent canary and escalation | P3.04, P4.04, P0.04 | NOT_STARTED | — | — | — | — |
-| P4.06 | Write operating and recovery runbooks | P2.06, P3.07, P4.03, P4.05 | NOT_STARTED | — | — | — | — |
+| P4.01 | Add availability and dependency probes | P0.02, P2.05, P3.04 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
+| P4.02 | Detect stale or absent telemetry | P0.02, P2.06 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
+| P4.03 | Validate complete alarm-to-evidence coverage | P1.05, P2.05, P4.01, P4.02 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
+| P4.04 | Add structured telemetry and dashboards | P3.08 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
+| P4.05 | Add independent canary and escalation | P3.04, P4.04, P0.04 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
+| P4.06 | Write operating and recovery runbooks | P2.06, P3.07, P4.03, P4.05 | VERIFYING | Codex (local); customer operator (live) | `codex/phase-4-detection-observability` | [Checkpoint](docs/implementation/phase-4/NOTES.md) | Local checks PASS; G4 live fault/receipt/operator rehearsal pending |
 
 **Phase 5 task records — Identity, evidence safety, and diagnostic quality.** Details and acceptance criteria are in the plan under the matching ID.
 
@@ -185,5 +185,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | 2026-10-05 | P1.01–P1.08 | Implemented correctness/build/UI changes; 147 tests, schema/lint/scans and deterministic packaging pass locally | [Validation](docs/implementation/phase-1/VALIDATION.md) | P1.01 VERIFYING for hosted CI; Phase 2 not started |
 | 2026-10-05 | P2.01–P2.06 | Local release/infrastructure implementation: 205 tests, 12 templates, deterministic builds and scans pass | [Validation](docs/implementation/phase-2/VALIDATION.md) | VERIFYING: hosted CI and live G2 pending; Phase 3 not started |
 
-**Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
 | 2026-10-06 | P3.01–P3.08 | Durable pipeline, owned orchestration and standalone/AgentCore releases verified locally; deployment/cost guide recorded | [Validation](docs/implementation/phase-3/VALIDATION.md) | VERIFYING: live G2/G3 and hosted CI pending; Phase 4 not started |
+| 2026-10-06 | P4.01–P4.06 | Detection, freshness, recovery, telemetry, no-model canary/receipt, independent fallback and runbooks verified locally | [Validation](docs/implementation/phase-4/VALIDATION.md) | VERIFYING: live G4 and prior gates pending; Phase 5 not started |
+
+**Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.

@@ -668,3 +668,19 @@ def test_runtime_verification_uses_injected_clients_for_stack_checks(monkeypatch
         durable_ops.verify_runtime({"spec": spec}, factory=factory)
     cfn.describe_stacks.assert_called_once()
     durable_ops.clients.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "operation,outcome", [("count_tokens", "COUNT_FAILED"), ("converse", "INFERENCE_FAILED")]
+)
+def test_model_api_failure_has_safe_correlated_telemetry(operation, outcome, capsys):
+    from kira.telemetry import correlate
+
+    client = MagicMock()
+    getattr(client, operation).side_effect = RuntimeError("sensitive remote details")
+    with correlate("a" * 32, 2), pytest.raises(RuntimeError):
+        drive(client)
+    events = [json.loads(s) for s in capsys.readouterr().out.splitlines()]
+    assert events == [
+        {"Component": "model", "outcome": outcome, "Failure": 1, "incident_id": "a" * 32, "fence": 2}
+    ]

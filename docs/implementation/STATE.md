@@ -1,114 +1,90 @@
 # Resume here
 
-Updated: 2026-10-06. **Phase 3 VERIFYING — local durable pipeline and owned Python orchestration implemented and checked, with customer choice of standalone or AWS AgentCore. 294 offline tests pass; local evidence, operator/setup/cost guides and continuity records saved. Live G2/G3, scan-cost acceptance and Phase 1 hosted CI remain pending. Phase 4 NOT_STARTED.**
+Updated: 2026-10-06. **Phase 4 repository implementation PASS; P4.01–P4.06
+VERIFYING, live G4 NOT_RUN.** The user explicitly authorized Phase 4. Phase 5 is
+not started. No project AWS deployment, probes, inference or notifications occurred.
 
-## User decisions and current context
+## User decisions
 
-- Implement the audit plan one phase at a time, beginning with Phase 0.
-- Use synthetic service fixtures. The user subsequently clarified that **no EC2,
-  Bedrock or other project infrastructure exists**, but their AWS CLI is configured.
-- Read-only inspection verified the default CLI account and its configured region,
-  `eu-central-1`. Private identity details stay in ignored local evidence.
-- Product remains open source and customer operated. Web chat/alerts/notifications
-  first; local desktop later. No managed services or maintainer-operated cloud.
+- Implement the audit plan one phase at a time, starting with Phase 0.
+- Open-source, customer-operated software in the customer's own infrastructure.
+  Web chat/alerts/notifications first; local desktop later. No managed service.
+- Phase 0 used synthetic service fixtures. The user then confirmed no EC2/Bedrock
+  or other project infrastructure exists; only their AWS CLI is configured.
+- Prior read-only checks verified the configured default account and region
+  `eu-central-1`; private identity is retained only in ignored evidence. There were
+  no project resources. Lambda concurrency quota **10** is a live prerequisite gap.
+- Shared code-owned Python orchestration with selectable standalone and AWS
+  AgentCore, using Bedrock models. Standalone is the default; no Agents Classic
+  dependency in the new-account path. No paid orchestration framework required.
+- Budget matters. Keep local tests/builds offline; cloud activation needs actual
+  customer inventory, identities, model, endpoints, recipients, owners and budget.
+  The synthetic reference spec is not authorization or infrastructure.
 
-## Current checkpoint
+## Current checkpoint and evidence
 
-**6/6 Phase 0 tasks DONE; G0 PASS as a new-deployment prerequisite assessment.**
-This supersedes the initial 5/6 synthetic-only checkpoint. The plan explicitly
-clarifies why deployed services are not prerequisites for assessing a new account.
-Actual deployment, model invocation, runtime authorization and delivery tests are
-still pending in their later phases. All 20 audit findings remain OPEN.
+- Branch `codex/phase-4-detection-observability`, parent `c3297e2` (Phase 3 docs),
+  Phase 3 code `d215bfd`, Phase 3 parent `01e4ce8`.
+- Phase 2 code `13db959`, parent `16a523d`; Phase 1 code `ea8a079`.
+- Original parent `6b91a71e268ce7b0915055fb897073d3379e1ffe`; verified source baseline
+  `1ad38ec1aaff96c4872a653885e33e540742519a`. Original 25-file snapshot/manifest and
+  ten reproduced defects remain preserved; unchanged Phase 0 source at `badc15e`.
+- **13/52 tasks DONE**, 20 findings OPEN. G0 PASS as a new-deployment prerequisite
+  assessment, not deployed runtime qualification. P1.01 hosted CI and live G2/G3/G4
+  remain pending. Tests cannot close them.
+- Phase 4: **349 tests**, 12 prior + 20 owned + 32 extended CloudFormation templates
+  pass; 13 deterministic package pairs/import checks; standalone nine-stage and
+  AgentCore eleven-stage complete observation renders verify actual local hashes.
+  Previous six/eight-stage releases also render. Lint/format/shell/schema/pip/secret
+  checks pass. Locks are unchanged; prior same-day 93-package advisory scan remains
+  the recorded scan. No new dependency, project AWS call, push or hosted CI.
+- Safe external HTTPS health checks and exact collector/log freshness, separate
+  Nginx request/diagnostic counts, atomic recovery links, correlated structured
+  metrics and an operator dashboard are implemented. Sender/receipt/observer
+  functions exercise initial notification without model work. Real-inbox delivery
+  is a separate explicit operator attestation bound to the topic/current recipient.
+  CloudWatch fallback and missing-heartbeat alarms bypass the primary notifier.
+- New synthetic observation settings are paused. Default live cadence is five-minute
+  observers, daily UTC synthetic notifications, ten-minute receipt/freshness windows
+  and weekly manual inbox attestation. No VPC-only probe or auto-discovery adapter.
+- Full procedures, local limits and pending live matrix: [Phase 4 checkpoint](phase-4/NOTES.md),
+  [operator guide](phase-4/GUIDE.md), [runbooks](phase-4/RUNBOOKS.md),
+  [validation](phase-4/VALIDATION.md), [acceptance](phase-4/ACCEPTANCE.md),
+  [cost/setup](phase-4/COST.md), [sanitized evidence](evidence/phase-4/local-validation.json).
 
-- Branch: `codex/phase-3-durable-incidents`; Phase 3 implementation checkpoint `d215bfd`; Phase 3 parent `01e4ce8`; Phase 2 implementation checkpoint `13db959`; parent `16a523d`; Phase 1 implementation `ea8a079`.
-- Original parent: `6b91a71e268ce7b0915055fb897073d3379e1ffe`.
-- Verified source baseline: `1ad38ec1aaff96c4872a653885e33e540742519a`.
-- Phase 0 reference checkpoint: `d1cb3a9`; Phase 1 now changes application/deployment source.
-- Original 25-file snapshot and SHA-256 manifest preserved; retrieve unchanged Phase 0 source at `badc15e`.
-- Phase 0 fresh checkout: 21/21 original self-checks, 14 syntax checks and ten reproduced
-  defect cases. Runtime Python 3.12.14 with exact audit SDK versions in `.venv`.
-- Cloud preflight: STS plus nine regional checks succeeded. No non-terminated EC2
-  instances or matching project resources found. Lambda concurrency limit is **10**;
-  this is a recorded capacity gap for P2.05/P3.07/P6.03.
-- Bedrock model catalog is readable. This does not prove chosen-model invocation
-  permission, entitlement, quotas, or agent compatibility.
-- No cloud resources created, model invocations, notifications, release or push.
+## Next authorized work
 
-Evidence: [baseline manifest](evidence/phase-0/baseline-manifest.json),
-[clean checkout](evidence/phase-0/checkout-validation.json),
-[account summary](evidence/phase-0/account-preflight-summary.json).
+Resume Phase 4 staging qualification when actual customer prerequisites and budget
+exist. Follow the Phase 3 deployment guide and Phase 4 additions; resolve quotas,
+prove exact telemetry and IAM, activate only reviewed qualified candidates, perform
+fault/recovery drills, receive real primary/fallback emails and have a second
+operator rehearse the runbooks. G4 needs those receipts and timings; G1/G2/G3 and
+later production qualification remain separate. Do not provision synthetic resources,
+repeat the account preflight unnecessarily, claim production-grade completion or
+start Phase 5 without the user's direction.
 
-## Next action
+Keep initial notification/capture and independent fallback operating when expensive
+model work is paused. Query/window bounds are not hard billed-byte/dollar limits;
+chat per-user controls remain Phase 5. Recovery observations do not cancel active
+work. Manual telemetry installation, readiness semantics, subscription confirmation,
+private inputs, IAM/quota setup and customer operation remain necessary. See
+[complete deployment/cost explanation](phase-3/DEPLOYMENT_AND_COST.md).
 
-Latest steering: the user authorized best-fit engineering with customer choice of
-standalone and AWS AgentCore, then requested an explanation of manual setup,
-deployment location and affordability. That explanation is saved in
-[deployment and cost](phase-3/DEPLOYMENT_AND_COST.md). Standalone is the default;
-maintainers need no customer-facing cloud account or managed service.
+## Historical validation
 
-Shared SDK-based orchestration and both adapters are implemented, including exact
-CountTokens input counting, conservative fenced aggregate reservations, observed
-usage, pinned tool calls, deadlines, remote one-execution-per-fence and immutable
-release/canary verification. Chat and incident work share the loop. AgentCore hosts
-it behind IAM using a pinned endpoint; ambiguous remote failures wait for lease
-recovery. No new-account Agents Classic dependency in either deployment path.
-
-Local checkpoint: **294 tests pass**, 20 owned same/split-region templates plus
-12 prior templates lint, complete standalone (6 stages) and AgentCore (8 stages)
-release renders verify against real local build hashes. Three legacy, six pipeline
-and one ARM64 host ZIP pairs are deterministic and import with their bundled SDK.
-Lint/format/shell/schema/pip/secret checks pass; 93 unchanged dependencies have no
-known vulnerability at the session scan. See [validation](phase-3/VALIDATION.md)
-and [sanitized evidence](evidence/phase-3/local-validation.json). No project AWS
-calls, resources, inference, notifications, push or hosted CI were performed.
-
-Next authorized Phase 3 work is live qualification once the customer supplies
-real regions/model, identities, inventory/telemetry, recipients, stable HTTPS UI URL
-and approved pilot budget, and resolves the Lambda concurrency gap. Follow
-[GUIDE.md](phase-3/GUIDE.md). Actual AgentCore boot, model capability, IAM isolation,
-concurrent claims/reservations, termination, delivery and 1,000 accepted-event
-accounting are not proven by mocks. Query/window bounds are not a hard billed-byte
-or dollar cap; per-user chat controls remain Phase 5. Keep G1/G2/G3 pending and
-all audit findings OPEN. Do not provision the paused synthetic examples or silently
-advance Phase 4. For local-only continuation, use the stored source/test/build
-checks and preserve this checkpoint; do not repeat AWS preflight unnecessarily.
-
-User authorized all of Phase 1. **7/8 tasks DONE; P1.01 VERIFYING** solely for the
-hosted CI acceptance run. Local result: **147 tests passed** (21 migrated checks,
-11 UI flows), lint/format/shell/schema/pip checks pass, 86 dependencies scanned with
-zero known vulnerabilities, no unreviewed secret candidates. Three Lambda builds
-reproduce byte-for-byte and import with their bundled SDK. A clean clone of
-`ea8a079` passed all 147 tests/checks and produced identical packages. Browser
-review passed; the synthetic preview server is stopped.
-
-Next: run the configured `quality-and-build` GitHub Actions workflow on the reviewed
-branch and retain its result, then close P1.01/G1 if successful. No remote push or
-CI dispatch has occurred. The user explicitly requested Phase 2. P2.01–P2.06 repository implementation now passes local checks:
-**205 tests**, 12 CloudFormation templates, six-stage/47-resource synthetic render,
-93 dependencies with zero known vulnerabilities, deterministic packages and no
-unreviewed secret candidates. See [Phase 2 validation](phase-2/VALIDATION.md),
-[operator guide](phase-2/GUIDE.md) and [checkpoint](phase-2/NOTES.md).
-
-P2 tasks remain VERIFYING because G2 needs actual isolated staging, intended/denied
-IAM calls, candidate invocation, retirement and rollback evidence. No AWS calls,
-provisioning, notifications or model invocation occurred in Phase 2. The next
-live step needs actual regions/model, identities, fleet, recipient and budget.
-The user has now requested Phase 3. See [Phase 3 checkpoint](phase-3/NOTES.md) for in-progress work. Keep G1/G2 pending and do not deploy synthetic resources or mark G3 passed from local tests.
-See [validation](phase-1/VALIDATION.md) and [operator guide](phase-1/GUIDE.md).
-
-Keep Streamlit and the existing AWS/Bedrock architecture for now.
-
-Before later provisioning, select final regions/model, environment/account boundaries,
-approved budget, deployment identity and future pilot. Runtime/telemetry/notification
-checks require their resources to exist. See [PREFLIGHT.md](phase-0/PREFLIGHT.md)
-for each gap's owner and dependent task. Do not request EC2/agent IDs for nonexistent
-resources as a prerequisite to local Phase 1 development.
+Phase 0: 21 original self-checks, 14 syntax checks, ten reproduced defects, STS plus
+nine regional reads. [Preflight](phase-0/PREFLIGHT.md),
+[baseline manifest](evidence/phase-0/baseline-manifest.json).
+Phase 1: 147 tests including UI flows; deterministic packages and clean-clone check.
+Phase 2: 205 tests and 12 templates; actual isolated staging/IAM/canary still pending.
+Phase 3: 294 tests, both owned targets and durable ledger/budgets; live AgentCore
+boot/model capability/delivery/cancellation/load still pending. Historical records
+remain in each phase's VALIDATION.md and WORK_LOG. Keep Streamlit for now.
 
 ## Resume procedure
 
-1. Read this file and [WORK_LOG.md](WORK_LOG.md); run `git status --short`.
-2. Read the relevant task in `PRODUCTION_IMPLEMENTATION_PLAN.md` and its current
-   row in `IMPLEMENTATION_TRACKER.md`.
-3. Use [README.md](README.md) for reproduction commands and evidence conventions.
-4. Continue the next user-authorized phase, update records at meaningful checkpoints,
-   and keep all deployment-specific checks distinct from local/reference results.
+1. Read this file, WORK_LOG and git status.
+2. Read the matching task in PRODUCTION_IMPLEMENTATION_PLAN and IMPLEMENTATION_TRACKER.
+3. Use the Phase 4 notes/guide/validation for current reproduction and next steps.
+4. Record meaningful work, commands, evidence, limits and blockers without secrets.
+   Private customer evidence stays in ignored docs/implementation/evidence/private/.

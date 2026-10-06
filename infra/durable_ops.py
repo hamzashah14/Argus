@@ -21,8 +21,21 @@ from infra.verify import (
     verify_function,
 )
 
-IMMUTABLE = {"durable-runtime", "owned-tools", "agentcore-runtime", "agentcore-endpoint"}
-STAGES = {"foundation-tools", "foundation-monitor", "durable-foundation", "routing"} | IMMUTABLE
+IMMUTABLE = {
+    "durable-runtime",
+    "owned-tools",
+    "agentcore-runtime",
+    "agentcore-endpoint",
+    "observation-runtime",
+}
+STAGES = {
+    "foundation-tools",
+    "foundation-monitor",
+    "durable-foundation",
+    "routing",
+    "observation-foundation",
+    "observations",
+} | IMMUTABLE
 TOOLS_REGION = {"foundation-tools", "owned-tools", "agentcore-runtime", "agentcore-endpoint"}
 
 
@@ -100,6 +113,8 @@ def collect(bundle, stage, factory=clients):
         required = {"RuntimeArn", "RuntimeId", "RuntimeVersion"}
     elif stage == "agentcore-endpoint":
         required = {"RuntimeArn", "EndpointArn", "EndpointName", "RuntimeVersion"}
+    elif stage == "observation-runtime":
+        required = {k + "VersionArn" for k in ("Observer", "Canary", "Receipt")}
     else:
         required = set(output)
 
@@ -111,13 +126,22 @@ def collect(bundle, stage, factory=clients):
 def upload(bundle, build_dir, artifact_kind="pipeline"):
     require_reviewed_source(bundle)
     spec = bundle["spec"]
-    region = spec["monitor_region"] if artifact_kind == "pipeline" else spec["bedrock_region"]
+    region = (
+        spec["monitor_region"] if artifact_kind in {"pipeline", "observation"} else spec["bedrock_region"]
+    )
     assert_account(clients("sts", region), spec)
-    target = {"pipeline": "durable-runtime", "tools": "owned-tools", "host": "agentcore-runtime"}[
-        artifact_kind
-    ]
+    target = {
+        "pipeline": "durable-runtime",
+        "tools": "owned-tools",
+        "host": "agentcore-runtime",
+        "observation": "observation-runtime",
+    }[artifact_kind]
     assert_stack_absent(clients("cloudformation", region), name(spec, target, True))
-    if artifact_kind == "tools":
+    if artifact_kind == "observation":
+        from infra.observations import checked_build
+
+        build = checked_build(build_dir, spec)
+    elif artifact_kind == "tools":
         build = release.checked_build(build_dir, spec)
     elif artifact_kind == "host":
         build = durable.checked_build(
@@ -125,7 +149,9 @@ def upload(bundle, build_dir, artifact_kind="pipeline"):
         )
     else:
         build = durable.checked_build(build_dir)
-    bucket = templates.bucket_name(spec, "monitor" if artifact_kind == "pipeline" else "tools")
+    bucket = templates.bucket_name(
+        spec, "monitor" if artifact_kind in {"pipeline", "observation"} else "tools"
+    )
     s3 = clients("s3", region)
     owner = {"Bucket": bucket, "ExpectedBucketOwner": spec["account_id"]}
     if s3.get_bucket_versioning(**owner).get("Status") != "Enabled":
@@ -395,6 +421,10 @@ def execute(
     assert_account(clients("sts", spec["monitor_region"]), spec)
     if bundle["source_dirty"]:
         raise VerificationError("Commit reviewed source before execution")
+    if stage == "observations":
+        from infra.observations import verify_runtime as verify_observers
+
+        verify_observers({**bundle, "directory": str(directory)}, clients)
     if stage == "routing":
         if retirement is None:
             raise VerificationError("Promotion requires prior release, canary receipt and retirement diff")
@@ -433,6 +463,9 @@ def main():
             "verify-candidate",
             "canary",
             "cursor-version",
+            "verify-observations",
+            "verify-observation-routing",
+            "attest-email",
         ),
     )
     parser.add_argument("--bundle", type=Path, required=True)
@@ -440,8 +473,12 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--build-dir", type=Path)
     parser.add_argument("--stage", choices=sorted(STAGES))
-    parser.add_argument("--artifact-kind", choices=("pipeline", "tools", "host"), default="pipeline")
+    parser.add_argument(
+        "--artifact-kind", choices=("pipeline", "tools", "host", "observation"), default="pipeline"
+    )
     parser.add_argument("--allow-model-invocation", action="store_true")
+    parser.add_argument("--confirm-inbox-delivery", action="store_true")
+    parser.add_argument("--notification-id")
     parser.add_argument("--change-set")
     parser.add_argument("--change-set-hash")
     parser.add_argument("--phase2-bundle", type=Path)
@@ -455,6 +492,19 @@ def main():
             raise VerificationError("Synthetic reference inputs cannot be used for cloud operations")
         if args.command == "upload":
             value = upload(bundle, args.build_dir, args.artifact_kind)
+        elif args.command == "verify-observations":
+            from infra.observations import verify_runtime
+
+            value = verify_runtime(bundle, clients)
+        elif args.command == "verify-observation-routing":
+            from infra.observations import verify_registration
+
+            value = verify_registration(bundle, clients)
+        elif args.command == "attest-email":
+            require_reviewed_source(bundle)
+            from infra.observations import attest_email
+
+            value = attest_email(bundle, clients, args.notification_id, confirm=args.confirm_inbox_delivery)
         elif args.command == "verify-candidate":
             value = owned_ops.verify_candidate({**bundle, "directory": str(args.bundle)}, clients)
         elif args.command == "canary":

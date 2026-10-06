@@ -67,3 +67,7 @@ tests to the discovered suite in the responsible phase. A diagnostic changing to
 - [Ownership and migration](phase-2/OWNERSHIP.md): retain/import/replace decisions.
 - [Implementation checkpoint](phase-2/NOTES.md): resume context and open gates.
 - [Local validation](phase-2/VALIDATION.md): results, reproduction and live acceptance work.
+
+## Phase 4 records
+
+[Checkpoint](phase-4/NOTES.md), [operator guide](phase-4/GUIDE.md), [runbooks](phase-4/RUNBOOKS.md), [local validation](phase-4/VALIDATION.md), [live acceptance](phase-4/ACCEPTANCE.md), and [cost/setup](phase-4/COST.md) describe the current locally verified detection/observability implementation and pending G4.

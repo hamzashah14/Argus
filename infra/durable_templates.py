@@ -170,6 +170,11 @@ def foundation(spec, config):
         )
         t["Outputs"][key + "QueueArn"] = {"Value": att(key + "Queue")}
         t["Outputs"][key + "QueueUrl"] = {"Value": ref(key + "Queue")}
+    ingress_topics = (
+        [topic_arn(spec, "alarms"), topic_arn(spec, "canary")]
+        if "observability" in spec
+        else topic_arn(spec, "alarms")
+    )
     r["IngressPolicy"] = resource(
         "SQS::QueuePolicy",
         {
@@ -182,7 +187,7 @@ def foundation(spec, config):
                             "sqs:SendMessage", att("IngressQueue"), Principal={"Service": "sns.amazonaws.com"}
                         ),
                         "Condition": {
-                            "ArnEquals": {"aws:SourceArn": topic_arn(spec, "alarms")},
+                            "ArnEquals": {"aws:SourceArn": ingress_topics},
                             "StringEquals": {"aws:SourceAccount": spec["account_id"]},
                         },
                     },
@@ -225,7 +230,7 @@ def foundation(spec, config):
                             "sqs:SendMessage", att("DeliveryDead"), Principal={"Service": "sns.amazonaws.com"}
                         ),
                         "Condition": {
-                            "ArnEquals": {"aws:SourceArn": topic_arn(spec, "alarms")},
+                            "ArnEquals": {"aws:SourceArn": ingress_topics},
                             "StringEquals": {"aws:SourceAccount": spec["account_id"]},
                         },
                     },
@@ -389,6 +394,12 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
         "INCIDENT_RETENTION_DAYS": str(config["retention_days"]),
         "ALLOWED_INSTANCE_IDS": ",".join(i["id"] for i in spec["instances"]),
     }
+    if "observability" in spec:
+        common.update(
+            OBS_NAMESPACE=f"{spec['project']}/{spec['environment']}/Pipeline",
+            CANARY_TOPIC_ARN=topic_arn(spec, "canary"),
+            TRACK_ALARM_RECOVERY="true",
+        )
     definitions = {
         "incident_ingress": (
             "Ingress",

@@ -1,9 +1,10 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phase 3 durable incidents and a shared Python orchestration
-core are implemented locally with standalone and AWS AgentCore execution options.
+Implementation status: Phases 3–4 durable incidents, shared Python orchestration
+and detection/observability are implemented locally with standalone and AWS AgentCore
+execution options.
 Hosted CI and AWS staging remain pending. See [implementation state](docs/implementation/STATE.md),
-[task tracker](IMPLEMENTATION_TRACKER.md) and [current deployment guide](docs/implementation/phase-3/GUIDE.md).
+[task tracker](IMPLEMENTATION_TRACKER.md) and [deployment guide](docs/implementation/phase-3/GUIDE.md) and [observation guide](docs/implementation/phase-4/GUIDE.md).
 This is not a qualified production release. Customers operate their own
 infrastructure and credentials; the project provides no managed service. Desktop
 packaging is planned later.

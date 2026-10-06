@@ -36,6 +36,22 @@ def load(path):
             raise ValueError("Model profile must belong to the target account")
     if value["model_id"].startswith("arn:") and value["model_id"] not in value["model_arns"]:
         raise ValueError("Model ARN must be included in model_arns")
+    if "observability" in value:
+        from kira.observation_config import validate
+
+        validate(value["observability"], value["instances"])
+        descriptors = {
+            d["id"]: d for d in alarm_descriptors({k: v for k, v in value.items() if k != "observability"})
+        }
+        if any(
+            s["collector_metric_id"] not in descriptors
+            or descriptors[s["collector_metric_id"]]["namespace"] != "CWAgent"
+            or descriptors[s["collector_metric_id"]]["instance_id"] != s["instance_id"]
+            for s in value["observability"]["services"]
+        ):
+            raise ValueError("Collector heartbeat must reference an exact declared metric")
+        if {s["instance_id"] for s in value["observability"]["services"]} != set(ids):
+            raise ValueError("Every mandatory inventory instance needs observed service coverage")
     return value
 
 
@@ -129,6 +145,29 @@ def alarm_descriptors(spec):
                     60,
                 )
             )
+        if "observability" in spec and instance["nginx_alarm"]:
+            definitions = [d for d in definitions if d[0] != "nginx"] + [
+                (
+                    "nginx-requests",
+                    f"{spec['project']}/{spec['environment']}/Nginx",
+                    f"nginx-failed-requests-{iid}",
+                    "Sum",
+                    {},
+                    5,
+                    "GreaterThanOrEqualToThreshold",
+                    60,
+                ),
+                (
+                    "nginx-diagnostics",
+                    f"{spec['project']}/{spec['environment']}/Nginx",
+                    f"nginx-diagnostic-events-{iid}",
+                    "Sum",
+                    {},
+                    5,
+                    "GreaterThanOrEqualToThreshold",
+                    60,
+                ),
+            ]
         for suffix, namespace, metric, statistic, dims, threshold, comparison, period in definitions:
             output.append(
                 {
@@ -144,6 +183,27 @@ def alarm_descriptors(spec):
                     "alarm_name": name(spec, f"{iid}-{suffix}"),
                 }
             )
+    if "observability" in spec:
+        settings = spec["observability"]
+        for service in settings["services"]:
+            for route in service["routes"] + [{"id": "telemetry"}]:
+                telemetry = route["id"] == "telemetry"
+                output.append(
+                    {
+                        "id": f"{service['instance_id']}-{service['id']}-{route['id']}",
+                        "instance_id": service["instance_id"],
+                        "namespace": f"{prefix(spec).replace('-', '/', 1)}/Health",
+                        "metric_name": "TelemetryFresh" if telemetry else "Availability",
+                        "statistic": "Minimum",
+                        "dimensions": {"Service": service["id"], "Route": route["id"]},
+                        "threshold": 1,
+                        "comparison": "LessThanThreshold",
+                        "period": settings["interval_minutes"] * 60,
+                        "missing_data": "breaching",
+                        "owner": service["owner"],
+                        "alarm_name": name(spec, f"{service['instance_id']}-{service['id']}-{route['id']}"),
+                    }
+                )
     return output
 
 
@@ -197,6 +257,18 @@ def cwagent(spec, instance):
                         for kind in ("access", "error")
                         if instance["nginx_alarm"]
                     ]
+                    + (
+                        [
+                            {
+                                "file_path": "/var/log/kira-collector-heartbeat.log",
+                                "log_group_name": f"{log_prefix(spec)}/{instance['id']}/{next(s['heartbeat_log_group'] for s in spec['observability']['services'] if s['instance_id'] == instance['id'])}",
+                                "log_stream_name": instance["id"],
+                                "retention_in_days": spec["log_retention_days"],
+                            }
+                        ]
+                        if "observability" in spec
+                        else []
+                    )
                 }
             }
         },

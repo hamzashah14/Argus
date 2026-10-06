@@ -1,5 +1,6 @@
 """Conditional DynamoDB ledger: accepted event, incident and intents commit together."""
 
+import hashlib
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -50,6 +51,26 @@ class Ledger:
     def accept(self, event, retention_days):
         eid, iid = event["event_id"], event["incident_id"]
         expires = int(time.time()) + retention_days * 86400
+        previous, alarm_pk, recovery = None, None, None
+        if event.get("track_recovery"):
+            alarm_pk = "ALARM#" + hashlib.sha256(event["native_id"].encode()).hexdigest()
+            previous = self.get(alarm_pk)
+            if previous and datetime.fromisoformat(
+                previous["occurred_at"].replace("Z", "+00:00")
+            ) > datetime.fromisoformat(event["occurred_at"].replace("Z", "+00:00")):
+                event["out_of_order"] = True
+            elif (
+                previous
+                and event["state"] == "OK"
+                and previous.get("last_incident_id")
+                and previous.get("ttl", 0) > time.time()
+            ):
+                recovery = previous["last_incident_id"]
+                parent = self.get(f"INCIDENT#{recovery}")
+                if parent and parent.get("ttl", 0) > time.time():
+                    event["related_incident_id"] = recovery
+                else:
+                    recovery = None
         event_row = {
             "PK": f"EVENT#{eid}",
             "SK": "META",
@@ -83,7 +104,7 @@ class Ledger:
                 "occurred_at": event["occurred_at"],
                 "received_at": event["received_at"],
                 "ingested_at": event.get("ingested_at", event["received_at"]),
-                "status": "PENDING",
+                "status": "PENDING" if event.get("investigate", True) else "CANARY",
                 "trigger_kind": event["kind"],
                 "trigger_state": event["state"],
                 "work_intent_sk": "INTENT#WORK#1",
@@ -98,7 +119,11 @@ class Ledger:
                 "GSI3PK": "OPEN",
                 "GSI3SK": f"{deadline:012d}#{iid}",
                 "ttl": expires,
+                **({"canary_slot": event["canary_slot"]} if "canary_slot" in event else {}),
             }
+            if not event.get("investigate", True):
+                for key in ("work_intent_sk", "work_due_epoch", "GSI3PK", "GSI3SK"):
+                    incident.pop(key)
             records.append(
                 {
                     "Put": {
@@ -109,6 +134,8 @@ class Ledger:
                 }
             )
             for kind in ("INITIAL", "WORK"):
+                if kind == "WORK" and not event.get("investigate", True):
+                    continue
                 records.append(
                     {
                         "Put": {
@@ -138,6 +165,41 @@ class Ledger:
                     }
                 }
             )
+        if alarm_pk and not event.get("out_of_order"):
+            state = {
+                "PK": alarm_pk,
+                "SK": "META",
+                "record_type": "alarm_state",
+                "ttl": expires,
+                "occurred_at": event["occurred_at"],
+                "event_id": eid,
+                "state": event["state"],
+            }
+            last = iid if event["actionable"] else (previous or {}).get("last_incident_id")
+            if last:
+                state["last_incident_id"] = last
+            put = {
+                "TableName": self.name,
+                "Item": item(state),
+                "ConditionExpression": "event_id=:previous" if previous else "attribute_not_exists(PK)",
+            }
+            if previous:
+                put["ExpressionAttributeValues"] = item({":previous": previous["event_id"]})
+            records.append({"Put": put})
+            if recovery:
+                records.append(
+                    {
+                        "Update": {
+                            "TableName": self.name,
+                            "Key": item({"PK": f"INCIDENT#{recovery}", "SK": "META"}),
+                            "UpdateExpression": "SET recovery_event_id=:event, recovered_at=:at",
+                            "ConditionExpression": "attribute_exists(PK) AND ttl>:now",
+                            "ExpressionAttributeValues": item(
+                                {":event": eid, ":at": event["occurred_at"], ":now": int(time.time())}
+                            ),
+                        }
+                    }
+                )
         try:
             self.client.transact_write_items(TransactItems=records)
         except ClientError as exc:

@@ -340,3 +340,59 @@ Append entries; retain previous outcomes when later work supersedes them.
   reran complete release-render verification on the committed source: both targets
   PASS with source_dirty false and reference_only true. Added this commit/result
   to continuity records in a documentation-only follow-up; no push/deployment.
+
+## 2026-10-06 — Phase 4 authorized
+
+- User explicitly requested Phase 4. Read STATE, P4.01–P4.06, tracker, work log and
+  repository continuity instructions; began from clean c3297e2/d215bfd.
+- Created local branch codex/phase-4-detection-observability. Keep prior G1/G2/G3
+  pending, all findings OPEN and Phase 5 NOT_STARTED. No project AWS calls.
+- Selected outside-process HTTPS probes, explicit freshness expectations, bounded
+  structured metrics, independent recipient canary and manual real-email receipt
+  checks. AWS SNS delivery telemetry is not an inbox receipt. Default new schedules
+  stay disabled, synthetic references protected, customer costs/ownership unchanged.
+
+
+## 2026-10-06 — Phase 4 local implementation and verification
+
+- User authorization: “go ahead for phase 4.” Continued sequential scope on
+  `codex/phase-4-detection-observability`, parent `c3297e2`; no Phase 5 work.
+- P4.01/P4.02: optional strict inventory, outside-process public HTTPS pinned TLS
+  probes with whole-operation child deadlines, exact CWAgent/explicit shipped
+  heartbeat freshness, maintenance suppression and atomic ordered recovery links.
+- P4.03: separate access request (500/502/503/504) and diagnostic-event metrics;
+  exact owner/evidence coverage for service and operational alarms, actual metric/
+  filter/log registration checks. Static fleet refresh is explicit, not discovery.
+- P4.04: safe correlation context across model/tools for both adapters, low-cardinality
+  EMF outcomes, native backlog/error and custom health/outcome dashboard, retained
+  logs and recovery fields in authorized status reads. No raw payload logging.
+- P4.05: sender persists expectations before ingress; initial-only canary creates no
+  model work. Separate SQS receipt consumer records actual publisher-message receipt;
+  verifier distinguishes SNS acceptance, SQS delivery and trusted real-inbox
+  attestation fingerprinted to the current topic/email. Daily UTC slots prevent
+  schedule/expectation drift. Direct fallback plus missing observer-heartbeat,
+  native queue/Lambda/SNS alarms; fallback delivery failure reaches primary directly.
+- Immutable inventory-bound observer builds, upload/pinned bindings, sealed actual
+  runtime/role verification and live schedule/mapping/alarm/dashboard/subscription
+  drift checks added to existing clean-source owned release workflow. Defaults paused.
+- P4.06: customer guide, owner/recovery runbooks, cost/setup and complete live G4
+  fault matrix written. Second-operator rehearsal remains pending. Public-only probes,
+  static inventory, customer-owned timer/readiness and real inbox checks are explicit.
+- Commands/results: `python -m pytest -q` **349 passed**; ruff lint/format, shellcheck,
+  OpenAPI schemas, pip check and whitespace PASS. cfn-lint **12 prior + 20 owned +
+  32 extended templates PASS**. `verify_build.py`, `verify_pipeline_build.py`,
+  `verify_agentcore_build.py`, `verify_observation_build.py`: **13 deterministic ZIP
+  pairs and bundled import checks PASS**, actual Linux/AgentCore boot not proven.
+  Inventory tool builds and `verify_durable_render.py` old 6/8 and extended 9/11
+  stages PASS against actual local hashes. CI workflow includes new checks but not run.
+- Early failures: mock handoff results, missing inbox timestamp, reused closed fixture
+  and missing test imports were corrected. Review corrected daily UTC scheduling,
+  full coverage defaults, explicit SDK error metrics and recipient-scoped stamps.
+  Final checks pass; exact public checksum/synthetic URL scan candidates reviewed.
+- No new dependencies. Unchanged lockfiles retain the previous same-day 93-package
+  pip-audit result (zero known advisories then); no fresh Phase 4 advisory scan claimed.
+- Evidence: phase-4 VALIDATION/ACCEPTANCE and evidence/phase-4/local-validation.json.
+  All six tasks VERIFYING, live G4 NOT_RUN; G1/G2/G3 pending, 13/52 DONE and all
+  20 findings OPEN. No AWS project calls/resources, live probes, inference,
+  notifications, push or hosted CI. Resume only approved staging with actual inputs,
+  customer owners/recipient receipts, resolved quota and budget. Do not deploy fixtures.

@@ -20,7 +20,9 @@ def event_identity(source, native_id, *transition):
     return hashlib.sha256(value.encode()).hexdigest()
 
 
-def normalize_sns(raw, expected_topic, account, region, allowed, alarm_prefix):
+def normalize_sns(
+    raw, expected_topic, account, region, allowed, alarm_prefix, *, canary_topic=None, track_recovery=False
+):
     """The SQS body is an SNS envelope. Keep original source bytes in the private event row."""
     if not isinstance(raw, str) or len(raw.encode()) > MAX_SOURCE_BYTES:
         raise InvalidEvent("Source envelope missing or too large")
@@ -31,9 +33,29 @@ def normalize_sns(raw, expected_topic, account, region, allowed, alarm_prefix):
         raise InvalidEvent("Invalid SNS source envelope") from exc
     if not isinstance(envelope, dict) or not isinstance(source, dict):
         raise InvalidEvent("Source message must be an object")
-    if envelope.get("TopicArn") != expected_topic or envelope.get("Type") != "Notification":
+    if (
+        envelope.get("TopicArn") not in ({expected_topic, canary_topic} if canary_topic else {expected_topic})
+        or envelope.get("Type") != "Notification"
+    ):
         raise InvalidEvent("Unexpected SNS source")
-    if source.get("AlarmName"):
+    if canary_topic and envelope.get("TopicArn") == canary_topic:
+        if set(source) != {"source", "account", "region", "instance_id", "slot", "time"} or (
+            source["source"] != "kira.canary"
+            or source["account"] != account
+            or source["region"] != region
+            or type(source["slot"]) is not int
+            or source["slot"] < 0
+        ):
+            raise InvalidEvent("Unexpected synthetic canary source")
+        iid, transition, native = (
+            source["instance_id"],
+            source["time"],
+            canary_topic + ":" + str(source["slot"]),
+        )
+        kind, state, actionable = "canary", "TEST", True
+    elif envelope.get("TopicArn") != expected_topic:
+        raise InvalidEvent("Unexpected SNS source")
+    elif source.get("AlarmName"):
         alarm_arn = source.get("AlarmArn", "")
         arn_prefix = f"arn:aws:cloudwatch:{region}:{account}:alarm:"
         name = source["AlarmName"]
@@ -76,6 +98,8 @@ def normalize_sns(raw, expected_topic, account, region, allowed, alarm_prefix):
         raise InvalidEvent("Source instance is outside deployment inventory")
     try:
         occurred_at = iso_utc(parse_utc(transition))
+        if kind == "canary" and parse_utc(transition).timestamp() != source["slot"]:
+            raise ValueError("Canary slot/time mismatch")
     except (TypeError, ValueError) as exc:
         raise InvalidEvent("Source transition time is invalid") from exc
     if kind == "alarm" and state not in {"ALARM", "OK", "INSUFFICIENT_DATA"}:
@@ -97,8 +121,10 @@ def normalize_sns(raw, expected_topic, account, region, allowed, alarm_prefix):
         "correlation_key": f"{account}:{region}:{iid}",
         "source_account": account,
         "source_region": region,
-        "source_topic": expected_topic,
+        "source_topic": envelope["TopicArn"],
         "sns_message_id": envelope.get("MessageId"),
         "sns_timestamp": envelope.get("Timestamp"),
         "original_event": envelope["Message"],
+        **({"canary_slot": source["slot"], "investigate": False} if kind == "canary" else {}),
+        **({"track_recovery": True} if kind == "alarm" and track_recovery else {}),
     }

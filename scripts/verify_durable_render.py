@@ -11,15 +11,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from infra import durable, durable_ops, templates  # noqa: E402
-from infra.spec import load, prefix  # noqa: E402
+from infra.spec import load, name, prefix  # noqa: E402
 from scripts.validate_durable import examples  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tool-build-dir", type=Path, default=ROOT / ".build/reference-lambda")
+    parser.add_argument("--observations", action="store_true")
     args = parser.parse_args()
-    spec_path = ROOT / "infra/deployment.example.json"
+    spec_path = ROOT / (
+        "infra/observability.example.json" if args.observations else "infra/deployment.example.json"
+    )
     spec = load(spec_path)
     base = json.loads((ROOT / "infra/durable.example.json").read_text())
     pipeline, host = ROOT / ".build/pipeline-a", ROOT / ".build/agentcore-a"
@@ -56,7 +59,20 @@ def main():
                 "RuntimeId": bindings["agentcore"]["RuntimeArn"].split("/")[-1],
                 "RuntimeVersion": "1",
             }
-        folder = ROOT / ".build/durable-render" / target
+        if args.observations:
+            from infra.observation_templates import FUNCTIONS
+
+            observation = ROOT / ".build/observation-a"
+            bindings["observation_artifacts"] = {n: pin(observation, "monitor", n) for n in FUNCTIONS}
+            bindings["observation_versions"] = {
+                logical
+                + "VersionArn": f"arn:aws:lambda:{spec['monitor_region']}:{spec['account_id']}:function:{name(spec, n.replace('_', '-'), True)}:1"
+                for n, logical in FUNCTIONS.items()
+            }
+            count += 3
+        folder = (
+            ROOT / (".build/observation-render" if args.observations else ".build/durable-render") / target
+        )
         folder.mkdir(parents=True, exist_ok=True)
         config_path, bindings_path = folder / "config.json", folder / "bindings.json"
         config_path.write_text(json.dumps(config))
@@ -69,12 +85,20 @@ def main():
             bindings_path,
             args.tool_build_dir,
             host if target == "agentcore" else None,
+            ROOT / ".build/observation-a" if args.observations else None,
         )
         checked = durable_ops.read_bundle(folder / "plan", bundle["review_hash"])
         assert checked == bundle and len(checked["stages"]) == count and checked["spec"]["reference_only"]
         evidence[target] = {"stages": count, "status": "PASS", "synthetic_only": True}
-    (ROOT / ".build/durable-render-validation.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print("PASS: complete standalone (6 stages) and AgentCore (8 stages) render and bundle verification")
+    (
+        ROOT
+        / (
+            ".build/observation-render-validation.json"
+            if args.observations
+            else ".build/durable-render-validation.json"
+        )
+    ).write_text(json.dumps(evidence, indent=2) + "\n")
+    print("PASS: complete release renders and bundle verification", evidence)
 
 
 if __name__ == "__main__":

@@ -25,7 +25,16 @@ def load(incident_id):
     if incident is None or int(incident.get("ttl", 0)) <= time.time():
         return None
     result = {
-        key: incident.get(key) for key in ("instance_id", "occurred_at", "received_at", "status", "attempts")
+        key: incident.get(key)
+        for key in (
+            "instance_id",
+            "occurred_at",
+            "received_at",
+            "status",
+            "attempts",
+            "recovered_at",
+            "recovery_event_id",
+        )
     }
     result["incident_id"] = incident_id
     version = incident.get("report_version") or incident.get("checkpoint_version")

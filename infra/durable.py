@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-from infra import durable_templates, owned_runtime, release, templates
+from infra import durable_templates, observation_templates, owned_runtime, release, templates
 from infra.spec import ROOT, digest, load, prefix
 from infra.spec import name as resource_name
 from infra.verify import VerificationError
@@ -105,6 +105,7 @@ def render(
     bindings_path=None,
     tool_build_dir=None,
     host_build_dir=None,
+    observation_build_dir=None,
 ):
     spec = load(spec_path)
     config = load_config(config_path, spec)
@@ -116,6 +117,9 @@ def render(
         if host_build_dir
         else None
     )
+    from infra.observations import checked_build as checked_observers
+
+    observation_build = checked_observers(observation_build_dir, spec) if observation_build_dir else None
     stages = {
         "foundation-tools": templates.foundation(spec, "tools"),
         "foundation-monitor": templates.foundation(spec, "monitor"),
@@ -147,6 +151,39 @@ def render(
             spec, bindings["tool_artifacts"], secret, classic=False
         )
     foundation = bindings.get("foundation")
+    if "observability" in spec and foundation:
+        stages["observation-foundation"] = observation_templates.foundation(spec, foundation, config)
+        if "observation_artifacts" in bindings:
+            if not observation_build or set(bindings["observation_artifacts"]) != set(
+                observation_templates.FUNCTIONS
+            ):
+                raise VerificationError("Complete inventory-bound observation build required")
+            for function, artifact in bindings["observation_artifacts"].items():
+                expected = observation_build["functions"][function]["sha256"]
+                if artifact != {
+                    "bucket": templates.bucket_name(spec, "monitor"),
+                    "key": f"releases/{spec['release_id']}/{expected}.zip",
+                    "sha256": expected,
+                    "version_id": artifact.get("version_id"),
+                } or not artifact.get("version_id"):
+                    raise VerificationError("Observation artifact must be the pinned monitor bucket object")
+            stages["observation-runtime"] = observation_templates.runtime(
+                spec, foundation, bindings["observation_artifacts"], config
+            )
+        if "observation_versions" in bindings:
+            from infra.observations import validate_versions
+
+            validate_versions(spec, bindings["observation_versions"])
+            if (
+                "versions" not in bindings
+                or "observation-runtime" not in stages
+                or not build
+                or not bindings.get("artifacts")
+            ):
+                raise VerificationError("Observation schedules require verified pipeline/runtime bindings")
+            stages["observations"] = observation_templates.active(
+                spec, foundation, bindings["observation_versions"], bindings["versions"]
+            )
     artifacts = bindings.get("artifacts")
     if foundation and artifacts:
         if not build or set(artifacts) != set(PIPELINE_FUNCTIONS):
@@ -244,18 +281,32 @@ def render(
         "build": build,
         "tool_build": tool_build,
         "host_build": host_build,
+        **({"observation_build": observation_build} if "observability" in spec else {}),
         "stages": {
             stage: {
                 "stack": resource_name(
                     spec,
                     stage,
-                    stage in {"durable-runtime", "owned-tools", "agentcore-runtime", "agentcore-endpoint"},
+                    stage
+                    in {
+                        "durable-runtime",
+                        "owned-tools",
+                        "agentcore-runtime",
+                        "agentcore-endpoint",
+                        "observation-runtime",
+                    },
                 ),
                 "region": spec["bedrock_region"]
                 if stage in {"foundation-tools", "owned-tools", "agentcore-runtime", "agentcore-endpoint"}
                 else spec["monitor_region"],
                 "create_only": stage
-                in {"durable-runtime", "owned-tools", "agentcore-runtime", "agentcore-endpoint"},
+                in {
+                    "durable-runtime",
+                    "owned-tools",
+                    "agentcore-runtime",
+                    "agentcore-endpoint",
+                    "observation-runtime",
+                },
                 "template_hash": templates.template_hash(value),
             }
             for stage, value in stages.items()
@@ -268,6 +319,10 @@ def render(
             raise VerificationError("Durable template exceeds inline change-set limit")
         release.write_json(output / f"{stage}.json", value)
     release.write_json(output / "bundle.json", bundle)
+    if "observability" in spec:
+        release.write_json(
+            output / "coverage.json", observation_templates.coverage_manifest(spec, stages.values())
+        )
     return bundle
 
 
@@ -280,6 +335,7 @@ def main():
     parser.add_argument("--bindings", type=Path)
     parser.add_argument("--tool-build-dir", type=Path)
     parser.add_argument("--host-build-dir", type=Path)
+    parser.add_argument("--observation-build-dir", type=Path)
     args = parser.parse_args()
     bundle = render(
         args.spec,
@@ -289,6 +345,7 @@ def main():
         args.bindings,
         args.tool_build_dir,
         args.host_build_dir,
+        args.observation_build_dir,
     )
     print(
         json.dumps(

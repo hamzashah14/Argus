@@ -244,6 +244,9 @@
     },
     "reference_only": {
       "type": "boolean"
+    },
+    "observability": {
+      "type": "object"
     }
   }
 }

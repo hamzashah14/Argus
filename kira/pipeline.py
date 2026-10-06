@@ -12,6 +12,7 @@ from botocore.config import Config
 
 from kira.incident import InvalidEvent, normalize_sns
 from kira.ledger import MAX_ATTEMPTS, Ledger
+from kira.telemetry import emit
 from kira.time import iso_utc, parse_utc
 from kira.transport import clip_utf8
 
@@ -36,7 +37,7 @@ def ledger():
     return Ledger(env("INCIDENT_TABLE"), region_name=env("MONITOR_REGION"))
 
 
-def partial_batch(event, handler):
+def partial_batch(event, handler, stage="ingress"):
     failures = []
     for record in event.get("Records", []):
         try:
@@ -44,6 +45,7 @@ def partial_batch(event, handler):
         except Exception:
             # No customer payload or exception text in logs. SQS retries only this message.
             failures.append({"itemIdentifier": record["messageId"]})
+            emit(stage, "HANDOFF_FAILED", metrics={"Failure": 1})
     return {"batchItemFailures": failures}
 
 
@@ -58,7 +60,16 @@ def ingest(event, context=None):
 
     def one(record):
         try:
-            source = normalize_sns(record["body"], topic, account, region, allowed, prefix)
+            source = normalize_sns(
+                record["body"],
+                topic,
+                account,
+                region,
+                allowed,
+                prefix,
+                canary_topic=os.getenv("CANARY_TOPIC_ARN"),
+                track_recovery=os.getenv("TRACK_ALARM_RECOVERY") == "true",
+            )
             source["ingested_at"] = source["received_at"]
             sent = datetime.fromtimestamp(int(record["attributes"]["SentTimestamp"]) / 1000, timezone.utc)
             if sent.timestamp() > time.time() + 5:
@@ -70,7 +81,16 @@ def ingest(event, context=None):
             # Poison payload remains in the queue until its redrive DLQ. It is never
             # logged or silently acknowledged as an accepted incident.
             raise
-        store.accept(source, retention)
+        result = store.accept(source, retention)
+        emit(
+            "ingress",
+            result,
+            incident_id=source["incident_id"],
+            metrics={
+                "Duplicate" if result == "DUPLICATE" else "Accepted": 1,
+                "QueueDelaySeconds": max(0, time.time() - parse_utc(source["received_at"]).timestamp()),
+            },
+        )
 
     return partial_batch(event, one)
 
@@ -93,7 +113,9 @@ def dispatch_row(store, row, sqs):
     kind = row["kind"]
     if kind not in queues:
         raise ValueError("Unknown intent kind")
-    return store.dispatch(row, sqs, queues[kind])
+    result = store.dispatch(row, sqs, queues[kind])
+    emit("dispatch", result, incident_id=row["PK"].removeprefix("INCIDENT#"))
+    return result
 
 
 def dispatch(event, context=None):
@@ -113,6 +135,7 @@ def dispatch(event, context=None):
                 dispatch_row(store, row, sqs)
         except Exception:
             failures.append({"itemIdentifier": sequence})
+            emit("dispatch", "HANDOFF_FAILED", metrics={"Failure": 1})
             break  # Later stream records must replay from the first failed sequence.
     return {"batchItemFailures": failures}
 
@@ -167,6 +190,11 @@ def reconcile(event=None, context=None):
         ),
         "pending_repaired": scan(store.pending, now_text, lambda row: dispatch_row(store, row, sqs)),
     }
+    emit(
+        "reconcile",
+        "INCOMPLETE" if failures else "COMPLETE",
+        metrics={"Heartbeat": 1, "SweepPending": result["pending_repaired"], "Failure": len(failures)},
+    )
     if failures:
         raise RuntimeError("Reconciliation incomplete; due state remains durable for the next sweep")
     return result
@@ -204,6 +232,7 @@ def work(event, context):
         claim = store.claim(iid, owner, now, budget + 50, sk)
         if claim is None:
             return  # Another valid lease owns work; reconciler handles abandoned leases.
+        emit("work", "CLAIMED", incident_id=iid, fence=claim["fencing_token"], metrics={"Attempt": 1})
         source = store.get(f"EVENT#{claim['event_id']}")
         if source is None:
             raise RuntimeError("Accepted source event is unavailable")
@@ -219,6 +248,9 @@ def work(event, context):
             answer, complete = invoke_agent(incident, model_budget, checkpoint, store=store, claim=claim)
             status = "COMPLETE" if complete and answer.strip() else "DEGRADED"
         except Exception:
+            emit(
+                "work", "MODEL_FAILED", incident_id=iid, fence=claim["fencing_token"], metrics={"Failure": 1}
+            )
             if os.getenv("RUNTIME_TARGET", "standalone") == "agentcore":
                 raise  # Remote execution may still own the fence; wait for external lease recovery.
             if claim["attempts"] < MAX_ATTEMPTS:
@@ -253,8 +285,9 @@ def work(event, context):
         )
         if stored == "STALE":
             return  # A newer fencing token owns the incident; old object is orphaned for lifecycle cleanup.
+        emit("work", status, incident_id=iid, fence=claim["fencing_token"], metrics={"ReportPersisted": 1})
 
-    return partial_batch(event, one)
+    return partial_batch(event, one, "work")
 
 
 def checkpoint_writer(store, claim, s3=None):
@@ -393,6 +426,8 @@ def notify(event, context, kind):
                 f"Trigger: {incident.get('trigger_kind', 'unknown')} {incident.get('trigger_state', 'unknown')}\n"
                 f"Status link: {link}\nNotification ID: {notification_id}"
             )
+            if "canary_slot" in incident:
+                text = "Scheduled delivery test; no application outage is asserted.\n" + text
         else:
             report_note = (
                 "Full report is stored in the private evidence bucket; sign in to read it."
@@ -406,7 +441,18 @@ def notify(event, context, kind):
                 f"{report_note}"
             )
         try:
-            response = sns.publish(TopicArn=topic, Subject=f"[Kira] {kind.title()} {iid[:12]}", Message=text)
+            response = sns.publish(
+                TopicArn=topic,
+                Subject=f"[Kira] {kind.title()} {iid[:12]}",
+                Message=text,
+                MessageAttributes={
+                    "kira_canary": {
+                        "DataType": "String",
+                        "StringValue": "true" if "canary_slot" in incident else "false",
+                    },
+                    "kira_incident": {"DataType": "String", "StringValue": iid},
+                },
+            )
             if not response.get("MessageId"):
                 raise RuntimeError("SNS did not acknowledge publication")
         except Exception:
@@ -415,8 +461,15 @@ def notify(event, context, kind):
         # A crash after publish can repeat email. The stable ID lets recipients
         # recognize duplicates; SNS acceptance never proves inbox delivery.
         store.notification_result(claim, "PUBLISHER_ACCEPTED", response["MessageId"])
+        emit(
+            kind.lower(),
+            "PUBLISHER_ACCEPTED",
+            incident_id=iid,
+            fence=claim["fencing_token"],
+            metrics={"NotificationAccepted": 1},
+        )
 
-    return partial_batch(event, one)
+    return partial_batch(event, one, kind.lower())
 
 
 def initial(event, context=None):

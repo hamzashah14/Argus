@@ -241,6 +241,8 @@ Acceptance: Every injected accepted incident is terminal or visibly recoverable 
 
 **Phase 4: Detection coverage and operational visibility.** Measure service availability, telemetry health, and the entire incident path. Suggested effort: 2–3 days. Gate G4: Service and telemetry failures are detected; an independent canary proves pipeline failures are visible.
 
+**Phase 4 implementation checkpoint (6 October 2026).** The user authorized this phase. Repository implementation and local checks pass; P4.01–P4.06 remain VERIFYING and G4 NOT_RUN pending customer staging faults, exact telemetry and real primary/fallback receipts plus a second-operator rehearsal. Prior gates and all findings remain open. See [Phase 4 records](docs/implementation/phase-4/NOTES.md); no Phase 5 advancement is implied.
+
 **P4.01 — Add availability and dependency probes.** Prerequisites: P0.02, P2.05, P3.04. Suggested owner: Engineering + Operations. Findings: F05.
 
 Define externally observed HTTP/service checks for critical routes and essential dependencies, response-time thresholds, and recovery signals. Cover services with little traffic and failures that leave the instance running; keep probes outside the failing process.

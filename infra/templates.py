@@ -227,7 +227,11 @@ def foundation(spec, purpose):
                         "FilterPattern": spec["nginx_filters"][kind]["pattern"],
                         "MetricTransformations": [
                             {
-                                "MetricName": f"nginx-upstream-errors-{instance['id']}",
+                                "MetricName": (
+                                    f"nginx-{'failed-requests' if kind == 'access' else 'diagnostic-events'}-{instance['id']}"
+                                    if "observability" in spec
+                                    else f"nginx-upstream-errors-{instance['id']}"
+                                ),
                                 "MetricNamespace": f"{spec['project']}/{spec['environment']}/Nginx",
                                 "MetricValue": "1",
                                 "DefaultValue": 0,
@@ -524,6 +528,22 @@ def routing(spec, worker_arn, agent_id, alias_id):
             "CloudWatch::Alarm",
             {
                 "AlarmName": alarm["alarm_name"],
+                **(
+                    {
+                        "AlarmDescription": "Owner: "
+                        + (
+                            alarm.get("owner")
+                            or next(
+                                s["owner"]
+                                for s in spec["observability"]["services"]
+                                if s["instance_id"] == alarm["instance_id"]
+                            )
+                        )
+                        + "; docs/implementation/phase-4/RUNBOOKS.md"
+                    }
+                    if "observability" in spec
+                    else {}
+                ),
                 "Namespace": alarm["namespace"],
                 "MetricName": alarm["metric_name"],
                 "Dimensions": [{"Name": k, "Value": v} for k, v in sorted(alarm["dimensions"].items())],
@@ -533,9 +553,13 @@ def routing(spec, worker_arn, agent_id, alias_id):
                 "DatapointsToAlarm": 2,
                 "Threshold": alarm["threshold"],
                 "ComparisonOperator": alarm["comparison"],
-                "TreatMissingData": "missing",
-                "ActionsEnabled": not spec["maintenance_mode"],
+                "TreatMissingData": alarm.get(
+                    "missing_data", "notBreaching" if alarm["namespace"].endswith("/Nginx") else "missing"
+                ),
+                "ActionsEnabled": not spec["maintenance_mode"]
+                and (not alarm["namespace"].endswith("/Health") or spec["observability"]["enabled"]),
                 "AlarmActions": [topic_arn(spec, "alarms")],
+                **({"OKActions": [topic_arn(spec, "alarms")]} if "observability" in spec else {}),
                 "Tags": tagged(spec),
             },
         )

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
-from infra.spec import alarm_descriptors, digest, name, topic_arn
+from infra.spec import alarm_descriptors, digest, log_groups, name, topic_arn
 
 
 class VerificationError(RuntimeError):
@@ -96,6 +96,27 @@ def coverage(spec, clients):
                 raise VerificationError(
                     f"Required {kind} metric filter failed its positive/negative fixtures"
                 )
+        if "observability" in spec:
+            # Every declared failed-request status must match, bytes/other statuses must not.
+            fixture = spec["nginx_filters"]["access"]
+            import re
+
+            from kira.nginx import access_evidence
+
+            for status in (500, 502, 503, 504):
+                sample = re.sub(r'("[^"]+") \d{3} ', rf"\g<1> {status} ", fixture["match"], count=1)
+                if access_evidence(sample)["status"] != status or [
+                    m["eventNumber"]
+                    for m in logs.test_metric_filter(
+                        filterPattern=fixture["pattern"], logEventMessages=[sample, fixture["miss"]]
+                    )["matches"]
+                ] != [1]:
+                    raise VerificationError("Access filter does not cover declared failed-request statuses")
+    if "observability" in spec:
+        for group in log_groups(spec):
+            found = logs.describe_log_groups(logGroupNamePrefix=group)["logGroups"]
+            if not any(g["logGroupName"] == group for g in found):
+                raise VerificationError("Required evidence log group is absent")
     return {
         "spec_hash": digest(spec),
         "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -153,12 +174,19 @@ def routing_health(
             TopicArn=topic_arn(spec, topic)
         ):
             subs.extend(page["Subscriptions"])
-        if (
-            len(subs) != 1
-            or subs[0]["Protocol"] != protocol
-            or subs[0]["Endpoint"] != endpoint
-            or not subs[0]["SubscriptionArn"].startswith("arn:")
-        ):
+        if sorted((s["Protocol"], s["Endpoint"]) for s in subs) != sorted(
+            [(protocol, endpoint)]
+            + (
+                [
+                    (
+                        "sqs",
+                        f"arn:aws:sqs:{spec['monitor_region']}:{spec['account_id']}:{name(spec, 'observation-receipts')}",
+                    )
+                ]
+                if topic == "reports" and "observability" in spec
+                else []
+            )
+        ) or any(not s["SubscriptionArn"].startswith("arn:") for s in subs):
             raise VerificationError("Routing includes an unexpected or unconfirmed subscriber")
     desired = {
         r["Properties"]["AlarmName"]: r["Properties"]
@@ -181,6 +209,8 @@ def routing_health(
                 value = sorted(value, key=lambda d: d["Name"])
             if current != value:
                 raise VerificationError(f"Required alarm configuration differs: {alarm_name}/{key}")
-        if registered.get("OKActions") or registered.get("InsufficientDataActions"):
+        if registered.get("OKActions", []) != properties.get("OKActions", []) or registered.get(
+            "InsufficientDataActions"
+        ):
             raise VerificationError("Required alarm has unexpected additional notification actions")
     return {"status": "PASS", "scope": "routing registration only; delivery requires a live canary"}
