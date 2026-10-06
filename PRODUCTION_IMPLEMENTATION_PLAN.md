@@ -179,6 +179,17 @@ Acceptance: Removing an instance, disabling a feature, changing a prefix, or rep
 
 **Phase 3: Durable incident processing and notification.** Make initial alerting independent of model execution and recover every accepted incident. Suggested effort: 4–6 days. Gate G3: All accepted fault-injected incidents are durable, deduplicated, and completed or recoverable; initial alerts survive model outage.
 
+2026-10-06 implementation decision: the user selected an owned Python orchestration
+layer using Bedrock models, with customer choice of standalone Lambda execution
+(default) or AWS AgentCore hosting. Both use the same durable pipeline and model/tool
+contracts. New deployments have no Agents Classic creation dependency. Substitute
+owned model/tool/runtime release verification for the Classic-specific P2.04 path;
+retain its isolation, candidate, promotion and rollback gates. See the
+[decision record](docs/implementation/phase-3/RUNTIME_DECISION.md). Token/step/tool/query
+reservations and deadlines are implemented locally. Query count/window/result-byte
+limits do not satisfy a hard billed scan-byte/dollar cap; this acceptance limitation
+remains open alongside actual G2/G3 validation. No Phase 4 advancement is implied.
+
 **P3.01 — Add durable ingress and incident schema.** Prerequisites: P2.01, P2.02, P1.04. Suggested owner: Engineering. Findings: F02, F03, F19.
 
 Route SNS/EventBridge events into SQS with delivery failure queues and source checks. Normalize source/account/region/instance identifiers and define versioned incident, event, attempt, evidence, and notification records in DynamoDB. Use stable native event identity where available plus semantic keys for alarm transitions.

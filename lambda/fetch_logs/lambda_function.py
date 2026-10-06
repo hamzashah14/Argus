@@ -18,7 +18,7 @@ from kira.transport import bounded_envelope, error_result, fits, parameters
 
 MONITOR_REGION = os.environ.get("MONITOR_REGION") or os.environ.get("AWS_REGION")
 LOG_GROUP_PREFIX = (os.environ.get("LOG_GROUP_PREFIX") or "/aiops").rstrip("/")
-BOTO_CONFIG = Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 3, "mode": "standard"})
+BOTO_CONFIG = Config(connect_timeout=3, read_timeout=10, retries={"total_max_attempts": 1})
 
 # Conservative application budget for the complete Bedrock response envelope.
 MAX_BODY_BYTES = 20_000
@@ -166,8 +166,18 @@ def run_queries(client, log_group, queries, deadline):
     """Start every query at once, then poll until all finish or the deadline passes.
     queries: {name: (query_string, start_dt, end_dt)} -> {name: [row dict, ...]}"""
     ids = {}
+
+    def check_budget():
+        from kira.tool_deadline import check
+
+        try:
+            check(deadline)
+        except ValueError:
+            raise QueryFailed("Log query deadline reached") from None
+
     try:
         for name, (query, start, end) in queries.items():
+            check_budget()
             ids[name] = client.start_query(
                 logGroupName=log_group,
                 startTime=int(start.timestamp()),
@@ -177,6 +187,7 @@ def run_queries(client, log_group, queries, deadline):
         results, pending = {}, dict(ids)
         while pending:
             for name, query_id in list(pending.items()):
+                check_budget()
                 response = client.get_query_results(queryId=query_id)
                 status = response["status"]
                 if status == "Complete":
@@ -340,7 +351,9 @@ def lambda_handler(event, context):
     status = 200
     try:
         params = parameters(event)
-        budget_s = context.get_remaining_time_in_millis() / 1000 - 5 if context else 25
+        from kira.tool_deadline import remaining
+
+        budget_s = remaining(event, context)
         deadline = time.monotonic() + max(0, budget_s)
         result = search(params, deadline, event)
     except (BadInput, ValueError) as exc:

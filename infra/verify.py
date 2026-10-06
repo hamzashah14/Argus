@@ -121,7 +121,15 @@ def verify_function(client, arn, artifact):
     }
 
 
-def routing_health(spec, clients, worker_arn):
+def routing_health(
+    spec,
+    clients,
+    worker_arn,
+    alarm_endpoint=None,
+    alarm_protocol="lambda",
+    include_worker_failure=True,
+    ec2_targets=None,
+):
     from infra.templates import routing
 
     expected = routing(spec, worker_arn, "ABCDEFGHIJ", "KLMNOPQRST")["Resources"]
@@ -132,11 +140,12 @@ def routing_health(spec, clients, worker_arn):
     if json.loads(rule["EventPattern"]) != expected["Ec2Down"]["Properties"]["EventPattern"]:
         raise VerificationError("EC2 state rule inventory or event selection differs from the plan")
     result = events.list_targets_by_rule(Rule=name(spec, "ec2-down"))
-    if result.get("NextToken") or result["Targets"] != [{"Id": "alarms", "Arn": topic_arn(spec, "alarms")}]:
+    wanted_targets = ec2_targets or [{"Id": "alarms", "Arn": topic_arn(spec, "alarms")}]
+    if result.get("NextToken") or result["Targets"] != wanted_targets:
         raise VerificationError("EC2 rule target differs from desired routing")
     sns = clients("sns", spec["monitor_region"])
     for topic, protocol, endpoint in (
-        ("alarms", "lambda", worker_arn),
+        ("alarms", alarm_protocol, alarm_endpoint or worker_arn),
         ("reports", "email", spec["notification_email"]),
     ):
         subs = []
@@ -155,6 +164,7 @@ def routing_health(spec, clients, worker_arn):
         r["Properties"]["AlarmName"]: r["Properties"]
         for r in expected.values()
         if r["Type"] == "AWS::CloudWatch::Alarm"
+        and (include_worker_failure or r["Properties"]["AlarmName"] != name(spec, "worker-errors"))
     }
     alarms = clients("cloudwatch", spec["monitor_region"]).describe_alarms(AlarmNames=sorted(desired))
     actual = {a["AlarmName"]: a for a in alarms.get("MetricAlarms", [])}

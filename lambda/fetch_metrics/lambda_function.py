@@ -14,7 +14,7 @@ from kira.time import parse_utc
 from kira.transport import bounded_envelope, error_result, parameters
 
 MONITOR_REGION = os.environ.get("MONITOR_REGION") or os.environ.get("AWS_REGION")
-BOTO_CONFIG = Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 3, "mode": "standard"})
+BOTO_CONFIG = Config(connect_timeout=3, read_timeout=10, retries={"total_max_attempts": 1})
 
 
 MAX_DATAPOINTS = 60
@@ -158,6 +158,9 @@ def fetch(params):
 def lambda_handler(event, context):
     status = 200
     try:
+        from kira.tool_deadline import remaining
+
+        remaining(event, context)
         result = fetch(parameters(event))
     except (BadInput, ValueError) as exc:
         result, status = error_result("INVALID_REQUEST", str(exc)), 400

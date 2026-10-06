@@ -14,15 +14,25 @@ sys.path.insert(0, str(ROOT))
 from kira.metrics import validate_catalog  # noqa: E402 — runnable from outside the repository
 
 FUNCTIONS = ("fetch_logs", "fetch_metrics", "trigger_investigation")
+PIPELINE_FUNCTIONS = (
+    "incident_ingress",
+    "incident_dispatch",
+    "incident_investigate",
+    "incident_initial",
+    "incident_report",
+    "incident_reconcile",
+)
 
 
 def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
+def build(functions, output, catalog_path, wheelhouse, log_scope_path=None, architecture="x86_64"):
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Lambda builds require Python 3.12.")
+    if architecture not in {"x86_64", "arm64"}:
+        raise ValueError("Unsupported artifact architecture")
     catalog = json.dumps(
         validate_catalog(json.loads(catalog_path.read_text())), sort_keys=True, separators=(",", ":")
     ).encode()
@@ -39,7 +49,7 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
             "--require-hashes",
             "--only-binary=:all:",
             "--platform",
-            "manylinux2014_x86_64",
+            "manylinux2014_aarch64" if architecture == "arm64" else "manylinux2014_x86_64",
             "--python-version",
             "312",
             "--implementation",
@@ -75,9 +85,16 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
             raise ValueError("Log scope must be an explicit list of log group names")
         entries["config/log-scope.json"] = json.dumps(sorted(set(scope)), separators=(",", ":")).encode()
         entries["requirements/lambda.lock"] = lock.read_bytes()
+        for filename in (
+            "agent-instruction.txt",
+            "schemas/fetch_logs.json",
+            "schemas/fetch_metrics.json",
+            "kira_agentcore.py",
+        ):
+            entries[filename] = (ROOT / filename).read_bytes()
         manifest = {
             "python": "3.12",
-            "architecture": "x86_64",
+            "architecture": architecture,
             "lock_sha256": digest(lock.read_bytes()),
             "wheels": wheels,
             "functions": {},
@@ -101,7 +118,16 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
                     name: digest(data)
                     for name, data in files.items()
                     if name.startswith("kira/")
-                    or name in {"lambda_function.py", "config/metric-catalog.json", "config/log-scope.json"}
+                    or name
+                    in {
+                        "lambda_function.py",
+                        "config/metric-catalog.json",
+                        "config/log-scope.json",
+                        "agent-instruction.txt",
+                        "schemas/fetch_logs.json",
+                        "schemas/fetch_metrics.json",
+                        "kira_agentcore.py",
+                    }
                 },
             }
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
@@ -110,13 +136,21 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--function", choices=FUNCTIONS, action="append")
+    parser.add_argument("--function", choices=FUNCTIONS + PIPELINE_FUNCTIONS, action="append")
     parser.add_argument("--output", type=Path, default=ROOT / ".build/lambda")
     parser.add_argument("--catalog", type=Path, default=ROOT / "config/metric-catalog.json")
     parser.add_argument("--wheelhouse", type=Path)
     parser.add_argument("--log-scope", type=Path)
+    parser.add_argument("--architecture", choices=("x86_64", "arm64"), default="x86_64")
     args = parser.parse_args()
-    build(args.function or FUNCTIONS, args.output, args.catalog, args.wheelhouse, args.log_scope)
+    build(
+        args.function or FUNCTIONS,
+        args.output,
+        args.catalog,
+        args.wheelhouse,
+        args.log_scope,
+        args.architecture,
+    )
 
 
 if __name__ == "__main__":

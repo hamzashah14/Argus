@@ -10,9 +10,9 @@ def desired_names(spec):
     return {d["alarm_name"] for d in alarm_descriptors(spec)} | {name(spec, "worker-errors")}
 
 
-def plan(spec, owned, desired_worker_arn):
+def plan(spec, owned, desired_worker_arn, desired_alarm_names=None):
     """owned is obtained from the exact routing stack, never a prefix-wide account scan."""
-    alarms = desired_names(spec)
+    alarms = desired_names(spec) if desired_alarm_names is None else desired_alarm_names
     result = {"spec_hash": digest(spec), "disable_alarms": [], "unsubscribe": [], "preserve": []}
     for item in owned:
         if item["type"] == "AWS::CloudWatch::Alarm" and item["id"] not in alarms:
@@ -100,9 +100,9 @@ def owned_resources(spec, clients):
     return result
 
 
-def apply(spec, clients, reviewed, worker_arn):
+def apply(spec, clients, reviewed, worker_arn, desired_alarm_names=None):
     assert_account(clients("sts", spec["monitor_region"]), spec)
-    actual = plan(spec, owned_resources(spec, clients), worker_arn)
+    actual = plan(spec, owned_resources(spec, clients), worker_arn, desired_alarm_names)
     if actual != reviewed:
         raise VerificationError("Retirement diff changed; obtain a new plan before cleanup")
     if actual["disable_alarms"]:

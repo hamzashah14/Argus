@@ -8,7 +8,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       AWS_EC2_METADATA_DISABLED: "true"
       PYTHON_DOTENV_DISABLED: "1"
@@ -28,6 +28,7 @@ jobs:
           shellcheck setup-iam.sh setup-lambdas.sh deploy.sh setup-alerts.sh scripts/common.sh
           python scripts/validate_schemas.py
           python scripts/validate_infrastructure.py
+          python scripts/validate_durable.py
       - name: Unit, contract and UI regression tests (no AWS access)
         run: python -m pytest --junitxml=.build/tests.xml
       - name: Secret candidate scan
@@ -38,8 +39,14 @@ jobs:
         run: python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
       - name: Independent deterministic builds and isolated package imports
         run: python scripts/verify_build.py
+      - name: Independent durable-pipeline builds and isolated imports
+        run: python scripts/verify_pipeline_build.py
+      - name: Independent ARM64 AgentCore host builds and bundled imports
+        run: python scripts/verify_agentcore_build.py
       - name: Build the synthetic inventory release without AWS access
         run: python -m infra build --spec infra/deployment.example.json --output .build/reference-lambda --wheelhouse .build/wheels
+      - name: Verify complete releases for both execution targets without AWS access
+        run: python scripts/verify_durable_render.py
       - name: Save validation and artifact evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -49,6 +56,13 @@ jobs:
             .build/tests.xml
             .build/dependency-audit.json
             .build/build-validation.json
+            .build/pipeline-build-validation.json
+            .build/agentcore-build-validation.json
+            .build/durable-render-validation.json
             .build/lambda-a/*.zip
             .build/lambda-a/manifest.json
+            .build/pipeline-a/*.zip
+            .build/pipeline-a/manifest.json
+            .build/agentcore-a/*.zip
+            .build/agentcore-a/manifest.json
           retention-days: 14

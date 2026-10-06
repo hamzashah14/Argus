@@ -43,7 +43,7 @@ def make_client(settings):
     )
 
 
-def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.monotonic):
+def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.monotonic, history=()):
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         return failure("INVALID_PROMPT", f"Enter a question of 1–{MAX_PROMPT_CHARS} characters.")
     if settings.problems():
@@ -55,6 +55,40 @@ def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.mono
     text = ""
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     try:
+        if settings.runtime_target in {"standalone", "agentcore"}:
+            from kira import agentcore, execution
+
+            payload = {
+                "version": 1,
+                "release": settings.runtime_release,
+                "mode": "chat",
+                "prompt": prompt.strip(),
+                "history": [
+                    {"role": m["role"], "content": m["content"]}
+                    for m in history[-MAX_HISTORY_MESSAGES:]
+                    if m.get("content")
+                ],
+            }
+            if settings.runtime_target == "standalone":
+                result = execution.execute(payload)
+            else:
+                result = agentcore.invoke(
+                    payload,
+                    arn=settings.agentcore_arn,
+                    qualifier=settings.agentcore_endpoint,
+                    region=settings.region,
+                    account=settings.account_id,
+                    session_id="chat_" + session_id,
+                    deadline=time.time() + MAX_REQUEST_SECONDS,
+                )
+            text = clip_utf8(result["text"], MAX_OUTPUT_BYTES)
+            if result["complete"]:
+                return ChatResult(text, "ok")
+            return failure(
+                "INVESTIGATION_INCOMPLETE",
+                "Investigation stopped with incomplete evidence or an execution limit.",
+                text,
+            )
         client = factory(settings)  # Credential resolution/client creation is inside the error boundary.
         if clock() - started >= MAX_REQUEST_SECONDS:
             return failure("REQUEST_TIMEOUT", "Connection setup exceeded the request time budget.")

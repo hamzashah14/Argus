@@ -226,6 +226,16 @@ class AppConfig:
     alias_id: str
     password: str = field(repr=False)
     environment: str = "development"
+    runtime_target: str = "classic"
+    model_id: str = ""
+    account_id: str = ""
+    logs_arn: str = ""
+    metrics_arn: str = ""
+    allowed_ids: str = ""
+    runtime_limits: str = ""
+    runtime_release: str = ""
+    agentcore_arn: str = ""
+    agentcore_endpoint: str = ""
 
     @classmethod
     def from_env(cls):
@@ -235,20 +245,65 @@ class AppConfig:
             os.getenv("BEDROCK_AGENT_ALIAS_ID", ""),
             os.getenv("APP_PASSWORD", ""),
             os.getenv("ENVIRONMENT", "development"),
+            os.getenv("RUNTIME_TARGET", "classic" if os.getenv("BEDROCK_AGENT_ID") else "standalone"),
+            os.getenv("BEDROCK_MODEL_ID", ""),
+            os.getenv("EXPECTED_ACCOUNT_ID", ""),
+            os.getenv("LOGS_TOOL_ARN", ""),
+            os.getenv("METRICS_TOOL_ARN", ""),
+            os.getenv("ALLOWED_INSTANCE_IDS", ""),
+            os.getenv("RUNTIME_LIMITS", ""),
+            os.getenv("RUNTIME_RELEASE", ""),
+            os.getenv("AGENTCORE_RUNTIME_ARN", ""),
+            os.getenv("AGENTCORE_ENDPOINT", ""),
         )
 
     def problems(self):
         problems = []
         if not REGION.fullmatch(self.region):
             problems.append("Set BEDROCK_REGION to the region containing your agent.")
-        if not IDENTIFIER.fullmatch(self.agent_id):
+        if self.runtime_target == "classic" and not IDENTIFIER.fullmatch(self.agent_id):
             problems.append("Set BEDROCK_AGENT_ID to your 10-character agent ID.")
-        if not IDENTIFIER.fullmatch(self.alias_id) and self.alias_id != "TSTALIASID":
+        if (
+            self.runtime_target == "classic"
+            and not IDENTIFIER.fullmatch(self.alias_id)
+            and self.alias_id != "TSTALIASID"
+        ):
             problems.append("Set BEDROCK_AGENT_ALIAS_ID to a valid agent alias.")
         if self.environment not in {"development", "staging", "production"}:
             problems.append("ENVIRONMENT must be development, staging or production.")
         if self.environment == "production" and self.alias_id == "TSTALIASID":
             problems.append("Production requires a versioned alias.")
+        if self.runtime_target not in {"standalone", "agentcore", "classic"}:
+            problems.append(
+                "RUNTIME_TARGET must be standalone or agentcore (classic is legacy compatibility)."
+            )
+        if self.runtime_target in {"standalone", "agentcore"}:
+            if not re.fullmatch(r"[a-zA-Z_./0-9:-]{1,256}", self.model_id) or not re.fullmatch(
+                r"[0-9]{12}", self.account_id
+            ):
+                problems.append("Set the intended Bedrock model and AWS account.")
+            if not re.fullmatch(r"[0-9a-f]{64}", self.runtime_release):
+                problems.append("Set the verified RUNTIME_RELEASE fingerprint.")
+            try:
+                from kira.runtime import Limits
+
+                Limits(**json.loads(self.runtime_limits))
+                ids = self.allowed_ids.split(",")
+                if not ids or len(ids) > 100 or any(not INSTANCE.fullmatch(i) for i in ids):
+                    raise ValueError("Invalid inventory")
+                if self.runtime_target == "standalone":
+                    for arn in (self.logs_arn, self.metrics_arn):
+                        if not re.fullmatch(
+                            rf"arn:aws:lambda:{re.escape(self.region)}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",
+                            arn,
+                        ):
+                            raise ValueError("Invalid tool version")
+                else:
+                    from kira.agentcore import validate_target
+
+                    validate_target(self.agentcore_arn, self.agentcore_endpoint, self.region, self.account_id)
+            except (ValueError, TypeError):
+                problems.append("Set validated runtime limits, inventory and qualified execution bindings.")
         if bool(os.getenv("AWS_ACCESS_KEY_ID")) != bool(os.getenv("AWS_SECRET_ACCESS_KEY")):
             problems.append("Set both AWS credential variables, or remove both to use the credential chain.")
         return problems

@@ -210,3 +210,129 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Updated source evidence and exact checksum fingerprints. All six Phase 2 tasks
   remain VERIFYING for live acceptance; continuity records identify next inputs
   and commands. Phase 3 has not started.
+
+## 2026-10-05 — Phase 3 authorized and underway
+
+- User requested the next phase. Created `codex/phase-3-durable-incidents` from
+  clean Phase 2 checkpoint `01e4ce8`; G1 hosted CI and G2 live staging remain pending.
+- Read P3.01–P3.08 criteria and the existing SNS-to-Lambda worker. Confirmed the
+  direct path can lose work after Lambda termination or model/report failure.
+- Began source normalization and a DynamoDB conditional ledger with an atomic
+  event/incident/initial/work intent write, fencing tokens, notification claims,
+  a Stream dispatcher and overdue reconciler. Added separate Lambda entrypoints.
+- AWS references checked for SNS-to-SQS queue policy, DynamoDB transactions,
+  and partial SQS/Streams batch response semantics. No cloud changes/model calls.
+- Next: complete deployable infrastructure and routing, failure tests, operator
+  guide and local evidence. Phase 3 is not yet qualified.
+
+## 2026-10-06 — Durable pipeline and runtime selection checkpoint
+
+- Implemented six durable handlers, atomic acceptance/outbox, fenced attempt
+  records, retry intents with jitter, superseded-work rejection, queue-age incident
+  deadlines, paged recovery, independent notifications and versioned evidence.
+- Added private UI status/checkpoint access with version/checksum/read bounds,
+  delivery/consumer/stream DLQs, reserved initial capacity, work concurrency of 2,
+  reviewed model pause, immutable runtime and clean-source cloud mutation guards.
+- Current suite: 248 offline tests pass. Six durable and twelve prior infrastructure
+  templates lint successfully. Deterministic builds are being refreshed after the
+  latest edits. Public vulnerability scan of unchanged dependencies found no known
+  vulnerabilities; initial cache/network sandbox failures were resolved with a
+  workspace cache and approved public advisory access. No project AWS calls.
+- Official AWS docs now describe Agents Classic new-customer restrictions effective
+  30 July 2026. Catalog access does not establish agent-creation eligibility.
+  Asked for the replacement runtime preference; user explicitly selected a
+  code-owned Python runtime using Bedrock models. Preserve the ledger/notification
+  implementation and replace model orchestration within Phase 3. Do not advance
+  Phase 4 or claim G3/aggregate token limits already pass.
+- Next implementation: portable Converse loop, model-specific CountTokens before
+  inference, conservative durable token/step/tool/query reservations across attempts,
+  qualified tool invocation and enforced tool windows/deadlines, release/model/schema
+  binding without Classic, compatible candidate/coverage/rollback verification,
+  web chat adapter, then expanded budget/fault tests and updated evidence.
+
+## 2026-10-06 — Customer-selectable AgentCore and standalone execution
+
+- User clarified that both AWS AgentCore and code-owned orchestration must be
+  supported, with a customer choice. Recorded one shared Python loop and two
+  execution targets; these are hosting options rather than separate agent logic.
+- Checked official AWS AgentCore framework support, HTTP hosting contract and
+  InvokeAgentRuntime API, plus framework documentation. AgentCore supports custom
+  agents without LangChain/LangGraph; no framework dependency was selected by the
+  user. Recommended the bounded SDK loop initially, with graph/retrieval adapters
+  only when their features are required.
+- Updated the runtime decision, state and checkpoint. Defined remote fence/budget
+  enforcement, release binding, session isolation, explicit target selection and
+  no automatic fallback after ambiguous completion. Implementation and live
+  acceptance remain pending; no new code, tests or AWS deployment in this update.
+
+## 2026-10-06 — Shared orchestration and both execution targets implemented locally
+
+- Implemented portable Converse/tool loop with exact CountTokens request input,
+  conservative input+maximum-output reservations before inference, aggregate model
+  step/tool/query allowances, response/usage validation and no automatic SDK retry.
+- Added fenced ledger execution markers, policy/release binding across retries,
+  conservative counters and observed usage. Remote requests derive source/inventory
+  and current ownership from the ledger; caller-provided allowance cannot override it.
+- Added the AgentCore HTTP/SSE host (health, heartbeat, two work slots) and SigV4
+  adapter with explicit release endpoint, bounded reads, result binding and close.
+  An ambiguous remote failure leaves the attempt leased for external recovery.
+- Integrated both targets into incident work and web chat. Tools now receive caller
+  deadlines and use one SDK attempt; stored evidence/checkpoints enforce retention
+  when read. Original Classic adapters are explicit compatibility code only.
+- Added owned-tool templates, direct/AgentCore caller scopes, ARM64 direct-code host
+  and separate pinned endpoint stages, regional cloud operations, sealed-role/artifact
+  verification and an explicitly authorized staging canary path. Synthetic cloud
+  commands still reject before credential access. No project AWS calls/deployment.
+- Current checks: 283 offline tests, 20 target/region templates, lint and both OpenAPI
+  schemas pass. Three legacy/six pipeline/one ARM64 host ZIP pairs reproduce and
+  import with the bundled SDK, but later source changes require the final rebuild.
+  No new dependency; prior 93-package vulnerability result remains unchanged.
+- Next: complete release verification and host/UI regressions, guide, final builds
+  and sanitized evidence. Live G2/G3 and hosted G1 remain pending. Strict query/window
+  allowances bound operations; AWS Insights does not expose a pre-query billed-byte
+  cap. Do not claim a hard dollar/scan-byte bound or production qualification.
+
+## 2026-10-06 — Final local Phase 3 checkpoint and affordability guidance
+
+- Completed owned release verification and staging canary/promotion contracts,
+  two-target UI adapters, safe AgentCore HTTP/SSE serialization, strict remote
+  result accounting validation and capacity recovery when thread creation fails.
+  A verifier injection regression first hit the existing synthetic-input guard;
+  corrected only the mock fixture, then all tests passed. The production synthetic
+  guard was preserved. Propagated injected clients through stack/output checks.
+- Added complete release-render verification against actual local builds and
+  synthetic bindings: standalone six stages, AgentCore eight. Added this and ARM64
+  host build checks to CI. Both remain local evidence; hosted CI was not dispatched.
+- Final commands: pytest **294 passed**; Ruff lint/format PASS; two OpenAPI schemas
+  PASS; cfn-lint 20 owned and 12 prior templates PASS; pip check PASS; five shell
+  scripts PASS with `.venv/bin/shellcheck` (initial PATH lookup lacked that binary).
+  Three legacy, six durable and one ARM64 host independent ZIP pairs/imports PASS;
+  inventory-bound reference build and both full renders PASS. Pip cache permission
+  warnings disabled caching without invalidating offline wheelhouse builds.
+- Public advisory scan from this session: 93 unchanged locked dependencies, zero
+  known vulnerabilities. No new dependencies. Installed SDK shape check recognizes
+  direct-code artifact/lifecycle/CountTokens fields; this is not live service proof.
+- Updated runtime decision, operator guide, plan, task tracker, STATE and validation
+  evidence. All P3 tasks now VERIFYING; G3 NOT_RUN, G1/G2 pending, Phase 4 NOT_STARTED.
+  All 20 audit findings remain OPEN. Query/window/count/output bounds do not enforce
+  a pre-query billed scan-byte or dollar cap; this acceptance limitation stays open.
+- User requested post-task explanation of manual work, hosting and affordability.
+  Added DEPLOYMENT_AND_COST.md: customer account/roles/model/telemetry/recipients/
+  HTTPS URL need setup, staged CLI currently requires review/binding collection;
+  local UI/default standalone avoid a dedicated Kira EC2 host and optional AgentCore
+  cost. Full notification links need a reachable stable UI. Cloud costs and
+  operations belong to each customer; no maintainer-hosted SaaS. No fixed monthly
+  estimate or free-tier assumption was invented. Development remains offline;
+  automatic model work is paused in fixtures. No project AWS calls or cloud changes.
+- Next: retain this clean local checkpoint; real selected-target G2/G3 staging needs
+  approved identity/model/pilot/recipients/budget and resolution of concurrency 10.
+  Test actual termination, IAM/capability, durable contention, delivery and 1,000
+  accepted-event accounting before any production qualification. Do not enter
+  Phase 4 until the user authorizes it.
+- Final evidence scan flagged checksum strings, not customer data. Verified every
+  candidate against its actual source/ZIP/lock checksum or Git revision, then
+  allowlisted only 96 exact evidence-file fingerprints. Secret scan PASS with 246
+  reviewed baseline candidates and zero unreviewed candidates. Whitespace PASS.
+- Final UI review replaced legacy-only connection instructions with the selected
+  target's settings; preserved baseline JSON ordering to avoid unrelated churn.
+  Refreshed the UI source checksum; 294 tests/lint/format/secret scan pass again.

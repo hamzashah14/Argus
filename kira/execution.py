@@ -1,0 +1,154 @@
+"""Shared execution service for direct calls and the AgentCore HTTP host."""
+
+import json
+import math
+import os
+import re
+import time
+
+from kira.runtime import LambdaTools, Limits, MemoryBudget, RuntimeStop, run
+
+
+def required(name):
+    value = os.getenv(name)
+    if not value:
+        raise ValueError(f"Missing execution setting: {name}")
+    return value
+
+
+def limits():
+    return Limits(**json.loads(required("RUNTIME_LIMITS")))
+
+
+def tools(policy, reserve, instance=None, anchor=None):
+    return LambdaTools(
+        required("BEDROCK_REGION"),
+        required("EXPECTED_ACCOUNT_ID"),
+        {"fetch_logs": required("LOGS_TOOL_ARN"), "fetch_metrics": required("METRICS_TOOL_ARN")},
+        {instance} if instance else set(required("ALLOWED_INSTANCE_IDS").split(",")),
+        policy,
+        reserve,
+        anchor,
+    )
+
+
+def execute(payload, *, store=None, checkpoint=None):
+    """The host derives all authorization and allowances from trusted configuration."""
+    if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != 1:
+        raise RuntimeStop("INVALID_EXECUTION_REQUEST")
+    release = required("RUNTIME_RELEASE")
+    if payload.get("release") != release:
+        raise RuntimeStop("RELEASE_MISMATCH")
+    policy = limits()
+    mode = payload.get("mode")
+    if mode == "incident":
+        if set(payload) != {"version", "release", "mode", "incident_id", "owner", "fence", "deadline"}:
+            raise RuntimeStop("INVALID_EXECUTION_REQUEST")
+        if (
+            not isinstance(payload["incident_id"], str)
+            or not re.fullmatch(r"[0-9a-f]{32}", payload["incident_id"])
+            or type(payload["fence"]) is not int
+            or payload["fence"] < 1
+            or not isinstance(payload["owner"], str)
+            or not re.fullmatch(r"[0-9a-f-]{36}", payload["owner"])
+            or type(payload["deadline"]) not in (int, float)
+            or not math.isfinite(payload["deadline"])
+        ):
+            raise RuntimeStop("INVALID_EXECUTION_REQUEST")
+        from kira.pipeline import checkpoint_writer, ledger
+
+        store = store or ledger()
+        claim = store.get("INCIDENT#" + payload["incident_id"])
+        if (
+            not claim
+            or claim["status"] != "RUNNING"
+            or claim["lease_owner"] != payload["owner"]
+            or int(claim["fencing_token"]) != payload["fence"]
+        ):
+            raise RuntimeStop("STALE_EXECUTION")
+        deadline = min(
+            payload["deadline"],
+            int(claim["lease_until"]) - 50,
+            int(claim["deadline_epoch"]) - 60,
+            time.time() + 400,
+        )
+        if deadline - time.time() < 30:
+            raise RuntimeStop("DEADLINE")
+        source = store.get("EVENT#" + claim["event_id"])
+        if not source or not source["event"]["actionable"]:
+            raise RuntimeStop("SOURCE_UNAVAILABLE")
+        event = source["event"]
+        if event["instance_id"] not in required("ALLOWED_INSTANCE_IDS").split(","):
+            raise RuntimeStop("UNAUTHORIZED_INSTANCE")
+        store.begin_execution(claim, policy.fingerprint, release)
+
+        def reserve(delta):
+            return store.reserve(claim, policy, delta)
+
+        executor = tools(policy, reserve, event["instance_id"], event["occurred_at"])
+        checkpoint = checkpoint or checkpoint_writer(store, claim)
+        prompt = (
+            f"Investigate instance {event['instance_id']} near {event['occurred_at']}. "
+            f"Trigger: {event['kind']} {event['state']}. Use logs and metrics. "
+            f"Window allowance: {policy.window_minutes} minutes per side. "
+            "Return evidence, uncertainty, remediation and follow-up."
+        )
+        result = run(
+            prompt,
+            model_id=required("BEDROCK_MODEL_ID"),
+            region=required("BEDROCK_REGION"),
+            tools=executor,
+            reserve=reserve,
+            limits=policy,
+            deadline=deadline,
+            checkpoint=checkpoint,
+            require_evidence=True,
+            record_usage=lambda input_tokens, output_tokens: store.record_usage(
+                claim, input_tokens, output_tokens
+            ),
+        )
+    elif mode == "chat":
+        if set(payload) != {"version", "release", "mode", "prompt", "history"}:
+            raise RuntimeStop("INVALID_EXECUTION_REQUEST")
+        if not isinstance(payload["prompt"], str) or not 1 <= len(payload["prompt"].strip()) <= 4000:
+            raise RuntimeStop("INVALID_PROMPT")
+        history = payload["history"]
+        if (
+            not isinstance(history, list)
+            or len(history) > 24
+            or any(
+                not isinstance(m, dict)
+                or set(m) != {"role", "content"}
+                or m["role"] not in {"user", "assistant"}
+                or not isinstance(m["content"], str)
+                or len(m["content"].encode()) > 32000
+                for m in history
+            )
+        ):
+            raise RuntimeStop("INVALID_HISTORY")
+        budget = MemoryBudget(policy)
+        result = run(
+            payload["prompt"],
+            model_id=required("BEDROCK_MODEL_ID"),
+            region=required("BEDROCK_REGION"),
+            tools=tools(policy, budget.reserve),
+            reserve=budget.reserve,
+            limits=policy,
+            deadline=time.time() + 180,
+            history=history,
+        )
+    else:
+        raise RuntimeStop("INVALID_EXECUTION_MODE")
+    return {**result, "release": release}
+
+
+def incident_request(claim, seconds):
+    return {
+        "version": 1,
+        "release": required("RUNTIME_RELEASE"),
+        "mode": "incident",
+        "incident_id": claim["PK"].removeprefix("INCIDENT#"),
+        "owner": claim["lease_owner"],
+        "fence": int(claim["fencing_token"]),
+        "deadline": time.time() + seconds,
+    }

@@ -213,4 +213,5 @@ def test_query_timeout_stops_queries():
             raise AssertionError("no timeout")
         except target.QueryFailed:
             pass
-    assert client.stop_query.called
+    client.start_query.assert_not_called()
+    client.get_query_results.assert_not_called()

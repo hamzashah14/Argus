@@ -1,24 +1,37 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phase 2 infrastructure and release controls are implemented locally; hosted CI and AWS staging validation remain pending.
-See [implementation state](docs/implementation/STATE.md), the
-[task tracker](IMPLEMENTATION_TRACKER.md), and [Phase 1 guide](docs/implementation/phase-1/GUIDE.md), and [Phase 2 deployment guide](docs/implementation/phase-2/GUIDE.md).
-This is not a qualified production release. Customers deploy and operate their own
-infrastructure; the project provides no managed service. Desktop packaging is planned later.
+Implementation status: Phase 3 durable incidents and a shared Python orchestration
+core are implemented locally with standalone and AWS AgentCore execution options.
+Hosted CI and AWS staging remain pending. See [implementation state](docs/implementation/STATE.md),
+[task tracker](IMPLEMENTATION_TRACKER.md) and [current deployment guide](docs/implementation/phase-3/GUIDE.md).
+This is not a qualified production release. Customers operate their own
+infrastructure and credentials; the project provides no managed service. Desktop
+packaging is planned later.
 
-A Bedrock Agent that investigates EC2 production incidents from CloudWatch logs and metrics, and reports root cause, evidence and a fix. Two ways in, one agent:
+Kira investigates EC2 incidents using customer-owned Bedrock models and CloudWatch
+logs/metrics. Customers select where the same Python orchestration runs:
+`standalone` (incident Lambda; web chat directly) or `agentcore` (their AWS Runtime).
 
-- **Chat** — an engineer asks in a password-protected Streamlit UI (run locally or in your infrastructure).
-- **Automatic** — a CloudWatch alarm or EC2 stop/terminate triggers an investigation at the exact incident time, and the result is emailed.
+- **Chat** — ask through the password-protected Streamlit UI.
+- **Automatic** — accepted alarms/events enter a durable incident ledger. Initial
+  notifications run independently; investigations save private versioned reports
+  and queue a separate follow-up notification.
 
-```
-Customer web UI ───────────────────────────────┐
-                                                ▼
-EventBridge: EC2 stopped/terminated ─┐     Bedrock Agent (BEDROCK_REGION)
-Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-trigger-investigation ─┘   │
-        disk, process, Nginx 5xx ────┘                        │                               ├─ fetch_logs    ─┐
-                                                              └─► SNS aiops-incident-reports  └─ fetch_metrics ─┴─► CloudWatch (MONITOR_REGION)
-                                                                   ─► email
+```mermaid
+flowchart LR
+    Events[CloudWatch / EventBridge] --> SNS[SNS]
+    SNS --> Ingress[Ingress queue]
+    Ingress --> Ledger[DynamoDB ledger / outbox]
+    Ledger --> Initial[Independent initial alert]
+    Ledger --> Work[Investigation queue / fenced worker]
+    UI[Customer web UI] --> Core[Shared Python orchestration]
+    Work --> Core
+    Core --> Target[Standalone or AgentCore]
+    Target --> Model[Bedrock Converse]
+    Target --> Tools[Pinned read-only tools]
+    Tools --> CW[Customer CloudWatch]
+    Work --> Evidence[Private versioned evidence]
+    Evidence --> Followup[Separate follow-up notification]
 ```
 
 **What fetch_logs gives the agent:** paginated discovery of an instance’s log groups (Nginx, each container, …); the lines just before and just after the incident time; and per-minute log activity across the window with silent gaps called out. A log gap requires corroborating telemetry; quiet traffic or a collector failure can also cause silence.
@@ -27,19 +40,31 @@ Alarms: status check, CPU, memory,   ├─► SNS aiops-alarms ─► aiops-tri
 
 ## Current deployment path
 
-Use the [Phase 2 CloudFormation workflow](docs/implementation/phase-2/GUIDE.md)
-for new deployments. It creates separate candidate releases and requires reviewed
-change sets and verification before routing alerts to them. Start locally:
+Use the [Phase 3 owned-runtime workflow](docs/implementation/phase-3/GUIDE.md)
+for new deployments. It creates immutable tools/runtime candidates and requires
+reviewed changes, verification and an explicit staging canary before promotion.
+It does not require Bedrock Agents Classic creation. Start locally:
 
 ```bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements/dev.lock
-.venv/bin/python -m infra render --spec infra/deployment.example.json --output .local/phase2/reference-plan
+.venv/bin/python -m infra.durable --spec infra/deployment.example.json --config infra/durable.example.json --output .local/phase3/reference-plan
 ```
 
-The example is synthetic and cloud commands refuse it. Customer deployment files
-belong in ignored private storage. No account-wide managed service is provided.
-See the [ownership/migration plan](docs/implementation/phase-2/OWNERSHIP.md).
+The example is synthetic, investigations are paused and cloud commands refuse it.
+Customer files belong in ignored private storage. Copy `.env.example` for UI
+configuration and use the verified routing `RuntimeConnection` output. Use SSO,
+assumed roles or workload credentials through the standard AWS credential chain.
+
+Owned model execution counts exact input tokens and reserves the maximum output
+allowance before inference. Aggregate incident budgets survive retries and remote
+connection loss. Query counts/windows are bounded; these are not hard AWS spend
+or billed scan-byte caps. Actual model/region support and both hosting targets
+require AWS qualification. See the [runtime decision](docs/implementation/phase-3/RUNTIME_DECISION.md).
+
+The [Phase 2 guide](docs/implementation/phase-2/GUIDE.md) remains historical for
+eligible Classic installations. Its resource [ownership guidance](docs/implementation/phase-2/OWNERSHIP.md)
+still applies. The following older instructions describe Classic development.
 
 The shell instructions below are retained as a **legacy development reference**.
 They are disabled by default and cannot deploy staging/production. A development
@@ -192,11 +217,11 @@ You should get an email within a few minutes. In chat, ask about the gap time th
 The deploying customer pays their AWS costs. Set a budget before provisioning and
 check regional pricing for Bedrock, CloudWatch, Lambda, SNS and EventBridge for the
 chosen model and traffic. Local tests use mocks and do not invoke AWS. Browser
-request limits are not an account-wide spend cap.
+request limits are not an account-wide spend cap. See the [deployment and cost guide](docs/implementation/phase-3/DEPLOYMENT_AND_COST.md) for manual setup, hosting and the standalone pilot.
 
 ## Troubleshooting
 
-- **No incident emails:** first, did you confirm the SNS subscription? Then check the alarm really went to `ALARM`, then the `aiops-trigger-investigation` logs. Handled agent failures attempt a fallback email. A timeout or delivery failure can still lose a report; durable processing and independent notifications remain Phase 3 work.
+- **No incident emails:** first, did you confirm the SNS subscription? Then check the alarm really went to `ALARM`, then the `aiops-trigger-investigation` logs. Handled agent failures attempt a fallback email. This legacy path can lose reports after a timeout. New deployments use the [Phase 3 durable pipeline](docs/implementation/phase-3/GUIDE.md); check incident records, outbox and delivery/consumer DLQs there.
 - **Kira says a log group doesn't exist or finds none:** the instance isn't shipping to `/aiops/<instance-id>/…` yet (step 5), or `MONITOR_REGION` is wrong.
 - **A `setup-alerts.sh` warning keeps coming back:** CWAgent isn't publishing that metric with the expected dimensions. Check with `aws cloudwatch list-metrics --namespace CWAgent --metric-name mem_used_percent --region <MONITOR_REGION>`.
 - **`deploy.sh` fails at prepare:** read the printed `failureReasons`. Most often the model isn't enabled in Bedrock → Model access, or isn't supported for Agents in that region.

@@ -290,7 +290,7 @@ def add_function(t, spec, logical, function, artifact, env, region, policies, ti
     return ref(logical + "Version")
 
 
-def tools_release(spec, artifacts, secret):
+def tools_release(spec, artifacts, secret, *, classic=True):
     region = spec["bedrock_region"]
     t = template(spec, region, "Kira create-only tool and agent candidate; never update this release stack")
     r = t["Resources"]
@@ -344,6 +344,9 @@ def tools_release(spec, artifacts, secret):
         ],
         30,
     )
+    if not classic:
+        t["Description"] = "Kira create-only tools for code-owned orchestration"
+        return t
     executors = (
         {"Logs": logs_version, "Metrics": metrics_version}
         if spec["executor_mode"] == "qualified"

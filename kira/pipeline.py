@@ -1,0 +1,427 @@
+"""Durable incident handlers. Each SQS record acknowledges only after its durable handoff."""
+
+import hashlib
+import os
+import re
+import time
+import uuid
+from datetime import datetime, timezone
+
+import boto3
+from botocore.config import Config
+
+from kira.incident import InvalidEvent, normalize_sns
+from kira.ledger import MAX_ATTEMPTS, Ledger
+from kira.time import iso_utc, parse_utc
+from kira.transport import clip_utf8
+
+CLIENT_CONFIG = Config(connect_timeout=3, read_timeout=8, retries={"total_max_attempts": 1})
+REPORT_LIMIT = 64 * 1024
+STATUS_LINK = re.compile(r"https://[^\s#?]+\Z")
+TOKEN = re.compile(r"(?i)(password|api[_-]?key|authorization|secret)\s*[:=]\s*\S+")
+
+
+def env(name):
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(f"Required pipeline setting is missing: {name}")
+    return value
+
+
+def clients(service):
+    return boto3.client(service, region_name=env("MONITOR_REGION"), config=CLIENT_CONFIG)
+
+
+def ledger():
+    return Ledger(env("INCIDENT_TABLE"), region_name=env("MONITOR_REGION"))
+
+
+def partial_batch(event, handler):
+    failures = []
+    for record in event.get("Records", []):
+        try:
+            handler(record)
+        except Exception:
+            # No customer payload or exception text in logs. SQS retries only this message.
+            failures.append({"itemIdentifier": record["messageId"]})
+    return {"batchItemFailures": failures}
+
+
+def ingest(event, context=None):
+    store = ledger()
+    allowed = set(env("ALLOWED_INSTANCE_IDS").split(","))
+    topic = env("ALARMS_TOPIC_ARN")
+    account = env("EXPECTED_ACCOUNT_ID")
+    region = env("MONITOR_REGION")
+    prefix = env("ALARM_NAME_PREFIX")
+    retention = int(env("INCIDENT_RETENTION_DAYS"))
+
+    def one(record):
+        try:
+            source = normalize_sns(record["body"], topic, account, region, allowed, prefix)
+            source["ingested_at"] = source["received_at"]
+            sent = datetime.fromtimestamp(int(record["attributes"]["SentTimestamp"]) / 1000, timezone.utc)
+            if sent.timestamp() > time.time() + 5:
+                raise InvalidEvent("Ingress timestamp is ahead of the receiver")
+            if source.get("sns_timestamp"):
+                sent = min(sent, parse_utc(source["sns_timestamp"]))
+            source["received_at"] = iso_utc(sent)
+        except InvalidEvent:
+            # Poison payload remains in the queue until its redrive DLQ. It is never
+            # logged or silently acknowledged as an accepted incident.
+            raise
+        store.accept(source, retention)
+
+    return partial_batch(event, one)
+
+
+def parse_intent(body):
+    if not isinstance(body, str) or not re.fullmatch(
+        r"INCIDENT#[0-9a-f]{32}\|INTENT#(?:INITIAL|WORK|REPORT)#[A-Za-z0-9]+", body
+    ):
+        raise ValueError("Invalid queue intent")
+    pk, sk = body.split("|", 1)
+    return pk, sk
+
+
+def dispatch_row(store, row, sqs):
+    queues = {
+        "INITIAL": env("INITIAL_QUEUE_URL"),
+        "WORK": env("WORK_QUEUE_URL"),
+        "REPORT": env("REPORT_QUEUE_URL"),
+    }
+    kind = row["kind"]
+    if kind not in queues:
+        raise ValueError("Unknown intent kind")
+    return store.dispatch(row, sqs, queues[kind])
+
+
+def dispatch(event, context=None):
+    store = ledger()
+    sqs = clients("sqs")
+    failures = []
+    # DynamoDB Streams partial failure identifiers are sequence numbers, not event IDs.
+    for record in event.get("Records", []):
+        sequence = record["dynamodb"]["SequenceNumber"]
+        try:
+            keys = record["dynamodb"]["Keys"]
+            pk, sk = keys["PK"]["S"], keys["SK"]["S"]
+            if not sk.startswith("INTENT#"):
+                continue
+            row = store.get(pk, sk)
+            if row and row.get("status") == "PENDING":
+                dispatch_row(store, row, sqs)
+        except Exception:
+            failures.append({"itemIdentifier": sequence})
+            break  # Later stream records must replay from the first failed sequence.
+    return {"batchItemFailures": failures}
+
+
+def reconcile(event=None, context=None):
+    store = ledger()
+    now = datetime.now(timezone.utc)
+    now_text = now.isoformat().replace("+00:00", "Z")
+    sqs = clients("sqs")
+    failures = []
+    deadline = time.monotonic() + min(
+        45, context.get_remaining_time_in_millis() / 1000 - 10 if context else 45
+    )
+
+    def scan(query, value, process):
+        cursor, checked = None, 0
+        for _ in range(10):
+            if time.monotonic() >= deadline:
+                failures.append("sweep deadline")
+                break
+            try:
+                rows, cursor = query(value, cursor=cursor)
+            except Exception:
+                failures.append("index read")
+                break
+            for row in rows:
+                if time.monotonic() >= deadline:
+                    failures.append("sweep deadline")
+                    return checked
+                try:
+                    process(row)
+                except Exception:
+                    failures.append("handoff")  # Continue independent incident recovery.
+                checked += 1
+            if not cursor:
+                break
+        else:
+            failures.append("sweep page limit")
+        return checked
+
+    def current_action(row, action):
+        current = store.get(row["PK"])
+        if current:
+            action(current, int(now.timestamp()))
+
+    result = {
+        "expired_checked": scan(
+            store.expired, int(now.timestamp()), lambda row: current_action(row, store.recover)
+        ),
+        "overdue_checked": scan(
+            store.overdue, int(now.timestamp()), lambda row: current_action(row, store.degrade_overdue)
+        ),
+        "pending_repaired": scan(store.pending, now_text, lambda row: dispatch_row(store, row, sqs)),
+    }
+    if failures:
+        raise RuntimeError("Reconciliation incomplete; due state remains durable for the next sweep")
+    return result
+
+
+def redact(text):
+    if not isinstance(text, str):
+        return "No usable investigation response."
+    value = TOKEN.sub(lambda match: match.group(1) + "=[redacted]", text)
+    return clip_utf8(value, REPORT_LIMIT, "\n[truncated]")
+
+
+def work(event, context):
+    store = ledger()
+    bucket = env("REPORT_BUCKET")
+    key_arn = env("REPORT_KMS_KEY_ARN")
+    s3 = clients("s3")
+
+    def one(record):
+        pk, sk = parse_intent(record["body"])
+        if not sk.startswith("INTENT#WORK#"):
+            raise ValueError("Work queue received a different intent")
+        iid = pk.removeprefix("INCIDENT#")
+        current = store.get(pk)
+        if current is None:
+            raise RuntimeError("Accepted incident is unavailable")
+        if current.get("status") in {"COMPLETE", "DEGRADED"} or current.get("work_intent_sk") != sk:
+            return
+        owner = str(uuid.uuid4())
+        now = int(time.time())
+        remaining = context.get_remaining_time_in_millis() // 1000 if context else 480
+        budget = min(400, remaining - 60, int(current["deadline_epoch"]) - now - 60)
+        if budget < 25:
+            raise RuntimeError("Insufficient worker deadline")
+        claim = store.claim(iid, owner, now, budget + 50, sk)
+        if claim is None:
+            return  # Another valid lease owns work; reconciler handles abandoned leases.
+        source = store.get(f"EVENT#{claim['event_id']}")
+        if source is None:
+            raise RuntimeError("Accepted source event is unavailable")
+        incident = source["event"]
+
+        checkpoint = checkpoint_writer(store, claim, s3)
+
+        try:
+            model_budget = min(budget, claim["lease_until"] - int(time.time()) - 50)
+            if model_budget < 25:
+                store.retry(claim)
+                return
+            answer, complete = invoke_agent(incident, model_budget, checkpoint, store=store, claim=claim)
+            status = "COMPLETE" if complete and answer.strip() else "DEGRADED"
+        except Exception:
+            if os.getenv("RUNTIME_TARGET", "standalone") == "agentcore":
+                raise  # Remote execution may still own the fence; wait for external lease recovery.
+            if claim["attempts"] < MAX_ATTEMPTS:
+                store.retry(claim)
+                return  # A new durable intent drives the next attempt.
+            answer, status = "Automatic investigation failed; operator review required.", "DEGRADED"
+        report = redact(answer)
+        data = report.encode("utf-8")
+        key = f"incidents/{iid}/reports/{claim['fencing_token']}.txt"
+        uploaded = s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=data,
+            ServerSideEncryption="aws:kms",
+            SSEKMSKeyId=key_arn,
+            ContentType="text/plain; charset=utf-8",
+        )
+        version = uploaded.get("VersionId")
+        if not version:
+            raise RuntimeError("Versioned report write was not confirmed")
+        stored = store.complete(
+            claim,
+            {
+                "bucket": bucket,
+                "key": key,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "classification": "best-effort-redacted-investigation",
+            },
+            version,
+            status,
+            int(time.time()),
+        )
+        if stored == "STALE":
+            return  # A newer fencing token owns the incident; old object is orphaned for lifecycle cleanup.
+
+    return partial_batch(event, one)
+
+
+def checkpoint_writer(store, claim, s3=None):
+    bucket = env("REPORT_BUCKET")
+    key_arn = env("REPORT_KMS_KEY_ARN")
+    iid = claim["PK"].removeprefix("INCIDENT#")
+    s3 = s3 or clients("s3")
+
+    def checkpoint(answer):
+        data = redact(answer).encode("utf-8")
+        key = f"incidents/{iid}/checkpoints/{claim['fencing_token']}.txt"
+        uploaded = s3.put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=data,
+            ServerSideEncryption="aws:kms",
+            SSEKMSKeyId=key_arn,
+            ContentType="text/plain; charset=utf-8",
+        )
+        version = uploaded.get("VersionId")
+        if not version:
+            raise RuntimeError("Checkpoint version was not confirmed")
+        stored = store.checkpoint(
+            claim,
+            {
+                "bucket": bucket,
+                "key": key,
+                "sha256": hashlib.sha256(data).hexdigest(),
+                "classification": "best-effort-redacted-investigation",
+            },
+            version,
+            int(time.time()),
+        )
+        if stored != "CHECKPOINTED":
+            raise RuntimeError("Checkpoint lease is stale")
+
+    return checkpoint
+
+
+def invoke_agent(incident, budget, checkpoint=None, *, store=None, claim=None):
+    if os.getenv("RUNTIME_TARGET", "standalone") != "classic":
+        from kira import agentcore, execution
+
+        payload = execution.incident_request(claim, budget)
+        target = env("RUNTIME_TARGET")
+        if target == "standalone":
+            result = execution.execute(payload, store=store, checkpoint=checkpoint)
+        elif target == "agentcore":
+            result = agentcore.invoke(
+                payload,
+                arn=env("AGENTCORE_RUNTIME_ARN"),
+                qualifier=env("AGENTCORE_ENDPOINT"),
+                region=env("BEDROCK_REGION"),
+                account=env("EXPECTED_ACCOUNT_ID"),
+                session_id=f"incident_{payload['incident_id']}_{payload['fence']}_{payload['owner']}",
+                deadline=payload["deadline"],
+            )
+        else:
+            raise ValueError("Unsupported runtime target")
+        answer = result["text"]
+        if not result["complete"]:
+            answer += "\nInvestigation incomplete; operator review required."
+        return answer, result["complete"]
+    # Explicit Classic compatibility adapter; never used by new owned-runtime IaC.
+    client = boto3.client(
+        "bedrock-agent-runtime",
+        region_name=env("BEDROCK_REGION"),
+        config=Config(
+            connect_timeout=3, read_timeout=min(20, max(5, budget - 10)), retries={"total_max_attempts": 1}
+        ),
+    )
+    deadline = time.monotonic() + budget
+    response = client.invoke_agent(
+        agentId=env("BEDROCK_AGENT_ID"),
+        agentAliasId=env("BEDROCK_AGENT_ALIAS_ID"),
+        sessionId=str(uuid.uuid4()),
+        inputText=(
+            f"Investigate instance {incident['instance_id']} near {incident['occurred_at']}. "
+            f"Trigger: {incident['kind']} {incident['state']}. Use logs and metrics. "
+            "Return concise evidence, uncertainty, remediation and follow-up."
+        ),
+    )
+    parts = []
+    saved_bytes = 0
+    stream = response["completion"]
+    try:
+        for index, chunk in enumerate(stream):
+            if time.monotonic() >= deadline or index >= 1024:
+                return "".join(parts), False
+            if "chunk" in chunk and "bytes" in chunk["chunk"]:
+                parts.append(chunk["chunk"]["bytes"].decode("utf-8", errors="replace"))
+                size = len("".join(parts).encode())
+                if checkpoint and size - saved_bytes >= 4096 and time.monotonic() < deadline - 25:
+                    checkpoint("".join(parts))
+                    saved_bytes = size
+                if size >= REPORT_LIMIT:
+                    return "".join(parts), False
+        return "".join(parts), True
+    finally:
+        if hasattr(stream, "close"):
+            stream.close()
+
+
+def notify(event, context, kind):
+    store = ledger()
+    sns = clients("sns")
+    topic = env("REPORTS_TOPIC_ARN")
+    base = env("STATUS_BASE_URL").rstrip("/")
+    if not STATUS_LINK.fullmatch(base):
+        raise RuntimeError("Status base URL must be a fixed HTTPS path")
+
+    def one(record):
+        pk, sk = parse_intent(record["body"])
+        if not sk.startswith(f"INTENT#{kind}#"):
+            raise ValueError("Notification queue received the wrong intent")
+        iid = pk.removeprefix("INCIDENT#")
+        notification = store.get(pk, f"NOTIFICATION#{kind}")
+        if notification is None:
+            raise RuntimeError("Notification record missing after durable handoff")
+        if notification["status"] == "PUBLISHER_ACCEPTED":
+            return
+        if notification["attempts"] >= MAX_ATTEMPTS:
+            raise RuntimeError("Notification exhausted retries; retain in DLQ")
+        claim = store.claim_notification(iid, kind, str(uuid.uuid4()), int(time.time()))
+        if claim is None:
+            raise RuntimeError("Notification has another active or expired lease; retry this queue record")
+        incident = store.get(pk)
+        if incident is None:
+            raise RuntimeError("Notification incident missing")
+        link = f"{base}?incident={iid}"
+        notification_id = f"{iid}-{kind.lower()}"
+        if kind == "INITIAL":
+            text = (
+                f"Incident: {iid}\nInstance: {incident['instance_id']}\n"
+                f"Trigger time: {incident['occurred_at']}\nStatus: {incident['status']}\n"
+                f"Trigger: {incident.get('trigger_kind', 'unknown')} {incident.get('trigger_state', 'unknown')}\n"
+                f"Status link: {link}\nNotification ID: {notification_id}"
+            )
+        else:
+            report_note = (
+                "Full report is stored in the private evidence bucket; sign in to read it."
+                if incident.get("report_version")
+                else "No investigation report was completed; operator review is required."
+            )
+            text = (
+                f"Incident: {iid}\nInstance: {incident['instance_id']}\n"
+                f"Status: {incident['status']}\nStatus link: {link}\n"
+                f"Notification ID: {notification_id}\n"
+                f"{report_note}"
+            )
+        try:
+            response = sns.publish(TopicArn=topic, Subject=f"[Kira] {kind.title()} {iid[:12]}", Message=text)
+            if not response.get("MessageId"):
+                raise RuntimeError("SNS did not acknowledge publication")
+        except Exception:
+            store.notification_result(claim, "FAILED" if claim["attempts"] >= MAX_ATTEMPTS else "PENDING")
+            raise
+        # A crash after publish can repeat email. The stable ID lets recipients
+        # recognize duplicates; SNS acceptance never proves inbox delivery.
+        store.notification_result(claim, "PUBLISHER_ACCEPTED", response["MessageId"])
+
+    return partial_batch(event, one)
+
+
+def initial(event, context=None):
+    return notify(event, context, "INITIAL")
+
+
+def report(event, context=None):
+    return notify(event, context, "REPORT")

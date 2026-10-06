@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from kira import chat
+from kira import chat, status
 from tests.helpers import ROOT
 
 
@@ -129,3 +129,28 @@ def test_expired_session_clears_private_history(settings):
     test.run()
     assert not test.session_state["authenticated"] and not test.session_state["messages"]
     assert not test.chat_input
+
+
+def test_incident_link_requires_sign_in_and_shows_authorized_report(settings, monkeypatch):
+    incident_id = "a" * 32
+    read = Mock(
+        return_value={
+            "incident_id": incident_id,
+            "instance_id": "i-0123456789abcdef0",
+            "occurred_at": "2026-10-05T10:00:00Z",
+            "status": "COMPLETE",
+            "report": "Redacted evidence from private storage",
+        }
+    )
+    monkeypatch.setattr(status, "load", read)
+    signed_out = app(False)
+    signed_out.query_params["incident"] = incident_id
+    signed_out.run()
+    assert not signed_out.exception
+    read.assert_not_called()
+    signed_in = app()
+    signed_in.query_params["incident"] = incident_id
+    signed_in.run()
+    assert not signed_in.exception
+    read.assert_called_once_with(incident_id)
+    assert any("Redacted evidence" in item.value for item in signed_in.text_area)

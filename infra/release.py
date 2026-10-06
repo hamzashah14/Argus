@@ -43,6 +43,15 @@ def checked_build(directory, spec):
     if manifest.get("lock_sha256") != lock_hash:
         raise VerificationError("Dependency lock changed after build; rebuild before rendering")
     for function, item in manifest["functions"].items():
+        required = {str(p.relative_to(ROOT)) for p in (ROOT / "kira").glob("*.py")} | {
+            "agent-instruction.txt",
+            "schemas/fetch_logs.json",
+            "schemas/fetch_metrics.json",
+            "kira_agentcore.py",
+            "lambda_function.py",
+        }
+        if not required <= set(item["source_files"]):
+            raise VerificationError("Build manifest omits required current source")
         if item["artifact"] != f"{function}.zip":
             raise VerificationError("Invalid artifact path")
         path = directory / item["artifact"]
@@ -61,7 +70,11 @@ def checked_build(directory, spec):
                 source = ROOT / (
                     f"lambda/{function}/lambda_function.py" if filename == "lambda_function.py" else filename
                 )
-                if filename.startswith("kira/") or filename == "lambda_function.py":
+                if filename.startswith(("kira/", "schemas/")) or filename in {
+                    "lambda_function.py",
+                    "agent-instruction.txt",
+                    "kira_agentcore.py",
+                }:
                     if hashlib.sha256(source.read_bytes()).hexdigest() != expected:
                         raise VerificationError("Source changed after build; rebuild before rendering")
     return manifest

@@ -8,6 +8,7 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from kira import chat
+from kira import status as incident_status
 from kira.config import AppConfig
 
 load_dotenv()
@@ -76,6 +77,7 @@ with st.sidebar:
         st.markdown("**Connection**")
         st.caption(st.session_state.connection_state if not settings.problems() else "Setup required")
         st.caption(f"Region: {settings.region or 'Not configured'}")
+        st.caption(f"Runtime: {settings.runtime_target}")
         st.caption(f"Environment: {settings.environment}")
     st.divider()
     st.caption(
@@ -94,7 +96,7 @@ if len(settings.password) < 12:
         st.subheader("Set up your workspace")
         st.info("Set APP_PASSWORD to at least 12 characters in your private .env file before signing in.")
         st.code(
-            "cp .env.example .env\n# Set APP_PASSWORD and your Bedrock agent connection settings.",
+            "cp .env.example .env\n# Set APP_PASSWORD and the verified runtime connection settings.",
             language="bash",
         )
         st.caption(
@@ -115,14 +117,51 @@ if not st.session_state.get("authenticated"):
             st.error("The workspace password did not match.")
     st.stop()
 
+requested_incident = st.query_params.get("incident")
+if requested_incident:
+    with st.container(border=True):
+        st.subheader("Incident status")
+        try:
+            snapshot = incident_status.load(requested_incident)
+            if snapshot is None:
+                st.info("This incident was not found or has passed its retention period.")
+            else:
+                st.write({key: value for key, value in snapshot.items() if key != "report"})
+                if snapshot.get("report"):
+                    label = (
+                        "Partial investigation checkpoint"
+                        if snapshot.get("partial")
+                        else "Investigation report"
+                    )
+                    st.text_area(label, snapshot["report"], height=280, disabled=True)
+        except (ValueError, RuntimeError, OSError):
+            st.warning("Incident status is unavailable. Ask the deployment operator to check storage access.")
+        except Exception:
+            # AWS client errors can include private infrastructure details.
+            st.warning("Incident status is unavailable. Ask the deployment operator to check storage access.")
+
 problems = settings.problems()
 if problems:
     with st.container(border=True):
-        st.subheader("Connect your Bedrock agent")
-        st.info("Your workspace is ready for configuration. Agent connectivity has not been checked.")
+        st.subheader("Connect your runtime")
+        st.info("Your workspace is ready for configuration. Runtime connectivity has not been checked.")
         for problem in problems:
             st.markdown(f"- {problem}")
-        st.code("BEDROCK_REGION=\nBEDROCK_AGENT_ID=\nBEDROCK_AGENT_ALIAS_ID=", language="bash")
+        if settings.runtime_target == "classic":
+            connection_example = (
+                "RUNTIME_TARGET=classic\nBEDROCK_REGION=\nBEDROCK_AGENT_ID=\nBEDROCK_AGENT_ALIAS_ID="
+            )
+        else:
+            connection_example = (
+                f"RUNTIME_TARGET={settings.runtime_target}\nBEDROCK_REGION=\nBEDROCK_MODEL_ID=\n"
+                "EXPECTED_ACCOUNT_ID=\nALLOWED_INSTANCE_IDS=\nRUNTIME_LIMITS=\nRUNTIME_RELEASE=\n"
+            )
+            connection_example += (
+                "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
+                if settings.runtime_target == "agentcore"
+                else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN="
+            )
+        st.code(connection_example, language="bash")
         st.caption(
             "Use your AWS profile, SSO session or workload role. The first investigation verifies that the configured agent can respond."
         )
@@ -133,8 +172,11 @@ with st.expander("Connection details", expanded=False):
     st.write(
         {
             "Region": settings.region,
-            "Agent": settings.agent_id,
-            "Alias": settings.alias_id,
+            "Runtime": settings.runtime_target,
+            "Model": settings.model_id or "Configured by the legacy agent",
+            "Endpoint": settings.agentcore_endpoint
+            if settings.runtime_target == "agentcore"
+            else settings.alias_id,
             "Environment": settings.environment,
             "Status": st.session_state.connection_state,
         }
@@ -197,7 +239,12 @@ if prompt and prompt.strip():
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
     with st.spinner("Reading evidence from your cloud…"):
-        result = chat.invoke(prompt, st.session_state.session_id, settings)
+        if settings.runtime_target == "classic":
+            result = chat.invoke(prompt, st.session_state.session_id, settings)
+        else:
+            result = chat.invoke(
+                prompt, st.session_state.session_id, settings, history=st.session_state.messages
+            )
     st.session_state.messages = chat.append_exchange(st.session_state.messages, prompt, result)
     st.session_state.connection_state = (
         "Last request succeeded" if result.status == "ok" else "Last request incomplete"
