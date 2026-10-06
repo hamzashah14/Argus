@@ -1,6 +1,7 @@
 """Conditional DynamoDB ledger: accepted event, incident and intents commit together."""
 
 import hashlib
+import re
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -653,6 +654,31 @@ class Ledger:
         )
         return result.get("Items", []), result.get("LastEvaluatedKey")
 
+    def sweep_state(self, kind):
+        row = self.get(f"SWEEP#{kind}") or {}
+        return {"revision": int(row.get("revision", 0)), "cursor": row.get("cursor")}
+
+    def save_sweep(self, kind, previous, cursor):
+        """CAS progress: concurrent sweeps can repeat rows but cannot overwrite newer progress."""
+        try:
+            self.table.update_item(
+                Key={"PK": f"SWEEP#{kind}", "SK": "META"},
+                UpdateExpression="SET revision=:next, #c=:cursor, #t=:ttl",
+                ConditionExpression="attribute_not_exists(revision) OR revision=:previous",
+                ExpressionAttributeNames={"#c": "cursor", "#t": "ttl"},
+                ExpressionAttributeValues={
+                    ":next": previous + 1,
+                    ":previous": previous,
+                    ":cursor": cursor,
+                    ":ttl": int(time.time()) + 30 * 86400,
+                },
+            )
+        except ClientError as exc:
+            if conditional(exc):
+                return "STALE"
+            raise
+        return "SAVED"
+
     def degrade_overdue(self, incident, now_epoch):
         """Give queued work an explicit outcome when its incident deadline passes."""
         if incident.get("status") not in {"PENDING", "RETRY"} or incident["deadline_epoch"] > now_epoch:
@@ -799,14 +825,16 @@ class Ledger:
         try:
             return self.table.update_item(
                 Key=key,
-                UpdateExpression="SET #s=:sending, lease_owner=:owner, lease_until=:until ADD attempts :one, fencing_token :one",
+                UpdateExpression="SET #s=:sending, lease_owner=:owner, lease_until=:until, GSI2PK=:active, GSI2SK=:lease_key ADD attempts :one, fencing_token :one",
                 ConditionExpression="(#s=:pending OR (#s=:sending AND lease_until<:now)) AND attempts<:max",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={
                     ":sending": "SENDING",
                     ":pending": "PENDING",
                     ":owner": owner,
-                    ":until": now_epoch + 30,
+                    ":until": now_epoch + 60,
+                    ":active": "NOTIFY",
+                    ":lease_key": f"{now_epoch + 60:012d}#{incident_id}#{kind}",
                     ":now": now_epoch,
                     ":one": 1,
                     ":max": MAX_ATTEMPTS,
@@ -829,7 +857,10 @@ class Ledger:
         if message_id:
             update += ", publisher_message_id=:message_id"
             values[":message_id"] = message_id
-        update += " REMOVE lease_owner, lease_until"
+            values[":messages"] = {message_id}
+        update += " REMOVE lease_owner, lease_until, GSI2PK, GSI2SK"
+        if message_id:
+            update += " ADD publisher_message_ids :messages"
         try:
             self.table.update_item(
                 Key={"PK": claim["PK"], "SK": claim["SK"]},
@@ -841,6 +872,154 @@ class Ledger:
         except ClientError as exc:
             if not conditional(exc):
                 raise
+
+    def expired_notifications(self, now_epoch, limit=100, cursor=None):
+        result = self.table.query(
+            IndexName="ActiveLeases",
+            KeyConditionExpression=Key("GSI2PK").eq("NOTIFY") & Key("GSI2SK").lte(f"{now_epoch:012d}~"),
+            Limit=limit,
+            **({"ExclusiveStartKey": cursor} if cursor else {}),
+        )
+        return result.get("Items", []), result.get("LastEvaluatedKey")
+
+    def recover_notification(self, row, now_epoch):
+        if row.get("status") != "SENDING" or row.get("lease_until", now_epoch) >= now_epoch:
+            return "UNCHANGED"
+        terminal = row["attempts"] >= MAX_ATTEMPTS
+        kind = row["SK"].removeprefix("NOTIFICATION#")
+        if kind not in {"INITIAL", "REPORT"}:
+            raise ValueError("Invalid notification kind")
+        records = [
+            {
+                "Update": {
+                    "TableName": self.name,
+                    "Key": item({"PK": row["PK"], "SK": row["SK"]}),
+                    "UpdateExpression": "SET #s=:next REMOVE lease_owner, lease_until, GSI2PK, GSI2SK ADD fencing_token :one",
+                    "ConditionExpression": "#s=:sending AND lease_owner=:owner AND fencing_token=:token AND lease_until<:now",
+                    "ExpressionAttributeNames": {"#s": "status"},
+                    "ExpressionAttributeValues": item(
+                        {
+                            ":next": "AMBIGUOUS" if terminal else "PENDING",
+                            ":sending": "SENDING",
+                            ":owner": row["lease_owner"],
+                            ":token": row["fencing_token"],
+                            ":now": now_epoch,
+                            ":one": 1,
+                        }
+                    ),
+                }
+            }
+        ]
+        if not terminal:
+            due = datetime.fromtimestamp(now_epoch, timezone.utc).isoformat().replace("+00:00", "Z")
+            records.append(
+                {
+                    "Put": {
+                        "TableName": self.name,
+                        "Item": item(
+                            self.intent(
+                                row["PK"].removeprefix("INCIDENT#"), kind, due, row["ttl"], uuid.uuid4().hex
+                            )
+                        ),
+                        "ConditionExpression": "attribute_not_exists(PK)",
+                    }
+                }
+            )
+        try:
+            self.client.transact_write_items(TransactItems=records)
+        except ClientError as exc:
+            if conditional(exc):
+                return "STALE"
+            raise
+        return "AMBIGUOUS" if terminal else "RETRY"
+
+    def notification_replay_plan(self, incident_id, kind):
+        if not re.fullmatch(r"[0-9a-f]{32}", incident_id) or kind not in {"INITIAL", "REPORT"}:
+            raise ValueError("Invalid notification reference")
+        pk = "INCIDENT#" + incident_id
+        incident, row = self.get(pk), self.get(pk, "NOTIFICATION#" + kind)
+        now = int(time.time())
+        if (
+            not incident
+            or not row
+            or min(incident.get("ttl", 0), row.get("ttl", 0)) <= now
+            or row["status"] not in {"FAILED", "AMBIGUOUS"}
+            or row.get("replay_runs", 0) >= 2
+        ):
+            raise ValueError(
+                "Only unexpired failed/ambiguous notifications with remaining replay allowance can be replayed"
+            )
+        plan = {
+            "incident_id": incident_id,
+            "kind": kind,
+            "status": row["status"],
+            "attempts": int(row["attempts"]),
+            "fencing_token": int(row["fencing_token"]),
+            "replay_runs": int(row.get("replay_runs", 0)),
+            "ttl": int(row["ttl"]),
+        }
+        plan["review_hash"] = hashlib.sha256(dumps(plan).encode()).hexdigest()
+        return plan
+
+    def replay_notification(self, reviewed, operator):
+        current = self.notification_replay_plan(reviewed["incident_id"], reviewed["kind"])
+        if current != reviewed:
+            raise ValueError("Notification replay plan changed; inspect again")
+        pk, kind, nonce = "INCIDENT#" + current["incident_id"], current["kind"], uuid.uuid4().hex
+        now = int(time.time())
+        due = datetime.fromtimestamp(now, timezone.utc).isoformat().replace("+00:00", "Z")
+        self.client.transact_write_items(
+            TransactItems=[
+                {
+                    "Update": {
+                        "TableName": self.name,
+                        "Key": item({"PK": pk, "SK": "NOTIFICATION#" + kind}),
+                        "UpdateExpression": "SET #s=:pending, attempts=:zero ADD fencing_token :one, replay_runs :one",
+                        "ConditionExpression": "#s=:old AND attempts=:attempts AND fencing_token=:fence AND #t>:now AND (replay_runs=:runs OR (attribute_not_exists(replay_runs) AND :runs=:zero))",
+                        "ExpressionAttributeNames": {"#s": "status", "#t": "ttl"},
+                        "ExpressionAttributeValues": item(
+                            {
+                                ":pending": "PENDING",
+                                ":old": current["status"],
+                                ":attempts": current["attempts"],
+                                ":fence": current["fencing_token"],
+                                ":now": now,
+                                ":runs": current["replay_runs"],
+                                ":zero": 0,
+                                ":one": 1,
+                            }
+                        ),
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": self.name,
+                        "Item": item(self.intent(current["incident_id"], kind, due, current["ttl"], nonce)),
+                        "ConditionExpression": "attribute_not_exists(PK)",
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": self.name,
+                        "Item": item(
+                            {
+                                "PK": pk,
+                                "SK": "NOTIFICATION_REPLAY#" + nonce,
+                                "operator": operator,
+                                "kind": kind,
+                                "created_at": due,
+                                "review_hash": current["review_hash"],
+                                "record_type": "notification_replay",
+                                "record_version": 1,
+                                "ttl": current["ttl"],
+                            }
+                        ),
+                        "ConditionExpression": "attribute_not_exists(PK)",
+                    }
+                },
+            ]
+        )
+        return {"status": "NOTIFICATION_REPLAY_RECORDED", "incident_id": current["incident_id"], "kind": kind}
 
     def replay_plan(self, event_id):
         event = self.get(f"EVENT#{event_id}")

@@ -236,9 +236,21 @@ def test_reconciler_resends_pending_and_fences_expired_lease(monkeypatch):
     monkeypatch.setenv("REPORT_QUEUE_URL", "report")
     store, sqs = MagicMock(), MagicMock()
     store.dispatch.return_value = "SENT"
+    store.sweep_state.return_value = {"revision": 0, "cursor": None}
+    store.save_sweep.return_value = "SAVED"
     intent = Ledger.intent("a" * 32, "INITIAL", "2026-10-05T10:00:00Z", 1000)
     store.pending.return_value = ([intent], None)
-    store.expired.return_value = ([{"PK": "INCIDENT#" + "b" * 32}], None)
+    store.expired.return_value = (
+        [
+            {
+                "PK": "INCIDENT#" + "b" * 32,
+                "SK": "META",
+                "GSI2PK": "ACTIVE",
+                "GSI2SK": "000000000000#" + "b" * 32,
+            }
+        ],
+        None,
+    )
     store.overdue.return_value = ([], None)
     store.get.return_value = {
         "PK": "INCIDENT#" + "b" * 32,
@@ -251,8 +263,10 @@ def test_reconciler_resends_pending_and_fences_expired_lease(monkeypatch):
         patch.object(pipeline, "ledger", return_value=store),
         patch.object(pipeline, "clients", return_value=sqs),
     ):
-        result = pipeline.reconcile()
-    assert result == {"pending_repaired": 1, "expired_checked": 1, "overdue_checked": 0}
+        result = pipeline.reconcile({"sweep": "pending"})
+        expired = pipeline.reconcile({"sweep": "expired"})
+    assert result == {"sweep": "pending", "checked": 1}
+    assert expired == {"sweep": "expired", "checked": 1}
     store.dispatch.assert_called_once()
     store.recover.assert_called_once()
 
@@ -303,14 +317,26 @@ def test_reconciler_marks_queued_overdue_incident(monkeypatch):
     store, sqs = MagicMock(), MagicMock()
     store.pending.return_value = ([], None)
     store.expired.return_value = ([], None)
-    store.overdue.return_value = ([{"PK": "INCIDENT#" + "a" * 32}], None)
+    store.sweep_state.return_value = {"revision": 0, "cursor": None}
+    store.save_sweep.return_value = "SAVED"
+    store.overdue.return_value = (
+        [
+            {
+                "PK": "INCIDENT#" + "a" * 32,
+                "SK": "META",
+                "GSI3PK": "OPEN",
+                "GSI3SK": "000000000000#" + "a" * 32,
+            }
+        ],
+        None,
+    )
     store.get.return_value = {"PK": "INCIDENT#" + "a" * 32, "status": "PENDING"}
     with (
         patch.object(pipeline, "ledger", return_value=store),
         patch.object(pipeline, "clients", return_value=sqs),
     ):
-        result = pipeline.reconcile()
-    assert result["overdue_checked"] == 1
+        result = pipeline.reconcile({"sweep": "overdue"})
+    assert result == {"sweep": "overdue", "checked": 1}
     store.degrade_overdue.assert_called_once()
 
 
@@ -651,6 +677,8 @@ def test_reconciler_continues_after_individual_dispatch_failure(monkeypatch):
     for key in ("WORK_QUEUE_URL", "INITIAL_QUEUE_URL", "REPORT_QUEUE_URL"):
         monkeypatch.setenv(key, key.lower())
     store, sqs = MagicMock(), MagicMock()
+    store.sweep_state.return_value = {"revision": 0, "cursor": None}
+    store.save_sweep.return_value = "SAVED"
     store.expired.return_value = ([], None)
     store.overdue.return_value = ([], None)
     store.pending.side_effect = [

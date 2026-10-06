@@ -243,6 +243,19 @@ Acceptance: Every injected accepted incident is terminal or visibly recoverable 
 
 **Phase 4 implementation checkpoint (6 October 2026).** The user authorized this phase. Repository implementation and local checks pass; P4.01–P4.06 remain VERIFYING and G4 NOT_RUN pending customer staging faults, exact telemetry and real primary/fallback receipts plus a second-operator rehearsal. Prior gates and all findings remain open. See [Phase 4 records](docs/implementation/phase-4/NOTES.md); no Phase 5 advancement is implied.
 
+**Cross-phase review (6 October 2026).** The subsequent user-requested review
+reproduced eight additional OPEN gaps, despite all 349 existing tests passing.
+See the [review and corrective batches](docs/implementation/review-phases-1-4/REVIEW.md)
+and [Floci compatibility proposal](docs/implementation/review-phases-1-4/FLOCI.md).
+Repair release verification/bootstrap, recovery/stream/notification behavior and
+observer/receipt/remote visibility under the existing tasks before relying on
+their acceptance. The user subsequently authorized continuation; corrective
+batches A–C now have local implementation and regression evidence, with R01–R08
+VERIFYING pending live acceptance. R01 originally overstated full promotion scope;
+its actual gap was standalone verification and exact role binding. See the
+[corrective checkpoint](docs/implementation/review-phases-1-4/CORRECTIONS.md).
+Emulator integration remains proposed. Phase 5 remains NOT_STARTED pending user direction.
+
 **P4.01 — Add availability and dependency probes.** Prerequisites: P0.02, P2.05, P3.04. Suggested owner: Engineering + Operations. Findings: F05.
 
 Define externally observed HTTP/service checks for critical routes and essential dependencies, response-time thresholds, and recovery signals. Cover services with little traffic and failures that leave the instance running; keep probes outside the failing process.

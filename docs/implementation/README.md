@@ -4,6 +4,16 @@ Start with [STATE.md](STATE.md), then [WORK_LOG.md](WORK_LOG.md). The root
 `IMPLEMENTATION_TRACKER.md` is the task/gate status authority. These files explain
 the evidence and preserve context between sessions.
 
+## Phases 1–4 review
+
+[Engineering review](review-phases-1-4/REVIEW.md) preserves eight historical gaps
+and reproductions. [Corrective implementation](review-phases-1-4/CORRECTIONS.md)
+records user-authorized batches A–C, regression evidence, bootstrap/replay
+procedures, scope correction and pending live gates. R01–R08 remain VERIFYING.
+[Floci assessment](review-phases-1-4/FLOCI.md) records exact compatibility gaps
+and a cost-conscious local integration proposal. No emulator is installed and
+Phase 5 remains NOT_STARTED.
+
 ## Phase 0 records
 
 | Record | Purpose |

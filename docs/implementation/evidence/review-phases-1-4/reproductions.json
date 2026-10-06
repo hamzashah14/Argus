@@ -1,0 +1,81 @@
+{
+  "kind": "known_defect_reproduction",
+  "network_calls": 0,
+  "aws_client_constructions": 0,
+  "findings": [
+    {
+      "finding": "R01",
+      "observed": "PASS with all six function roles unreviewed; zero IAM checks"
+    },
+    {
+      "finding": "R02",
+      "sweeps": 3,
+      "overdue_queries": 0,
+      "pending_queries": 0,
+      "recovery_calls": 12,
+      "observed": "Earlier scan consumes budget on every sweep; later indexes never queried"
+    },
+    {
+      "finding": "R03",
+      "coverage_errors": [
+        {
+          "enabled": false,
+          "error": "Required metric unavailable: i-0123456789abcdef0-api-ready"
+        },
+        {
+          "enabled": true,
+          "error": "Required metric unavailable: i-0123456789abcdef0-api-ready"
+        }
+      ],
+      "disabled_observer": {
+        "status": "DISABLED"
+      },
+      "observed": "Promotion requires observer health metrics even before activation and when paused"
+    },
+    {
+      "finding": "R04",
+      "deadline_seconds": 30,
+      "simulated_seconds_before_detection": 96002,
+      "stream_read_calls": 96002,
+      "error": "Remote execution limit reached",
+      "observed": "Botocore buffers a whole unterminated line before adapter checks time/size"
+    },
+    {
+      "finding": "R05",
+      "valid_services": 3,
+      "simulated_seconds": 26,
+      "health_publications": 0,
+      "error": "Observer deadline exhausted",
+      "observed": "Accepted inventory aborts before publishing even the already collected health results"
+    },
+    {
+      "finding": "R06",
+      "host_region": "us-east-1",
+      "model_widget_region": "eu-central-1",
+      "host_log_widgets": 0,
+      "host_log_retention_resources": 0,
+      "observed": "Remote model telemetry is not wired to its region/log group; host retention is not managed"
+    },
+    {
+      "finding": "R07",
+      "result": {
+        "batchItemFailures": [
+          {
+            "itemIdentifier": "synthetic"
+          }
+        ]
+      },
+      "terminal_or_recovery_writes": 0,
+      "observed": "Expired third SENDING lease is never finalized or made replayable by the notifier"
+    },
+    {
+      "finding": "R08",
+      "failures": [
+        "CANARY_RECEIPT_MISSED"
+      ],
+      "instrumented_delivery": false,
+      "observed": "First receipt and accepted retry have different SNS message IDs; valid delivery stays classified as missed"
+    }
+  ],
+  "interpretation": "All eight OPEN defects reproduced; this is not a production or remediation PASS"
+}

@@ -189,6 +189,10 @@ AgentCore UI only needs invocation on the exact Runtime and release endpoint.
 The UI's incident read role excludes raw EVENT records. Individual user identity
 and per-user durable work allowances remain Phase 5 requirements.
 
+For deployments with Phase 4 observations, follow the corrected
+[bootstrap order](../review-phases-1-4/CORRECTIONS.md#bootstrap-and-deployment-changes):
+verified enabled health bootstrap must precede strict coverage/promotion.
+
 ## Budgets, recovery, replay and rollback
 
 Reference allowances are 32,000 reserved input+maximum-output tokens across all
@@ -214,8 +218,14 @@ cleanup is asynchronous, while UI reads already reject expired records.
 For investigation replay, use `scripts/replay_incident.py` to inspect and then
 apply its reviewed plan with the exact event ID/operator identity. It preserves
 identity and records an audit intent. Completed, degraded, active, expired or
-exhausted work cannot be rerun. Notification-only and unaccepted poison/delivery
-DLQ replay need separate reviewed procedures; this script does not implement them.
+exhausted work cannot be rerun. Notification-only replay now has a separate
+`scripts/replay_notification.py` inspect/apply procedure with exact review JSON,
+operator audit and bounded notification allowance. See the
+[corrective recovery guide](../review-phases-1-4/CORRECTIONS.md#recovery-and-safe-notification-only-replay).
+Unaccepted poison/delivery DLQ replay still needs a separately reviewed procedure.
+Reconcile schedules now invoke four independent scan classes with persisted CAS
+progress; empty manual payloads scan pending only. AgentCore SDK invocation uses a
+killable child to bound the local wait; upstream cancellation remains unproven.
 
 Pause new model work through a reviewed routing change; initial alerts and sweep
 remain active. Existing calls may finish and queued incidents can become DEGRADED

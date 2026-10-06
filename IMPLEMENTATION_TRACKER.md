@@ -6,7 +6,7 @@ Updated: 6 October 2026. Plan: [PRODUCTION_IMPLEMENTATION_PLAN.md](/Users/hamzas
 
 Overall implementation: **13/52 tasks DONE (25.0%)**. Phase gates: **1/8 passed**. Verified audit closures: **0/20**. Current implementation status: **PHASE_4_VERIFYING**. The user clarified there is no deployed project infrastructure; the configured account and regional prerequisites have now been inspected read-only. G0 passes as the new-deployment assessment clarified in the plan, with deployment-specific checks explicitly assigned to later tasks. Phase 1 application/backend changes pass local acceptance; hosted CI is pending. Inventory fixtures and targets remain synthetic/provisional. Progress counts are manual and must be updated alongside task statuses. Tasks are unweighted; percentage does not indicate production readiness.
 
-Active tasks: **P4.01–P4.06 detection coverage and observability; prior live gates remain pending**; P2.01–P2.06 local implementation remains verified with live acceptance pending, explicitly authorized by the user. P1.01 hosted CI remains pending. The user authorized Phase 1. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
+Active checkpoint: **Phases 1–4 corrective batches A–C implemented locally; R01–R08 VERIFYING pending live qualification.** P4.01–P4.06 and prior live gates remain VERIFYING/pending; P1.01 hosted CI remains pending. The user will decide when Phase 5 starts. No review finding is remediated by a passing local suite. The account assessment is complete; provisioning still requires selected regions/model, budget and deployment identity. Resume from [docs/implementation/STATE.md](docs/implementation/STATE.md). Production operator roles remain unassigned; Codex owns this session's engineering records.
 
 Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Replace “—” with the actual owner, PR/commit/release link, validation evidence, or a blocker/next action. A DONE task requires its plan acceptance criterion and evidence. Do not mark an entire finding closed solely because one mapped task is done.
 
@@ -138,6 +138,23 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | F19 | P1.08, P3.01, P3.06, P4.04, P5.03, P6.05, P7.06 | OPEN | — |
 | F20 | P0.06, P1.02, P2.04, P6.01 | OPEN | — |
 
+**Phases 1–4 review findings.** Additional to F01–F20. User-authorized local
+corrections and positive tests are recorded in
+[CORRECTIONS.md](docs/implementation/review-phases-1-4/CORRECTIONS.md); all eight
+remain VERIFYING pending their full customer acceptance. Historical defect
+evidence remains in the [review](docs/implementation/review-phases-1-4/REVIEW.md).
+
+| Review ID | Priority | Existing remediation tasks | Status | Required next evidence |
+|---|---|---|---|---|
+| R01 — Shared IAM verification (standalone scope corrected) | P1 | P2.02, P2.05 | VERIFYING | Actual customer IAM/KMS/service calls after local six-role drift checks |
+| R02 — Recovery scan starvation | P1 | P3.03, P3.07, P3.08 | VERIFYING | Concurrent DynamoDB/GSI sweeps and sustained arrivals after local poison-prefix/CAS checks |
+| R03 — Bootstrap health dependency | P1 | P2.05, P4.01, P4.03 | VERIFYING | Real fresh-account bootstrap/paused behavior and telemetry publication |
+| R04 — AgentCore stream bounds | P1 | P3.05, P3.08 | VERIFYING | Linux Lambda and real AgentCore deadline/fencing after local SDK socket checks |
+| R05 — Observer aggregate budget | P1 | P4.01, P4.02, P4.05 | VERIFYING | Actual maximum-inventory cadence, quotas and fault/load behavior |
+| R06 — Remote runtime visibility | P2 | P4.04 | VERIFYING | Actual AgentCore logs/EMF/native metric ingestion with qualified region/endpoint |
+| R07 — Third notification ambiguity | P2 | P3.04, P3.06, P4.06 | VERIFYING | Actual SNS/DynamoDB send-ack/process-kill recovery and audited notification replay |
+| R08 — Duplicate receipt mismatch | P2 | P3.06, P4.05 | VERIFYING | Actual SNS/SQS reordered/duplicate delivery and mailbox/recipient rotation |
+
 **Decision register.** Proposed defaults allow document/repository work to proceed; actual integration choices must be recorded before their dependent tasks.
 
 | Decision | Proposed direction / required input | Owner | Status | Blocks |
@@ -150,6 +167,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 | D06 | [Reference targets](docs/implementation/phase-0/TARGETS.md); live traffic/budget approval pending | Codex proposal; customer owner pending | REFERENCE_RECORDED | Live P3.07, P6.03 |
 | D07 | Evidence classification, allowed model region, retention/deletion policy | Unassigned | TO_CONFIRM | P3.06, P5.03; real-data evaluation |
 | D08 | Production release owner, window, rollback/abort thresholds | Unassigned | TO_CONFIRM | P7.01 and production cutover |
+| D09 | Floci for scoped local integration; preserve strict AWS gates and qualify real AgentCore later | Codex assessment; user direction pending | PROPOSED — NOT_INSTALLED | Local integration harness only; does not close live gates |
 
 **Blocker / deferral register.** Phase 0's assessment is complete. The following gaps affect later cloud deployment, not local Phase 1 work.
 
@@ -187,5 +205,8 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | 2026-10-06 | P3.01–P3.08 | Durable pipeline, owned orchestration and standalone/AgentCore releases verified locally; deployment/cost guide recorded | [Validation](docs/implementation/phase-3/VALIDATION.md) | VERIFYING: live G2/G3 and hosted CI pending; Phase 4 not started |
 | 2026-10-06 | P4.01–P4.06 | Detection, freshness, recovery, telemetry, no-model canary/receipt, independent fallback and runbooks verified locally | [Validation](docs/implementation/phase-4/VALIDATION.md) | VERIFYING: live G4 and prior gates pending; Phase 5 not started |
+| 2026-10-06 | Phases 1–4 review; R01–R08 | 349 existing tests pass; eight additional gaps reproduced offline; corrective batches and Floci compatibility proposal recorded | [Review](docs/implementation/review-phases-1-4/REVIEW.md); [reproductions](docs/implementation/evidence/review-phases-1-4/reproductions.json) | Await user implementation direction; Phase 5 NOT_STARTED; no runtime fixes or emulator/cloud deployment |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
+
+| 2026-10-06 | Corrective batches A–C; R01–R08 | Shared IAM/bootstrap, resumable independent sweeps, killable AgentCore SDK, notification ambiguity/replay, per-service observer, duplicate receipts and remote visibility implemented; 410 tests, 64 templates, 13 build pairs and both release layouts PASS locally | [Corrections](docs/implementation/review-phases-1-4/CORRECTIONS.md); [evidence](docs/implementation/evidence/review-phases-1-4/corrections-validation.json) | VERIFYING: customer acceptance pending; R01 standalone scope corrected; Floci proposed; Phase 5 NOT_STARTED |

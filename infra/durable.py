@@ -182,7 +182,12 @@ def render(
             ):
                 raise VerificationError("Observation schedules require verified pipeline/runtime bindings")
             stages["observations"] = observation_templates.active(
-                spec, foundation, bindings["observation_versions"], bindings["versions"]
+                spec,
+                foundation,
+                bindings["observation_versions"],
+                bindings["versions"],
+                runtime_target=config["runtime_target"],
+                agentcore=bindings.get("agentcore"),
             )
     artifacts = bindings.get("artifacts")
     if foundation and artifacts:

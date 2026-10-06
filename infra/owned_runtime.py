@@ -6,7 +6,7 @@ import re
 from dataclasses import asdict
 
 from infra.spec import ROOT, digest, name, tags
-from infra.templates import att, resource, role, statement, template
+from infra.templates import att, resource, role, statement, tagged, template
 from infra.verify import VerificationError
 from kira.agentcore import validate_target
 from kira.runtime import Limits
@@ -197,6 +197,18 @@ def agentcore_endpoint(spec, runtime_id, version):
         raise VerificationError("Endpoint requires an explicitly collected runtime version")
     t = template(spec, spec["bedrock_region"], "Create-only AgentCore endpoint pinned to a candidate version")
     endpoint = "release_" + spec["release_id"].replace("-", "_")
+    # Pre-create groups before either endpoint can emit application logs. The
+    # DEFAULT endpoint is not used by Kira, but exists for every AWS runtime.
+    for logical, qualifier in (("RuntimeLogs", endpoint), ("DefaultLogs", "DEFAULT")):
+        t["Resources"][logical] = resource(
+            "Logs::LogGroup",
+            {
+                "LogGroupName": agentcore_log_group(runtime_id, qualifier),
+                "RetentionInDays": spec["log_retention_days"],
+                "Tags": tagged(spec),
+            },
+            retain=True,
+        )
     t["Resources"]["Endpoint"] = resource(
         "BedrockAgentCore::RuntimeEndpoint",
         {
@@ -206,6 +218,7 @@ def agentcore_endpoint(spec, runtime_id, version):
             "Tags": tags(spec, True),
         },
         retain=True,
+        depends=["RuntimeLogs", "DefaultLogs"],
     )
     t["Outputs"] = {
         "RuntimeArn": {"Value": att("Endpoint", "AgentRuntimeArn")},
@@ -214,3 +227,7 @@ def agentcore_endpoint(spec, runtime_id, version):
         "RuntimeVersion": {"Value": att("Endpoint", "LiveVersion")},
     }
     return t
+
+
+def agentcore_log_group(runtime_id, endpoint):
+    return f"/aws/bedrock-agentcore/runtimes/{runtime_id}-{endpoint}"

@@ -73,17 +73,65 @@ def verify_runtime(bundle, factory):
     return {"status": "PASS", "scope": "pinned observation runtime only; actual detection/delivery need G4"}
 
 
+def seed_health(bundle, factory):
+    """Explicit customer operation before promotion; never activates schedules."""
+    if bundle["spec"]["reference_only"]:
+        raise VerificationError("Synthetic reference cannot seed cloud observations")
+    from infra.durable_ops import require_reviewed_source
+
+    require_reviewed_source(bundle)
+    spec = bundle["spec"]
+    if not spec["observability"]["enabled"]:
+        return {"status": "DISABLED", "services": [], "scope": "reviewed observation inventory paused"}
+    if spec["maintenance_mode"]:
+        raise VerificationError("Health bootstrap requires a non-maintenance reviewed inventory")
+    verify_runtime(bundle, factory)
+    # Production caller supplies a client with the full observer read timeout.
+    client = factory("lambda", spec["monitor_region"])
+    results = []
+    for service in spec["observability"]["services"]:
+        response = client.invoke(
+            FunctionName=bundle["bindings"]["observation_versions"]["ObserverVersionArn"],
+            InvocationType="RequestResponse",
+            Payload=json.dumps({"mode": "health", "service_id": service["id"]}).encode(),
+        )
+        body = response["Payload"]
+        try:
+            result = json.loads(body.read(8193))
+        finally:
+            body.close()
+        if (
+            response.get("FunctionError")
+            or response.get("StatusCode") != 200
+            or (result.get("mode") != "health" or result.get("status") != "CHECKED")
+        ):
+            raise VerificationError("Health bootstrap incomplete; promotion remains blocked")
+        results.append(service["id"])
+    return {
+        "status": "SEEDED",
+        "services": results,
+        "next": "Run strict coverage/canary; metrics may take time to appear",
+    }
+
+
 def verify_registration(bundle, factory):
     """Verify live scheduling/subscription/alarm registrations, never claim delivery."""
     spec, bindings = bundle["spec"], bundle["bindings"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     validate_versions(spec, bindings["observation_versions"])
     desired = observation_templates.active(
-        spec, bindings["foundation"], bindings["observation_versions"], bindings["versions"]
+        spec,
+        bindings["foundation"],
+        bindings["observation_versions"],
+        bindings["versions"],
+        runtime_target=bundle["config"]["runtime_target"],
+        agentcore=bindings.get("agentcore"),
     )["Resources"]
     events = factory("events", spec["monitor_region"])
-    for logical in ("ObserverSchedule", "CanarySchedule"):
-        properties = desired[logical]["Properties"]
+    for resource_value in desired.values():
+        if resource_value["Type"] != "AWS::Events::Rule":
+            continue
+        properties = resource_value["Properties"]
         rule = events.describe_rule(Name=properties["Name"])
         targets = events.list_targets_by_rule(Rule=properties["Name"])
         if any(rule.get(k) != properties[k] for k in ("State", "ScheduleExpression")) or (

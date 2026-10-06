@@ -147,13 +147,14 @@ def reconcile(event=None, context=None):
     sqs = clients("sqs")
     failures = []
     deadline = time.monotonic() + min(
-        45, context.get_remaining_time_in_millis() / 1000 - 10 if context else 45
+        50, context.get_remaining_time_in_millis() / 1000 - 10 if context else 50
     )
 
-    def scan(query, value, process):
-        cursor, checked = None, 0
+    def scan(kind, number, query, value, process, stop):
+        state = store.sweep_state(kind)
+        cursor, checked = state["cursor"], 0
         for _ in range(10):
-            if time.monotonic() >= deadline:
+            if time.monotonic() + 38 >= stop:
                 failures.append("sweep deadline")
                 break
             try:
@@ -162,38 +163,63 @@ def reconcile(event=None, context=None):
                 failures.append("index read")
                 break
             for row in rows:
-                if time.monotonic() >= deadline:
+                if time.monotonic() + 30 >= stop:
                     failures.append("sweep deadline")
+                    break
+                progress = {key: row[key] for key in ("PK", "SK", f"GSI{number}PK", f"GSI{number}SK")}
+                # Advance before a potentially killed/poisoned operation. Durable rows
+                # remain eligible on the next wrap; a failed prefix cannot trap progress.
+                if store.save_sweep(kind, state["revision"], progress) == "STALE":
                     return checked
+                state["revision"] += 1
                 try:
                     process(row)
                 except Exception:
                     failures.append("handoff")  # Continue independent incident recovery.
                 checked += 1
-            if not cursor:
-                break
+            else:
+                if not cursor:
+                    store.save_sweep(kind, state["revision"], None)
+                    break
+                continue
+            break
         else:
             failures.append("sweep page limit")
         return checked
 
     def current_action(row, action):
-        current = store.get(row["PK"])
+        current = store.get(row["PK"], row.get("SK", "META"))
         if current:
             action(current, int(now.timestamp()))
 
-    result = {
-        "expired_checked": scan(
-            store.expired, int(now.timestamp()), lambda row: current_action(row, store.recover)
+    jobs = {
+        "expired": (2, store.expired, int(now.timestamp()), lambda row: current_action(row, store.recover)),
+        "overdue": (
+            3,
+            store.overdue,
+            int(now.timestamp()),
+            lambda row: current_action(row, store.degrade_overdue),
         ),
-        "overdue_checked": scan(
-            store.overdue, int(now.timestamp()), lambda row: current_action(row, store.degrade_overdue)
+        "pending": (1, store.pending, now_text, lambda row: dispatch_row(store, row, sqs)),
+        "notifications": (
+            2,
+            store.expired_notifications,
+            int(now.timestamp()),
+            lambda row: current_action(row, store.recover_notification),
         ),
-        "pending_repaired": scan(store.pending, now_text, lambda row: dispatch_row(store, row, sqs)),
     }
+    mode = (event or {}).get("sweep", "pending")
+    if mode not in jobs:
+        raise ValueError("Unknown recovery scan")
+    result = {"sweep": mode, "checked": scan(mode, *jobs[mode], deadline)}
     emit(
         "reconcile",
         "INCOMPLETE" if failures else "COMPLETE",
-        metrics={"Heartbeat": 1, "SweepPending": result["pending_repaired"], "Failure": len(failures)},
+        metrics={
+            "Heartbeat": 1,
+            "SweepPending": result["checked"] if mode == "pending" else 0,
+            "Failure": len(failures),
+        },
     )
     if failures:
         raise RuntimeError("Reconciliation incomplete; due state remains durable for the next sweep")
@@ -400,6 +426,8 @@ def notify(event, context, kind):
         raise RuntimeError("Status base URL must be a fixed HTTPS path")
 
     def one(record):
+        if context and context.get_remaining_time_in_millis() < 45000:
+            raise RuntimeError("Insufficient notification time; retain this record for retry")
         pk, sk = parse_intent(record["body"])
         if not sk.startswith(f"INTENT#{kind}#"):
             raise ValueError("Notification queue received the wrong intent")
@@ -409,6 +437,9 @@ def notify(event, context, kind):
             raise RuntimeError("Notification record missing after durable handoff")
         if notification["status"] == "PUBLISHER_ACCEPTED":
             return
+        if notification["status"] == "SENDING" and notification.get("lease_until", 0) < int(time.time()):
+            store.recover_notification(notification, int(time.time()))
+            raise RuntimeError("Expired notification lease recovered; retry the durable handoff")
         if notification["attempts"] >= MAX_ATTEMPTS:
             raise RuntimeError("Notification exhausted retries; retain in DLQ")
         claim = store.claim_notification(iid, kind, str(uuid.uuid4()), int(time.time()))
@@ -446,6 +477,7 @@ def notify(event, context, kind):
                 Subject=f"[Kira] {kind.title()} {iid[:12]}",
                 Message=text,
                 MessageAttributes={
+                    "kira_notification": {"DataType": "String", "StringValue": notification_id},
                     "kira_canary": {
                         "DataType": "String",
                         "StringValue": "true" if "canary_slot" in incident else "false",

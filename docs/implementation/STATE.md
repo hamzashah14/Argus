@@ -1,8 +1,11 @@
 # Resume here
 
-Updated: 2026-10-06. **Phase 4 repository implementation PASS; P4.01–P4.06
-VERIFYING, live G4 NOT_RUN.** The user explicitly authorized Phase 4. Phase 5 is
-not started. No project AWS deployment, probes, inference or notifications occurred.
+Updated: 2026-10-06. **User-authorized Phases 1–4 corrective batches A–C are
+implemented locally; R01–R08 VERIFYING pending live qualification.** **410 tests**, 64 templates and 13 deterministic package pairs/import checks
+pass; both old and extended owned releases render with actual local hashes. Read the
+[corrective checkpoint](review-phases-1-4/CORRECTIONS.md). Phase 5 is not started.
+No AWS project calls/resources, live probes, inference or notifications occurred.
+Floci integration remains proposed, not installed.
 
 ## User decisions
 
@@ -29,7 +32,8 @@ not started. No project AWS deployment, probes, inference or notifications occur
 - Original parent `6b91a71e268ce7b0915055fb897073d3379e1ffe`; verified source baseline
   `1ad38ec1aaff96c4872a653885e33e540742519a`. Original 25-file snapshot/manifest and
   ten reproduced defects remain preserved; unchanged Phase 0 source at `badc15e`.
-- **13/52 tasks DONE**, 20 findings OPEN. G0 PASS as a new-deployment prerequisite
+- **13/52 tasks DONE**, 20 original findings OPEN plus eight VERIFYING review findings
+  R01–R08 (local fixes are not production qualification). G0 PASS as a new-deployment prerequisite
   assessment, not deployed runtime qualification. P1.01 hosted CI and live G2/G3/G4
   remain pending. Tests cannot close them.
 - Phase 4: **349 tests**, 12 prior + 20 owned + 32 extended CloudFormation templates
@@ -53,6 +57,26 @@ not started. No project AWS deployment, probes, inference or notifications occur
   [cost/setup](phase-4/COST.md), [sanitized evidence](evidence/phase-4/local-validation.json).
 
 ## Next authorized work
+
+The user said “Continue with the Project” after review. Continue corrective
+batches A–C in the existing phases; do not interpret that as Phase 5 or live AWS
+deployment. All eight have repository fixes and positive tests; final local validation passes.
+Save/verify the local checkpoint and preserve current evidence. Read
+[CORRECTIONS.md](review-phases-1-4/CORRECTIONS.md), tracker and WORK_LOG.
+
+R01 scope correction: full promotion already verified six pipeline role grants;
+the historical diagnostic exercised standalone verify-runtime. Checks now live in
+the shared verifier, with exact owned role binding and sealed template validation.
+Recovery uses four independent CAS-progress scans; AgentCore has a killable SDK
+child; notifications have expired-lease ambiguity and audited notification-only
+replay; health uses per-service invocations, separate guarded delivery checks and
+explicit bootstrap; duplicate receipt identity and remote-region/log/retention
+bindings are corrected. Read corrected Phase 3/4 guides before cloud commands.
+
+Historical review evidence at source `175d7e9` remains unchanged. The original
+defect runner is historical, not the current acceptance suite. Floci batch D is
+still a proposal; customer staging batch E requires real inputs and budget.
+The user will decide when Phase 5 starts; do not start it automatically.
 
 Resume Phase 4 staging qualification when actual customer prerequisites and budget
 exist. Follow the Phase 3 deployment guide and Phase 4 additions; resolve quotas,
@@ -89,7 +113,8 @@ remain in each phase's VALIDATION.md and WORK_LOG. Keep Streamlit for now.
 4. Record meaningful work, commands, evidence, limits and blockers without secrets.
    Private customer evidence stays in ignored docs/implementation/evidence/private/.
 
-Local implementation checkpoint: `832a4e5`. Complete old and extended release
+Historical Phase 4 implementation checkpoint: `832a4e5`. Complete old and extended release
 renders passed again from its clean working tree (`source_dirty: false`); synthetic
-cloud verification was rejected before creating an AWS client. This documentation
-follow-up changes no runtime code or live gate.
+cloud verification was rejected before creating an AWS client. That historical documentation
+follow-up changed no runtime code or live gate. Current corrective implementation
+and its limits are in CORRECTIONS.md and corrections-validation.json.

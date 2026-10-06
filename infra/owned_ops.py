@@ -12,6 +12,8 @@ from kira.runtime import sdk_client
 def verify_role(client, arn, planned):
     name = arn.rsplit("/", 1)[-1]
     actual = client.get_role(RoleName=name)["Role"]
+    if actual.get("PermissionsBoundary") or actual.get("Path") != planned["Path"]:
+        raise VerificationError("Execution role path or permissions boundary differs from the release")
     if actual["AssumeRolePolicyDocument"] != planned["AssumeRolePolicyDocument"]:
         raise VerificationError("Execution role trust differs from the release")
     inline = client.list_role_policies(RoleName=name)
@@ -49,6 +51,21 @@ def sealed(bundle, stage, factory):
     return body
 
 
+def verify_agentcore_logs(spec, remote, factory):
+    client = factory("logs", spec["bedrock_region"])
+    runtime_id = remote["RuntimeArn"].split("/")[-1]
+    for endpoint in (remote["EndpointName"], "DEFAULT"):
+        group = owned_runtime.agentcore_log_group(runtime_id, endpoint)
+        response = client.describe_log_groups(logGroupNamePrefix=group)
+        matches = [r for r in response.get("logGroups", []) if r["logGroupName"] == group]
+        if (
+            response.get("nextToken")
+            or len(matches) != 1
+            or (matches[0].get("retentionInDays") != spec["log_retention_days"])
+        ):
+            raise VerificationError("AgentCore application log group or retention drifted")
+
+
 def verify_candidate(bundle, factory):
     spec, bindings, config = bundle["spec"], bundle["bindings"], bundle["config"]
     from infra.verify import assert_account
@@ -75,6 +92,7 @@ def verify_candidate(bundle, factory):
         remote = bindings["agentcore"]
         planned = sealed(bundle, "agentcore-runtime", factory)
         sealed(bundle, "agentcore-endpoint", factory)
+        verify_agentcore_logs(spec, remote, factory)
         control = factory("bedrock-agentcore-control", spec["bedrock_region"])
         runtime_id = remote["RuntimeArn"].split("/")[-1]
         actual = control.get_agent_runtime(
@@ -141,16 +159,6 @@ def verify_candidate(bundle, factory):
     from infra.durable_ops import verify_runtime
 
     verify_runtime(bundle, factory=factory)
-    planned = sealed(bundle, "durable-runtime", factory)
-    for logical in ("Ingress", "Dispatch", "Investigate", "Initial", "Report", "Reconcile"):
-        actual = factory("lambda", spec["monitor_region"]).get_function_configuration(
-            FunctionName=bindings["versions"][logical + "VersionArn"]
-        )
-        verify_role(
-            factory("iam", spec["monitor_region"]),
-            actual["Role"],
-            planned["Resources"][logical + "Role"]["Properties"],
-        )
     return {
         "status": "PASS",
         "runtime_target": config["runtime_target"],

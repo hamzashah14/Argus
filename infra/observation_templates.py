@@ -2,7 +2,7 @@
 
 import json
 
-from infra import durable_templates
+from infra import durable_templates, owned_runtime
 from infra.spec import alarm_descriptors, digest, log_groups, log_prefix, name, topic_arn
 from infra.templates import add_function, att, ref, resource, statement, tagged, template
 
@@ -107,7 +107,14 @@ def foundation(spec, outputs, config):
                             "ArnEquals": {
                                 "aws:SourceArn": [
                                     f"arn:aws:events:{spec['monitor_region']}:{spec['account_id']}:rule/{name(spec, 'obs-' + job)}"
-                                    for job in ("probe", "canary")
+                                    for job in (
+                                        "probe",
+                                        "canary",
+                                        *(
+                                            "health-" + service["id"]
+                                            for service in spec["observability"]["services"]
+                                        ),
+                                    )
                                 ]
                             },
                             "StringEquals": {"aws:SourceAccount": spec["account_id"]},
@@ -242,7 +249,7 @@ def runtime(spec, outputs, artifacts, durable_config):
             common,
             spec["monitor_region"],
             permissions,
-            60 if logical == "Observer" else 30,
+            180 if logical == "Observer" else 30,
         )
         if logical != "Receipt":
             t["Resources"][logical + "Async"] = resource(
@@ -258,13 +265,23 @@ def runtime(spec, outputs, artifacts, durable_config):
     return t
 
 
-def active(spec, outputs, versions, pipeline_versions):
+def active(spec, outputs, versions, pipeline_versions, *, runtime_target="standalone", agentcore=None):
     t = template(
         spec, spec["monitor_region"], "Independent detection schedules, alarms and pipeline dashboard"
     )
     r = t["Resources"]
     config = spec["observability"]
     enabled = config["enabled"]
+    if runtime_target not in {"standalone", "agentcore"}:
+        raise ValueError("Unknown monitored runtime target")
+    if runtime_target == "agentcore":
+        if not agentcore:
+            raise ValueError("AgentCore observation requires explicit runtime and endpoint bindings")
+        from kira.agentcore import validate_target
+
+        validate_target(
+            agentcore["RuntimeArn"], agentcore["EndpointName"], spec["bedrock_region"], spec["account_id"]
+        )
     topic = topic_arn(spec, "observation-fallback")
 
     def alarm(logical, namespace, metric, dimensions, threshold=0, missing="notBreaching", periods=1):
@@ -300,6 +317,7 @@ def active(spec, outputs, versions, pipeline_versions):
                 "Targets": [
                     {
                         "Id": job,
+                        **({"Input": json.dumps({"mode": "delivery"})} if logical == "Observer" else {}),
                         "Arn": versions[logical + "VersionArn"],
                         "DeadLetterConfig": {"Arn": queue_arn(spec, "observation-dead")},
                         "RetryPolicy": {"MaximumRetryAttempts": 1, "MaximumEventAgeInSeconds": 300},
@@ -321,6 +339,36 @@ def active(spec, outputs, versions, pipeline_versions):
     r["CanarySchedule"]["Properties"]["ScheduleExpression"] = (
         "cron(0 0 * * ? *)" if hours == 24 else f"cron(0 0/{hours} * * ? *)"
     )
+    for number, service in enumerate(config["services"]):
+        logical = "Service" + str(number)
+        rule = name(spec, "obs-health-" + service["id"])
+        r[logical + "Schedule"] = resource(
+            "Events::Rule",
+            {
+                "Name": rule,
+                "ScheduleExpression": f"rate({config['interval_minutes']} minutes)",
+                "State": "ENABLED" if enabled and not spec["maintenance_mode"] else "DISABLED",
+                "Targets": [
+                    {
+                        "Id": service["id"],
+                        "Arn": versions["ObserverVersionArn"],
+                        "Input": json.dumps({"mode": "health", "service_id": service["id"]}),
+                        "DeadLetterConfig": {"Arn": queue_arn(spec, "observation-dead")},
+                        "RetryPolicy": {"MaximumRetryAttempts": 1, "MaximumEventAgeInSeconds": 300},
+                    }
+                ],
+            },
+        )
+        r[logical + "Permission"] = resource(
+            "Lambda::Permission",
+            {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": versions["ObserverVersionArn"],
+                "Principal": "events.amazonaws.com",
+                "SourceAccount": spec["account_id"],
+                "SourceArn": f"arn:aws:events:{spec['monitor_region']}:{spec['account_id']}:rule/{rule}",
+            },
+        )
     r["ReceiptMapping"] = resource(
         "Lambda::EventSourceMapping",
         {
@@ -403,7 +451,9 @@ def active(spec, outputs, versions, pipeline_versions):
                 "width": 8,
                 "height": 6,
                 "properties": {
-                    "region": spec["monitor_region"],
+                    "region": spec["bedrock_region"]
+                    if runtime_target == "agentcore" and component in {"model", "tool"}
+                    else spec["monitor_region"],
                     "title": component,
                     "period": 300,
                     "metrics": [
@@ -490,6 +540,50 @@ def active(spec, outputs, versions, pipeline_versions):
             },
         }
     )
+    if runtime_target == "agentcore":
+        runtime_id = agentcore["RuntimeArn"].split("/")[-1]
+        runtime_name = runtime_id.rsplit("-", 1)[0]
+        widgets.append(
+            {
+                "type": "metric",
+                "width": 24,
+                "height": 6,
+                "properties": {
+                    "region": spec["bedrock_region"],
+                    "title": "AgentCore release endpoint health",
+                    "period": 300,
+                    "stat": "Sum",
+                    "metrics": [
+                        [
+                            "AWS/Bedrock-AgentCore",
+                            metric,
+                            "Operation",
+                            "InvokeAgentRuntime",
+                            "Name",
+                            runtime_name + "::" + agentcore["EndpointName"],
+                            "Resource",
+                            agentcore["RuntimeArn"],
+                            {"stat": "Average" if metric == "Latency" else "Sum"},
+                        ]
+                        for metric in ("Invocations", "Throttles", "SystemErrors", "UserErrors", "Latency")
+                    ],
+                },
+            }
+        )
+        widgets.append(
+            {
+                "type": "log",
+                "width": 24,
+                "height": 6,
+                "properties": {
+                    "region": spec["bedrock_region"],
+                    "title": "AgentCore application handoffs",
+                    "query": "SOURCE '"
+                    + owned_runtime.agentcore_log_group(runtime_id, agentcore["EndpointName"])
+                    + "' | fields @timestamp, @message | sort @timestamp desc | limit 100",
+                },
+            }
+        )
     r["Dashboard"] = resource(
         "CloudWatch::Dashboard",
         {"DashboardName": name(spec, "operations"), "DashboardBody": json.dumps({"widgets": widgets})},

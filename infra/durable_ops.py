@@ -227,6 +227,13 @@ def verify_runtime(bundle, factory=clients):
     if output != bundle["bindings"]["versions"]:
         raise VerificationError("Durable runtime version outputs changed")
     planned = json.loads((Path(bundle["directory"]) / "durable-runtime.json").read_text())
+    if templates.template_hash(planned) != bundle["stages"]["durable-runtime"]["template_hash"]:
+        raise VerificationError("Durable template differs from the reviewed bundle")
+    deployed = cfn.get_template(StackName=name(spec, "durable-runtime", True))["TemplateBody"]
+    if isinstance(deployed, str):
+        deployed = json.loads(deployed)
+    if templates.template_hash(deployed) != templates.template_hash(planned):
+        raise VerificationError("Sealed durable template differs from the reviewed plan")
     for function, logical in (
         ("incident_ingress", "Ingress"),
         ("incident_dispatch", "Dispatch"),
@@ -243,6 +250,14 @@ def verify_runtime(bundle, factory=clients):
             raise VerificationError("Durable function configuration differs from the plan")
         properties = planned["Resources"][logical]["Properties"]
         actual = factory("lambda", spec["monitor_region"]).get_function_configuration(FunctionName=arn)
+        role_properties = planned["Resources"][logical + "Role"]["Properties"]
+        physical = cfn.describe_stack_resource(
+            StackName=name(spec, "durable-runtime", True), LogicalResourceId=logical + "Role"
+        )["StackResourceDetail"]["PhysicalResourceId"]
+        role_arn = f"arn:aws:iam::{spec['account_id']}:role{role_properties['Path']}{physical}"
+        if actual.get("Role") != role_arn:
+            raise VerificationError("Durable function role binding differs from its owned stack")
+        owned_ops.verify_role(factory("iam", spec["monitor_region"]), role_arn, role_properties)
         if any(actual.get(key) != properties[key] for key in ("Timeout", "MemorySize", "Architectures")):
             raise VerificationError("Durable function runtime capacity or deadline differs from the plan")
         reserved = (
@@ -466,6 +481,7 @@ def main():
             "verify-observations",
             "verify-observation-routing",
             "attest-email",
+            "seed-health",
         ),
     )
     parser.add_argument("--bundle", type=Path, required=True)
@@ -492,6 +508,16 @@ def main():
             raise VerificationError("Synthetic reference inputs cannot be used for cloud operations")
         if args.command == "upload":
             value = upload(bundle, args.build_dir, args.artifact_kind)
+        elif args.command == "seed-health":
+            from infra.observations import seed_health
+            from kira.runtime import sdk_client
+
+            value = seed_health(
+                bundle,
+                lambda service, region: (
+                    sdk_client(service, region, 185) if service == "lambda" else clients(service, region)
+                ),
+            )
         elif args.command == "verify-observations":
             from infra.observations import verify_runtime
 

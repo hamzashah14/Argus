@@ -109,6 +109,12 @@ def recipient(event, context=None):
         iid = attrs.get("kira_incident", {}).get("Value", "")
         if attrs.get("kira_canary", {}).get("Value") != "true" or not re.fullmatch(r"[0-9a-f]{32}", iid):
             raise ValueError("Receipt must identify a declared canary")
+        message_id = message.get("MessageId")
+        if not isinstance(message_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", message_id):
+            raise ValueError("Invalid recipient publication identifier")
+        notification_id = attrs.get("kira_notification", {}).get("Value")
+        if notification_id != iid + "-initial":
+            raise ValueError("Recipient must match the stable initial notification identity")
         incident = ledger.get(f"INCIDENT#{iid}")
         if not incident or "canary_slot" not in incident or incident.get("ttl", 0) <= time.time():
             raise ValueError("Canary incident missing or expired")
@@ -116,9 +122,16 @@ def recipient(event, context=None):
         now = int(time.time())
         ledger.table.update_item(
             Key={"PK": pk, "SK": "META"},
-            UpdateExpression="SET recipient_received_at=if_not_exists(recipient_received_at,:now), recipient_message_id=if_not_exists(recipient_message_id,:message)",
-            ConditionExpression="incident_id=:incident AND ttl>:now",
-            ExpressionAttributeValues={":now": now, ":incident": iid, ":message": message["MessageId"]},
+            UpdateExpression="SET recipient_received_at=if_not_exists(recipient_received_at,:now), recipient_message_id=if_not_exists(recipient_message_id,:message), recipient_notification_id=:notification ADD recipient_message_ids :messages",
+            ConditionExpression="incident_id=:incident AND ttl>:now AND (attribute_not_exists(recipient_message_ids) OR contains(recipient_message_ids,:message) OR size(recipient_message_ids)<:max)",
+            ExpressionAttributeValues={
+                ":now": now,
+                ":incident": iid,
+                ":message": message_id,
+                ":messages": {message_id},
+                ":notification": notification_id,
+                ":max": 9,
+            },
         )
         emit("receipt", "SQS_RECEIVED", incident_id=iid, metrics={"RecipientReceived": 1})
 
@@ -174,17 +187,50 @@ def check_freshness(service, config, cw, logs, now):
     return metric_fresh and probes.fresh(beats, now.timestamp(), service["freshness_seconds"])
 
 
-def confirmed_recipient(sns, topic=None, email=None):
-    entries = [
-        s
-        for page in sns.get_paginator("list_subscriptions_by_topic").paginate(
-            TopicArn=topic or env("REPORTS_TOPIC_ARN")
+class ObservationDeadline(RuntimeError):
+    pass
+
+
+def require_time(deadline, seconds=11):
+    if deadline is not None and time.monotonic() + seconds >= deadline:
+        raise ObservationDeadline("Observer deadline exhausted; checks remain incomplete")
+
+
+class TimedReads:
+    def __init__(self, client, deadline, seconds=11):
+        self.client, self.deadline, self.seconds = client, deadline, seconds
+
+    def __getattr__(self, name):
+        def call(*args, **kwargs):
+            require_time(self.deadline, self.seconds)
+            return getattr(self.client, name)(*args, **kwargs)
+
+        return call
+
+
+def confirmed_recipient(sns, topic=None, email=None, *, deadline=None):
+    entries = []
+    pages = iter(
+        sns.get_paginator("list_subscriptions_by_topic").paginate(TopicArn=topic or env("REPORTS_TOPIC_ARN"))
+    )
+    for _ in range(2):
+        require_time(deadline)
+        try:
+            page = next(pages)
+        except StopIteration:
+            break
+        entries.extend(
+            s
+            for s in page["Subscriptions"]
+            if s["Protocol"] == "email" and s["Endpoint"] == (email or env("PRIMARY_EMAIL"))
         )
-        for s in page["Subscriptions"]
-        if s["Protocol"] == "email" and s["Endpoint"] == (email or env("PRIMARY_EMAIL"))
-    ]
+        if not page.get("NextToken"):
+            break
+    else:
+        raise RuntimeError("Recipient discovery page limit; delivery check incomplete")
     if len(entries) != 1 or not entries[0]["SubscriptionArn"].startswith("arn:"):
         return False
+    require_time(deadline)
     attrs = sns.get_subscription_attributes(SubscriptionArn=entries[0]["SubscriptionArn"])["Attributes"]
     return not json.loads(attrs.get("FilterPolicy", "{}"))
 
@@ -212,7 +258,15 @@ def verify_canary(ledger, config, now):
             and notification
             and notification.get("status") == "PUBLISHER_ACCEPTED"
             and row.get("recipient_received_at")
-            and row.get("recipient_message_id") == notification.get("publisher_message_id")
+            and (
+                row.get("recipient_notification_id") == row["incident_id"] + "-initial"
+                or (set(row.get("recipient_message_ids", [])) | {row.get("recipient_message_id")})
+                & (
+                    set(notification.get("publisher_message_ids", []))
+                    | {notification.get("publisher_message_id")}
+                )
+                - {None}
+            )
         )
         received = received or valid
         if not valid and now >= row["due_epoch"]:
@@ -237,87 +291,111 @@ def observer(event=None, context=None):
     config = settings()
     if not config["enabled"]:
         return {"status": "DISABLED"}
+    event = event or {}
+    mode = event.get("mode", "health" if "service_id" in event else "combined")
+    if mode not in {"health", "delivery", "combined"}:
+        raise ValueError("Unknown observation mode")
+    services = config["services"]
+    if "service_id" in event:
+        services = [s for s in services if s["id"] == event["service_id"]]
+        if len(services) != 1:
+            raise ValueError("Service must belong to the reviewed observation inventory")
     now = datetime.now(timezone.utc)
     deadline = time.monotonic() + min(
-        45, context.get_remaining_time_in_millis() / 1000 - 10 if context else 45
+        150, context.get_remaining_time_in_millis() / 1000 - 15 if context else 150
     )
     cw, logs, sns, ledger = clients("cloudwatch"), clients("logs"), clients("sns"), store()
-    metrics, failures = [], []
-    if os.getenv("MAINTENANCE_MODE") != "true":
-        for service in config["services"]:
-            for route in service["routes"]:
-                if time.monotonic() + route["timeout_seconds"] + 1 >= deadline:
-                    raise RuntimeError(
-                        "Observer deadline exhausted; external heartbeat alarm must detect this"
+    cw, logs, ledger = TimedReads(cw, deadline), TimedReads(logs, deadline), TimedReads(ledger, deadline, 8)
+    failures, received, oldest = [], False, 0
+    email_age = config["email_receipt_max_age_hours"] * 3600 + 1
+    maintenance = os.getenv("MAINTENANCE_MODE") == "true"
+    try:
+        if not maintenance and mode in {"health", "combined"}:
+            for service in services:
+                metrics = []
+                for route in service["routes"]:
+                    require_time(deadline, route["timeout_seconds"] + 1)
+                    result = probes.bounded_check(route)
+                    metrics.append(
+                        {
+                            "MetricName": "Availability",
+                            "Value": int(result["healthy"]),
+                            "Unit": "Count",
+                            "Timestamp": now,
+                            "Dimensions": [
+                                {"Name": "Service", "Value": service["id"]},
+                                {"Name": "Route", "Value": route["id"]},
+                            ],
+                        }
                     )
-                result = probes.bounded_check(route)
-                metrics.append(
-                    {
-                        "MetricName": "Availability",
-                        "Value": int(result["healthy"]),
-                        "Unit": "Count",
-                        "Timestamp": now,
-                        "Dimensions": [
-                            {"Name": "Service", "Value": service["id"]},
-                            {"Name": "Route", "Value": route["id"]},
-                        ],
-                    }
-                )
-            if time.monotonic() + 20 >= deadline:
-                raise RuntimeError("Observer deadline exhausted")
-            try:
-                healthy = check_freshness(service, config, cw, logs, now)
-            except Exception:
-                healthy = False
-                failures.append("TELEMETRY_READ_FAILED")
-            metrics.append(
-                {
-                    "MetricName": "TelemetryFresh",
-                    "Value": int(healthy),
-                    "Unit": "Count",
-                    "Timestamp": now,
-                    "Dimensions": [
-                        {"Name": "Service", "Value": service["id"]},
-                        {"Name": "Route", "Value": "telemetry"},
+                # Publish route results before slow/failed freshness reads.
+                cw.put_metric_data(Namespace=env("HEALTH_NAMESPACE"), MetricData=metrics)
+                try:
+                    healthy = check_freshness(service, config, cw, logs, now)
+                except ObservationDeadline:
+                    raise
+                except Exception:
+                    healthy = False
+                    failures.append("TELEMETRY_READ_FAILED")
+                cw.put_metric_data(
+                    Namespace=env("HEALTH_NAMESPACE"),
+                    MetricData=[
+                        {
+                            "MetricName": "TelemetryFresh",
+                            "Value": int(healthy),
+                            "Unit": "Count",
+                            "Timestamp": now,
+                            "Dimensions": [
+                                {"Name": "Service", "Value": service["id"]},
+                                {"Name": "Route", "Value": "telemetry"},
+                            ],
+                        }
                     ],
-                }
-            )
-        cw.put_metric_data(Namespace=env("HEALTH_NAMESPACE"), MetricData=metrics)
-        problem, received, email_age = verify_canary(ledger, config, int(now.timestamp()))
-        failures.extend(problem)
-        if not confirmed_recipient(sns):
-            failures.append("PRIMARY_SUBSCRIPTION_MISSING")
-        if not confirmed_recipient(sns, env("FALLBACK_TOPIC_ARN"), env("FALLBACK_EMAIL")):
-            failures.append("FALLBACK_SUBSCRIPTION_MISSING")
-    else:
-        received, email_age = False, 0
-    oldest = 0
-    pending, cursor = ledger.pending(iso_utc(now), limit=100)
-    if pending:
-        oldest = max(
-            0,
-            int(now.timestamp())
-            - int(datetime.fromisoformat(pending[0]["due_at"].replace("Z", "+00:00")).timestamp()),
-        )
-        if oldest > 300 and os.getenv("MAINTENANCE_MODE") != "true":
-            failures.append("OUTBOX_OVERDUE")
+                )
+        if mode in {"delivery", "combined"}:
+            if not maintenance:
+                problem, received, email_age = verify_canary(ledger, config, int(now.timestamp()))
+                failures.extend(problem)
+            # Backlog checks run before potentially paged recipient discovery.
+            pending, cursor = ledger.pending(iso_utc(now), limit=1)
+            if pending:
+                oldest = max(
+                    0,
+                    int(now.timestamp())
+                    - int(datetime.fromisoformat(pending[0]["due_at"].replace("Z", "+00:00")).timestamp()),
+                )
+                if oldest > 300 and not maintenance:
+                    failures.append("OUTBOX_OVERDUE")
+            if not maintenance:
+                if not confirmed_recipient(sns, deadline=deadline):
+                    failures.append("PRIMARY_SUBSCRIPTION_MISSING")
+                if not confirmed_recipient(
+                    sns, env("FALLBACK_TOPIC_ARN"), env("FALLBACK_EMAIL"), deadline=deadline
+                ):
+                    failures.append("FALLBACK_SUBSCRIPTION_MISSING")
+    except ObservationDeadline:
+        failures.append("CHECKS_INCOMPLETE")
     for failure in sorted(set(failures)):
         emit("observer", failure)
     emit(
         "observer",
         "ATTENTION" if failures else "CHECKED",
         metrics={
-            "Heartbeat": 1,
+            "Heartbeat": 1 if mode in {"delivery", "combined"} else 0,
             "Failure": len(failures),
             "OldestOutboxSeconds": oldest,
-            "EmailReceiptAgeSeconds": email_age,
+            "EmailReceiptAgeSeconds": email_age if mode in {"delivery", "combined"} else 0,
         },
     )
     return {
         "status": "ATTENTION" if failures else "CHECKED",
+        "mode": mode,
+        "failures": sorted(set(failures)),
         "instrumented_delivery": received,
         "email_delivery": "SUPPRESSED"
-        if os.getenv("MAINTENANCE_MODE") == "true"
+        if maintenance
+        else "NOT_CHECKED"
+        if mode == "health"
         else "OPERATOR_ATTESTED"
         if email_age <= config["email_receipt_max_age_hours"] * 3600
         else "UNVERIFIED",

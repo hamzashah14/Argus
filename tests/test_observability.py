@@ -236,14 +236,19 @@ def test_recipient_receipt_is_conditional_and_never_reads_notification_body(envi
         "TopicArn": REPORTS,
         "MessageId": "sns-message",
         "Message": "private body ignored",
-        "MessageAttributes": {"kira_incident": {"Value": iid}, "kira_canary": {"Value": "true"}},
+        "MessageAttributes": {
+            "kira_incident": {"Value": iid},
+            "kira_canary": {"Value": "true"},
+            "kira_notification": {"Value": iid + "-initial"},
+        },
     }
     with patch.object(observability, "store", return_value=ledger):
         assert observability.recipient({"Records": [{"messageId": "q", "body": json.dumps(msg)}]}) == {
             "batchItemFailures": []
         }
     call = ledger.table.update_item.call_args.kwargs
-    assert call["ConditionExpression"] == "incident_id=:incident AND ttl>:now"
+    assert call["ConditionExpression"].startswith("incident_id=:incident AND ttl>:now")
+    assert "size(recipient_message_ids)<:max" in call["ConditionExpression"]
     assert "if_not_exists(recipient_received_at,:now)" in call["UpdateExpression"]
 
 

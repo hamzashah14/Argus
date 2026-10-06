@@ -34,10 +34,12 @@ Readiness/freshness alarms require two bad periods, about ten minutes plus AWS
 publication and queue delay at the default interval. A missing observer heartbeat
 requires three periods. A missed daily canary can take up to a day plus its deadline
 and the observer/alarm delay to detect. Use shorter approved intervals if that
-tradeoff is unsuitable. The example is a small pilot, not a proven fleet-size limit:
-its observer has a 60-second Lambda timeout and a 45-second internal budget. A
-large/slow inventory can exhaust that budget; the Lambda error/missing-heartbeat
-alarms then signal failure rather than declaring unchecked services healthy.
+tradeoff is unsuitable. Each service has its own health invocation; delivery/backlog has a separate
+invocation. The Observer has a 180-second Lambda timeout and at most 150 seconds
+internally, with remaining-time checks before each operation. Partial health
+results publish before freshness reads. Incomplete checks emit explicit attention;
+maximum-inventory cadence and customer quotas still require staging qualification.
+See the [corrective checkpoint](../review-phases-1-4/CORRECTIONS.md).
 
 ```bash
 .venv/bin/python -m pytest -q
@@ -107,7 +109,8 @@ runtimes use a new release ID, termination protection and the sealed stack polic
    the normal build/tool/host/bindings arguments. Update the durable foundation's
    ingress and delivery-DLQ policies to authorize only the explicit canary topic.
 3. Review/apply `observation-foundation`: canary topic/subscription, filtered SQS
-   test destination and DLQ, separate fallback topic/recipient. Confirm primary,
+   test destination and DLQ, separate fallback topic/recipient. Verify the DLQ
+   policy authorizes every exact per-service health rule as well as probe/canary. Confirm primary,
    Phase 3 fallback and Phase 4 fallback subscriptions from their actual mailboxes.
 4. Upload observers with `python -m infra.durable_ops upload --artifact-kind
    observation --build-dir .build/customer-observations` plus the standard
@@ -116,7 +119,13 @@ runtimes use a new release ID, termination protection and the sealed stack polic
 5. Review/create/seal `observation-runtime`; collect its exact outputs as
    `observation_versions` (ObserverVersionArn, CanaryVersionArn, ReceiptVersionArn).
    Re-render the complete plan. Run `verify-observations` to check actual pinned
-   code/configuration/capacity and IAM grants against the sealed template.
+   code/configuration/capacity and IAM grants against the sealed template. For
+   enabled observations, run `seed-health` with bundle/hash/output **before**
+   strict coverage/canary/promotion. It invokes health for each reviewed service,
+   without model work or notifications. Wait for metric discovery and run strict
+   coverage; missing enabled Health metrics still block promotion. Intentionally
+   paused inventory records only Health metrics as disabled. Maintenance bootstrap
+   is refused. Read the [complete bootstrap order](../review-phases-1-4/CORRECTIONS.md#bootstrap-and-deployment-changes).
 6. Qualify/activate the Phase 3 pipeline and reviewed service routing first. Review
    `observations` with the actual enabled setting. Executing this stage requires
    verification of the sealed observer runtime. Its schedules use qualified
@@ -142,6 +151,9 @@ runtimes use a new release ID, termination protection and the sealed stack polic
     production after the earlier gates and later release qualification also pass.
 
 `verify-observations` and `verify-observation-routing` use read-only cloud APIs.
+`seed-health` explicitly invokes the pinned observer and writes approved Health
+metrics; it requires clean reviewed source, sealed runtime verification and scoped
+Lambda invocation. It does not activate schedules or establish G4.
 `attest-email` writes the declared canary/receipt ledger records and requires the
 exact received ID and explicit inbox confirmation. Operators need scoped IAM reads
 for verification, GetItem/TransactWriteItems to the intended table for attestation,
@@ -164,6 +176,12 @@ EMF uses only Component as a metric dimension; IDs appear in safe structured log
 Outcome counters and SQS native values can duplicate/be approximate. Reconcile
 accepted events from the ledger for authoritative accounting. Logs do not contain
 raw prompts, tool payloads, URLs, contacts, SDK exception strings or AWS responses.
+AgentCore model/tool widgets and qualified runtime native health/log widgets use
+the Bedrock region. Its endpoint stage pre-creates retained qualified and DEFAULT
+application log groups; actual retention is checked before promotion. Do not invoke
+either endpoint before ownership/retention exists. Actual host EMF extraction and
+native dimensions need live verification. Local UI stdout has no automatic
+CloudWatch transport; cloud qualification does not certify that local execution.
 Log retention follows the deployment spec; private evidence retains its Phase 3
 policy. `ToolNoData` differs from successful complete evidence. Observed model
 usage can miss an ambiguous/lost response; durable conservative reservations remain
@@ -172,7 +190,9 @@ the execution allowance, not an exact AWS invoice.
 The canary exercises ingress, durable acceptance, dispatch, initial notification
 and the separate recipient consumer. It creates no model work, and does not prove
 Bedrock, follow-up report delivery, UI access or the recipient's real mailbox.
-The observer checks the expected/published/SQS-received identifiers, due times,
+The observer checks trusted topic/incident/stable initial notification identity
+and bounded publication/receipt IDs, so an earlier delivered send with a lost ack
+can survive an accepted retry with a different SNS ID. It also checks due times,
 primary/fallback subscription confirmation and fresh operator inbox attestation.
 CloudWatch alerts bypass the primary notifier and use the independent fallback;
 observer failure/heartbeat alarms also go directly to the primary topic. A native

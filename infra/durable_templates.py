@@ -473,7 +473,7 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
                 sqs_receive("Initial"),
                 statement("sns:Publish", topic_arn(spec, "reports")),
             ],
-            45,
+            60,
         ),
         "incident_report": (
             "Report",
@@ -488,7 +488,7 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
                 sqs_receive("Report"),
                 statement("sns:Publish", topic_arn(spec, "reports")),
             ],
-            45,
+            60,
         ),
         "incident_reconcile": (
             "Reconcile",
@@ -628,11 +628,13 @@ def active_routing(
             "State": "DISABLED" if spec["maintenance_mode"] else "ENABLED",
             "Targets": [
                 {
-                    "Id": "sweep",
+                    "Id": "sweep-" + kind,
+                    "Input": json.dumps({"sweep": kind}),
                     "Arn": versions["ReconcileVersionArn"],
                     "DeadLetterConfig": {"Arn": foundation_outputs["DeliveryDeadArn"]},
                     "RetryPolicy": {"MaximumEventAgeInSeconds": 600, "MaximumRetryAttempts": 2},
                 }
+                for kind in ("pending", "overdue", "expired", "notifications")
             ],
         },
     )

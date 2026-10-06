@@ -30,7 +30,12 @@ def fixtures(spec, config):
             spec, bindings["foundation"], observation_artifacts, config
         ),
         "observations": observation_templates.active(
-            spec, bindings["foundation"], observation_versions, versions
+            spec,
+            bindings["foundation"],
+            observation_versions,
+            versions,
+            runtime_target=config["runtime_target"],
+            agentcore=bindings.get("agentcore"),
         ),
     }
 

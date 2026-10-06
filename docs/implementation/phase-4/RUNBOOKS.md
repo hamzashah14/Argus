@@ -75,6 +75,15 @@ unexplained backlog, edit a lease/fencing token or reset budgets. An ambiguous S
 publish can legitimately lead to a duplicate email; use the stable notification ID.
 Never interpret an SDK timeout as proof the message was not published.
 
+The four independent sweeps handle pending intents, overdue incidents, expired
+workers and expired notifications; inspect persisted SWEEP records and failure
+metrics when progress is incomplete. An empty manual invocation checks pending
+only. Third expired notification leases become AMBIGUOUS. After diagnosing the
+cause, use the [reviewed notification-only replay](../review-phases-1-4/CORRECTIONS.md#recovery-and-safe-notification-only-replay)
+procedure for an unexpired FAILED/AMBIGUOUS notification. It audits the operator,
+fences changes and permits two additional three-attempt runs without model work.
+Keep the original DLQ record as evidence; do not reset counters manually.
+
 For ingress DLQs, privately inspect and validate the exact SNS source/account/topic,
 IID and transition. An invalid source must not be laundered into an accepted event.
 For dispatch/notification/work DLQs, correlate the exact intent to the ledger before
@@ -127,8 +136,11 @@ external monitor/contact procedure.
 Do not disable a canary/freshness alarm because it exposes unfinished setup. For
 bootstrap, invoke the pinned canary once after activation and confirm receipts.
 During fault drills, retain warning timestamps, recovery and absence of model work.
-SNS can accept duplicate sends after an ambiguous publish; mismatched receipt IDs
-remain an attention signal, requiring operator inspection rather than fake success.
+SNS can accept duplicate sends after an ambiguous publish. Stable trusted
+notification identity and bounded receipt/publication IDs preserve an earlier
+delivered send when a later retry is acknowledged. Wrong source/incident/notification
+scope or missing receipt still needs inspection; do not manufacture an inbox
+attestation from SNS acceptance or an SQS receipt.
 
 ## Recipient change and credential rotation
 

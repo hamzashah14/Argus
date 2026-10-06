@@ -13,8 +13,14 @@ private deployment inputs, reviewed change sets, staging qualification and perio
 mailbox/fallback tests. The code supplies templates, checks and runbooks; it does
 not create application infrastructure or operate it for the customer.
 
-Default enabled schedules generate 288 observer invocations and one marked
-synthetic notification per day. Each service adds one custom metric per route and
+Default five-minute schedules generate 288 × (S + 1) observer invocations/day
+for S services: one per service plus a separate delivery check. One service means
+576/day, plus one marked synthetic notification and its pipeline/receipt work.
+Recovery now has four minute targets, up to 5,760 scheduled invocations/day before
+retries; durable CAS cursors add writes. Observer maximum timeout is 180 seconds
+(internal maximum 150), not guaranteed billed duration. These count formulas are
+not a monthly quote; actual latency, concurrent schedules and quotas need staging.
+See [corrective cost changes](../review-phases-1-4/CORRECTIONS.md#monitoring-capacity-and-cost-changes). Each service adds one custom metric per route and
 one freshness metric; outcome EMF metrics, operational/service alarms, the dashboard,
 log ingestion/storage/query scans and AWS requests/storage also affect cost.
 The three new Lambdas, receipt SQS/DLQ and SNS topics use customer resources.

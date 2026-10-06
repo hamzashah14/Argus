@@ -470,11 +470,13 @@ def test_role_verification_rejects_extra_attached_policy():
 
     client = MagicMock()
     trust = {"Version": "2012-10-17", "Statement": []}
-    client.get_role.return_value = {"Role": {"AssumeRolePolicyDocument": trust}}
+    client.get_role.return_value = {"Role": {"AssumeRolePolicyDocument": trust, "Path": "/"}}
     client.list_role_policies.return_value = {"PolicyNames": ["runtime"]}
     client.list_attached_role_policies.return_value = {"AttachedPolicies": [{"PolicyArn": "unexpected"}]}
     with pytest.raises(VerificationError, match="Unexpected execution role policies"):
-        verify_role(client, "arn:aws:iam::123456789012:role/test", {"AssumeRolePolicyDocument": trust})
+        verify_role(
+            client, "arn:aws:iam::123456789012:role/test", {"AssumeRolePolicyDocument": trust, "Path": "/"}
+        )
 
 
 def test_unsupported_remote_endpoint_denied_before_client():

@@ -400,3 +400,132 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Saved local implementation commit `832a4e5`; clean-source old/extended renders
   and synthetic cloud-command denial passed afterward. Documentation follow-up
   records that evidence; no push, deployment or further phase advancement.
+
+## 2026-10-06 — User-requested Phases 1–4 review and Floci assessment
+
+- Authorization: thoroughly review completed repository phases for missed flaws
+  and bottlenecks; assess the user's Floci suggestion. The user will decide when
+  Phase 5 begins. Scope remained review/records/diagnostics; no application repair.
+- Reviewed source `175d7e9858b40aa2e5fa68ab7d163fde6bab1fd2` on existing Phase 4
+  branch; initial working tree clean. Read STATE, plan/tracker and prior work log.
+  Audited configuration/UI/tools, release/IAM/stage gates, durable pipeline and
+  both runtimes, observers, canary/fallback, dashboards and operational procedures.
+- R01–R08 OPEN: pipeline role verification omission; recovery scan starvation;
+  first-deployment/paused health-metric dependency; AgentCore line-buffered stream
+  deadline/size gap; observer aggregate-time starvation/lost publications; missing
+  remote region/log/retention visibility; expired third notification ambiguity;
+  first-receipt versus later publisher-message mismatch after legitimate retry.
+  Five P1 and three P2; linked to existing tasks, corrective batches A–C proposed.
+- Preserved distinction between known constraints and newly reproduced defects:
+  two-worker throughput, fixed index keys/ALL projections, scan/page ceilings,
+  release drain, billing limits, static/public-only inventory, same-region fallback,
+  later identity/evidence controls and pending real AWS/hosted CI/soak qualification.
+- `python -m pytest -q`: 349 passed in 2.78s. Separate public offline diagnostic
+  reproduced all eight findings with injected SDK objects, denied AWS client/
+  resource construction and denied sockets. Synthetic clock advances, not real
+  AWS latency or load. The runner exits zero on known defects: no remediation PASS.
+  During diagnostic review, corrected an initially malformed notification fixture
+  to the actual pipe-delimited intent and asserted the durable read occurred;
+  tightened recovery simulation to repeated failing rows within combined SDK
+  budgets, and isolated the canary mismatch from missing inbox attestation.
+- Final lint PASS, format PASS (121 Python files), secret scan PASS (no new
+  candidates; 342 exact reviewed entries). The initial scan passed with the prior
+  326; adding the checksum manifest identified 16 public git/source hashes.
+  Independently recomputed their detector hashes and marked only those exact
+  candidates false; no widened exclusions. `git diff --check` PASS.
+  No dependency or runtime changes; no rebuild/advisory rescan claimed. Prior
+  phase template/artifact evidence remains historical, not rerun for this review.
+- Consulted primary Floci documentation: useful storage/queue/Lambda subset;
+  documented stack-policy stubs conflict with release sealing, Logs Insights
+  lacks our stats/regex queries, SQS concurrency is serialized, AgentCore invoke
+  is canned non-streaming metadata emulation. Mandatory CountTokens is not in the
+  documented operation list and requires a pinned-version capability probe.
+  IAM enforcement defaults off. No emulator was run; documentary compatibility
+  assessment and isolated local-harness/real-AWS qualification proposal recorded.
+- Records: `review-phases-1-4/REVIEW.md`, `FLOCI.md`, `reproduce.py`, sanitized
+  `evidence/review-phases-1-4/reproductions.json` and validation manifest. Updated
+  STATE, plan, tracker and record index. Remediation and emulator integration are
+  proposed; 13/52 tasks DONE, 20 original plus eight review findings OPEN, all prior
+  live gates unchanged and Phase 5 NOT_STARTED. No cloud SDK calls, infrastructure,
+  notifications, model work, Docker startup, emulator install, push or hosted CI.
+
+
+## 2026-10-06 — User-authorized corrective batches A–C in Phases 1–4
+
+- Authorization: “Continue with the Project” after cross-phase review. Read STATE,
+  plan/tracker, review and prior log. Continued existing branch/source; preserved
+  previous uncommitted review documents, diagnostic and historical evidence.
+  Did not start Phase 5, deploy AWS, install/start Floci or change dependencies.
+- Scope correction R01: full `owned_ops.verify_candidate` already verified six
+  pipeline grants after `verify_runtime`. The prior promotion-wide wording was
+  overstated; standalone command and missing exact stack-role binding were the
+  gaps. Consolidated six IAM checks into shared verification, compared reviewed/
+  deployed template and owned role bindings, verified path/permissions boundary,
+  kept trust/inline/attached/grants strict. Corrected current review interpretation
+  without overwriting historical reproductions/source hashes.
+- R03: intentionally paused inventory skips only Health descriptors with explicit
+  status; enabled/missing health fails closed. Added account/reference/clean-source/
+  sealed-runtime guarded `seed-health` operation. Customer invokes each qualified
+  health service before strict coverage/promotion; no model/notification bootstrap.
+  Documented fresh deployment order; no such operation executed here.
+- R02: four independent scheduled recovery classes, CAS-persisted index cursors,
+  checkpoint before row processing, bounded SDK/row admission and unchanged fenced
+  incident outcomes. Poisoned prefix progresses across invocations; stale overlap
+  stops. Empty manual invocation now handles pending only. Ten-page ceiling and
+  eventual GSI/real load qualification remain; no durable failed row discarded.
+- R04: production SDK invocation and bounded incremental SSE reader run in a
+  killable/reaped child with absolute caller deadline. Added checks during line
+  accumulation; one-byte reads allow a short complete result while connection
+  remains open. Never retry/fail over ambiguous remote execution. Real loopback
+  botocore tests exercise silence/trickle/disconnect/oversized body/valid open SSE
+  plus production module entrypoint. Dummy credentials, explicit local endpoint
+  and isolated empty AWS config; parent denies AWS/network. Local process closure
+  does not establish upstream cancellation, refunds or Linux/ARM64 host boot.
+- R07: indexed 60-second notification leases, 60-second notifier timeout and
+  context admission across serial batch; attempt 1/2 recovery atomically writes
+  only notification retry intent, expired third becomes AMBIGUOUS. Reviewed
+  notification-only replay CLI preserves incident/model budgets, audit and CAS;
+  two explicit replay runs × three attempts after original = at most nine sends.
+  Success/expiry/drift/allowance exhaustion refuses replay. No manual counter reset.
+- R05/R08: independently scheduled per-service health and separate delivery check,
+  180-second observer/150-second maximum internal budget, guarded reads and max
+  two recipient pages. Publish routes before freshness; incomplete checks explicit.
+  Added exact health-rule DLQ grants and registration verification for all rules.
+  Trusted stable canary initial-notification scope and bounded receipt/publication
+  IDs preserve delivered earlier sends after ack loss/retry; wrong scope denied,
+  first receipt retained, duplicates idempotent and no SQS-to-inbox inference.
+- R06: remote model/tool widgets in Bedrock region; native endpoint dimensions
+  verified against primary AWS CDK source, qualified log widget; pre-create retained
+  qualified and DEFAULT application log groups in endpoint stage, verify actual
+  retention before promotion. Actual host EMF/native ingestion remains G4; local
+  UI stdout has no implicit CloudWatch transport. Dashboard is not a native alarm.
+- Documented corrected Phase 3/4 bootstrap, recovery/replay and costs. Default
+  observer invocation count is 288 × (services + 1)/day, four recovery minute
+  targets up to 5,760/day before retries. Cursor/index writes add volume; no fixed
+  price/free-tier claim, no increased worker/model budget. Actual customer quota,
+  load, simultaneous cadence, rollback/drain and inbox/second-operator gates pending.
+- Validation: final `python -m pytest -q --junitxml=.build/review-corrections-tests.xml`
+  **410 passed in 10.20s**, including **61 new** regression cases. Ruff lint/format
+  PASS (124 files), two OpenAPI schemas, venv shellcheck, pip check and whitespace
+  PASS. cfn-lint **12 prior + 20 owned + 32 extended templates PASS**. Four build
+  verification scripts PASS: **13 deterministic ZIP pairs/bundled imports**;
+  independent check matched ZIP/source hashes to current shared code. Both actual
+  inventory-bound tool builds and complete 6/8 plus 9/11-stage renders PASS locally;
+  initial render source_dirty true before saving checkpoint, not a cloud receipt.
+- Early validation failures: obsolete reconcile/receipt/IAM fixtures updated to
+  actual new contracts; collector fixture's quota/reference flags corrected.
+  Socket bind denied by filesystem sandbox; test-only escalation approved for
+  loopback/dummy credentials, no AWS permission requested. Regression confirmed
+  short SSE result must not wait for a 1,024-byte buffer; incremental reader fixed.
+  Bare shellcheck absent on PATH; configured `.venv/bin/shellcheck` passed.
+- Secrets: 342 prior entries retained, **34 exact public git/source/lock/artifact
+  checksums** independently recomputed and matched to detector hashes; **376**
+  reviewed candidates, zero new candidates, no widened exclusions. Historical
+  review checksum evidence unchanged. Locks unchanged, prior same-day 93-package
+  advisory scan remains historical; no fresh advisory scan claimed.
+- Records: CORRECTIONS.md and corrections-validation.json, updated STATE, tracker,
+  plan, record index, Phase 3/4 guides/runbooks/costs. R01–R08 VERIFYING; 13/52 DONE,
+  original F01–F20 OPEN; hosted CI and live G2/G3/G4 pending. No AWS account/project
+  calls, cloud resources, live probes, inference, notifications, push or CI run.
+  Next is checkpoint verification, then customer-budgeted staging or explicitly
+  chosen Floci harness; Phase 5 needs separate user direction.

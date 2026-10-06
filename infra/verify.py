@@ -83,6 +83,9 @@ def coverage(spec, clients):
         raise VerificationError("Inventory includes missing or terminated instances")
     cw = clients("cloudwatch", spec["monitor_region"])
     for descriptor in alarm_descriptors(spec):
+        if descriptor["namespace"].endswith("/Health") and not spec["observability"]["enabled"]:
+            checks.append({"id": descriptor["id"], "status": "disabled_by_reviewed_inventory"})
+            continue
         if not exact_metric_exists(cw, descriptor):
             raise VerificationError(f"Required metric unavailable: {descriptor['id']}")
         checks.append({"id": descriptor["id"], "status": "present"})
@@ -122,6 +125,7 @@ def coverage(spec, clients):
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "status": "PASS",
         "metrics": checks,
+        "observation_mode": "enabled" if spec.get("observability", {}).get("enabled") else "disabled",
         "limit": "Descriptor existence and filter fixtures; not end-to-end detection or notification delivery",
     }
 
