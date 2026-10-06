@@ -20,7 +20,7 @@ clarifies why deployed services are not prerequisites for assessing a new accoun
 Actual deployment, model invocation, runtime authorization and delivery tests are
 still pending in their later phases. All 20 audit findings remain OPEN.
 
-- Branch: `codex/phase-3-durable-incidents`; Phase 3 parent `01e4ce8`; Phase 2 implementation checkpoint `13db959`; parent `16a523d`; Phase 1 implementation `ea8a079`.
+- Branch: `codex/phase-3-durable-incidents`; Phase 3 implementation checkpoint `d215bfd`; Phase 3 parent `01e4ce8`; Phase 2 implementation checkpoint `13db959`; parent `16a523d`; Phase 1 implementation `ea8a079`.
 - Original parent: `6b91a71e268ce7b0915055fb897073d3379e1ffe`.
 - Verified source baseline: `1ad38ec1aaff96c4872a653885e33e540742519a`.
 - Phase 0 reference checkpoint: `d1cb3a9`; Phase 1 now changes application/deployment source.

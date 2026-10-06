@@ -11,6 +11,11 @@ Raw local command logs/builds are ignored under `.build/`; private account evide
 stays separate. No real credentials, inventory, events or cloud responses are
 included. Official AWS docs and public dependency advisories were consulted.
 
+Local implementation commit: `d215bfd`. After committing, the complete render
+command passed again for both targets with `source_dirty: false`; reference-only
+cloud-operation protection remained enabled. The working tree was clean before
+this documentation-only checkpoint update.
+
 ## Checks and commands
 
 | Check | Command using `.venv/bin/` | Result |

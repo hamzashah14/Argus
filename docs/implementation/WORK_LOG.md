@@ -336,3 +336,7 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Final UI review replaced legacy-only connection instructions with the selected
   target's settings; preserved baseline JSON ordering to avoid unrelated churn.
   Refreshed the UI source checksum; 294 tests/lint/format/secret scan pass again.
+- Saved implementation in local commit `d215bfd` (56 files). Working tree clean;
+  reran complete release-render verification on the committed source: both targets
+  PASS with source_dirty false and reference_only true. Added this commit/result
+  to continuity records in a documentation-only follow-up; no push/deployment.
