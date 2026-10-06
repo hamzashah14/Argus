@@ -565,5 +565,21 @@
     "Actual metrics, Nginx formats, IAM/runtime boot and mailbox receipts pending.",
     "Private network adapter and automatic fleet discovery not implemented.",
     "Second operator runbook rehearsal pending."
-  ]
+  ],
+  "clean_source_render": {
+    "source_sha": "832a4e5c75338f08e05ed1715353236c08a2395d",
+    "targets": {
+      "standalone": {
+        "status": "PASS",
+        "stages": 9,
+        "review_hash": "530c9f8123b2845184317d5dd3022eff2f0d943c86b39067601b0cfd97c0f127"
+      },
+      "agentcore": {
+        "status": "PASS",
+        "stages": 11,
+        "review_hash": "715ed4da68cc80d05d71785a437e8550fd3171927adf340a62a3ca4aa7e7ad53"
+      }
+    },
+    "synthetic_cloud_command_denial": "PASS_BEFORE_AWS_CLIENT_CREATION"
+  }
 }

@@ -23,3 +23,8 @@ Resume: inspect STATE/WORK_LOG/tracker and git status, then continue approved
 Phase 4 staging qualification only when real inputs, IAM/quotas, owners, recipients,
 endpoints and a budget exist. Never provision the reference fixture. Existing
 standalone/AgentCore choice and the open-source customer-operated model remain.
+
+Local implementation checkpoint: `832a4e5`. Complete old and extended release
+renders passed again from its clean working tree (`source_dirty: false`); synthetic
+cloud verification was rejected before creating an AWS client. This documentation
+follow-up changes no runtime code or live gate.

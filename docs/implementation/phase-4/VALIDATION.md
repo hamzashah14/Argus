@@ -73,3 +73,8 @@ Run [ACCEPTANCE.md](ACCEPTANCE.md) on the approved frozen staging candidate. Pri
 network probes, automatic fleet discovery, arbitrary collector formats and external
 account/region outage monitoring are not implemented adapters. Runbooks need a
 second customer's operator rehearsal. Do not close findings from this file.
+
+Local implementation checkpoint: `832a4e5`. Complete old and extended release
+renders passed again from its clean working tree (`source_dirty: false`); synthetic
+cloud verification was rejected before creating an AWS client. This documentation
+follow-up changes no runtime code or live gate.

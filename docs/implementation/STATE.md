@@ -88,3 +88,8 @@ remain in each phase's VALIDATION.md and WORK_LOG. Keep Streamlit for now.
 3. Use the Phase 4 notes/guide/validation for current reproduction and next steps.
 4. Record meaningful work, commands, evidence, limits and blockers without secrets.
    Private customer evidence stays in ignored docs/implementation/evidence/private/.
+
+Local implementation checkpoint: `832a4e5`. Complete old and extended release
+renders passed again from its clean working tree (`source_dirty: false`); synthetic
+cloud verification was rejected before creating an AWS client. This documentation
+follow-up changes no runtime code or live gate.
