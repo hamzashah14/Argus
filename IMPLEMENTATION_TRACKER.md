@@ -84,7 +84,7 @@ Status values: NOT_STARTED, IN_PROGRESS, IN_REVIEW, VERIFYING, DONE, BLOCKED. Re
 
 | Task | Deliverable | Depends on | Status | Actual owner | PR / commit / release | Evidence | Blocker / next action |
 |---|---|---|---|---|---|---|---|
-| P5.01 | Integrate individual identity and session controls | P0.04, P2.02, P1.08 | IN_PROGRESS | Codex (local); customer identity owner pending | Working tree | [Identity](docs/implementation/phase-5/IDENTITY.md); [validation](docs/implementation/evidence/phase-5/identity-validation.json) | First code slice verified: 459 tests; complete deployment/role/secret wiring, live IdP/MFA/origin acceptance |
+| P5.01 | Integrate individual identity and session controls | P0.04, P2.02, P1.08 | IN_PROGRESS | Codex (local); customer identity owner pending | `0a6ce44` (codex/phase-5-identity-evidence) | [Identity](docs/implementation/phase-5/IDENTITY.md); [validation](docs/implementation/evidence/phase-5/identity-validation.json) | First code slice verified: 459 tests; complete deployment/role/secret wiring, live IdP/MFA/origin acceptance |
 | P5.02 | Enforce per-user access and work budgets | P5.01, P3.07 | NOT_STARTED | — | — | — | — |
 | P5.03 | Redact and govern evidence end to end | P2.02, P3.06 | NOT_STARTED | — | — | — | — |
 | P5.04 | Strengthen evidence and uncertainty rules | P4.02, P4.03, P5.03 | NOT_STARTED | — | — | — | — |

@@ -596,3 +596,8 @@ Append entries; retain previous outcomes when later work supersedes them.
   P5.03–P5.06 remain pending: redaction/retention/deletion, evidence validation,
   evaluations and security operating procedures. G5 and earlier live gates remain
   NOT_RUN/pending; no findings were closed or DONE percentage increased.
+
+- Saved code/records at `0a6ce44` on `codex/phase-5-identity-evidence`, parent
+  `fff9cb3`. Old and extended synthetic release renders passed again from this
+  clean checkpoint; all four bundles show source_dirty false. Documentation
+  follow-up records that result; no runtime changes or live qualification.

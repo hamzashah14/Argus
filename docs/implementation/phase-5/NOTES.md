@@ -22,3 +22,8 @@ distributed user budgets; evidence redaction/retention/deletion; deterministic
 output validation; security/diagnostic fixtures and model evaluation; operator
 security runbooks. Do not present partial identity implementation as completed
 Phase 5 or production qualification. No AWS resources or model calls authorized.
+
+Implementation checkpoint: `0a6ce44` on `codex/phase-5-identity-evidence`, parent
+`fff9cb3`. Old and extended releases passed again from the clean code checkpoint
+with all four bundle records showing `source_dirty: false`. This confirms packaging
+and source binding only; identity deployment support remains unfinished.

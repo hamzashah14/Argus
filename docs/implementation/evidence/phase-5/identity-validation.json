@@ -79,5 +79,11 @@
     "P5.01 remains IN_PROGRESS; P5.02-P5.06 NOT_STARTED; G5 NOT_RUN; all earlier live gates unchanged.",
     "Floci integration deferred; no image or emulator container created; Docker Desktop reported already running.",
     "No hosted CI or push. Existing release renders validate packaging, not identity deployment support."
-  ]
+  ],
+  "implementation_checkpoint": "0a6ce44",
+  "clean_checkpoint_release_renders": {
+    "source_dirty": false,
+    "checkpoint": "0a6ce44",
+    "all_four_bundles": "PASS"
+  }
 }

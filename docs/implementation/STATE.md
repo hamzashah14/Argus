@@ -30,7 +30,8 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
-- Phase 5 first identity slice on the current working tree: native OIDC with
+- Phase 5 first identity slice at checkpoint `0a6ce44`, branch
+  `codex/phase-5-identity-evidence` (parent `fff9cb3`): native OIDC with
   verified issuer/audience/expiry/recent authentication/MFA claims; signed session
   references; central consistent DynamoDB grants and sessions; conditional idle
   renewal; revocation/logout retry; per-user tool and report scope; model/tool
@@ -40,6 +41,7 @@ Floci remains proposed/deferred; no emulator image/container was created.
   PASS locally. App/dev locks add seven OIDC packages without changing prior pins;
   Lambda lock unchanged. 100-package advisory scan has zero known vulnerabilities;
   secret scan has zero new candidates against the unchanged 377-entry baseline.
+  Both release layouts passed again from clean checkpoint (`source_dirty: false`).
   P5.01 IN_PROGRESS: deployment/IAM/secrets/IdP/origin wiring/verification remain;
   P5.02–P5.06 NOT_STARTED and G5 NOT_RUN. See [Phase 5 checkpoint](phase-5/NOTES.md).
 
