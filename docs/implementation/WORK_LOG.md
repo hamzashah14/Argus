@@ -989,3 +989,10 @@ Append entries; retain previous outcomes when later work supersedes them.
   zero new candidates/baseline 388 unchanged, whitespace PASS. Initial 637/638/639
   passing runs were intermediate; current final suite is 640. Final documentation
   link/shell checks and clean-source reference checkpoint evidence follow below.
+- Code checkpoint `0ea2015`. Temporary clean offline checkout passed actual init,
+  dry-run, eight-package/five-stage bootstrap rendering (`source_dirty:false`),
+  and synthetic check/apply rejection with SDK creation blocked. Verified packages
+  were copied without customer inputs; retained sanitized results and removed the
+  temporary checkout. 247 current local links/anchors and 34 shell blocks PASS.
+  Private configuration/logo assets and local UI preview remain preserved.
+  [Final evidence](evidence/deployment-automation/local-validation.json).

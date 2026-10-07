@@ -4,7 +4,9 @@ Updated: 2026-10-07. **Phase 5 P5.01–P5.06 local implementation COMPLETE; all 
 **User-authorized deployment automation COMPLETE locally.**
 640 tests (57 added), 90 templates, lint/format and zero-new-secret checks PASS.
 Actual automation wrapper built eight verified packages and five bootstrap
-stages offline with zero AWS clients. Final clean-checkpoint evidence follows. CLI supplies private init,
+stages offline with zero AWS clients. Clean code checkpoint `0ea2015`: init,
+dry-run, actual package-bound bootstrap render and synthetic check/apply rejection
+PASS (`source_dirty:false`). [Evidence](evidence/deployment-automation/local-validation.json). CLI supplies private init,
 offline dry-run, read-only preflight, resumable apply/status, initial grants and
 scoped UI launcher. Real AWS/IdP/inbox acceptance remains pending; no Phase 6.
 Read [automation track](DEPLOYMENT_AUTOMATION_PLAN.md) and
