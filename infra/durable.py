@@ -17,7 +17,7 @@ from scripts.build_lambdas import PIPELINE_FUNCTIONS
 
 def load_config(path, spec):
     value = json.loads(Path(path).read_text())
-    if set(value) != {
+    expected = {
         "status_base_url",
         "fallback_email",
         "retention_days",
@@ -25,10 +25,15 @@ def load_config(path, spec):
         "investigation_paused",
         "runtime_target",
         "runtime_limits",
-    }:
+    }
+    if set(value) not in (expected, expected | {"identity"}):
         raise ValueError(
             "Durable configuration requires status URL, fallback email, retention, initial capacity and model pause"
         )
+    if "identity" in value:
+        from infra.identity import validate_config
+
+        validate_config(value["identity"])
     url = value["status_base_url"]
     email = value["fallback_email"]
     if (
@@ -125,6 +130,11 @@ def render(
         "foundation-monitor": templates.foundation(spec, "monitor"),
         "durable-foundation": durable_templates.foundation(spec, config),
     }
+    if "identity" in config:
+        from infra import identity
+
+        stages["identity-foundation"] = identity.foundation(spec, bindings)
+        stages["identity-secret"] = identity.signing_secret(spec)
     if "tool_artifacts" in bindings:
         if not tool_build or set(bindings["tool_artifacts"]) != {"fetch_logs", "fetch_metrics"}:
             raise VerificationError("Verified inventory-bound tool artifacts are required")
@@ -302,7 +312,14 @@ def render(
                     },
                 ),
                 "region": spec["bedrock_region"]
-                if stage in {"foundation-tools", "owned-tools", "agentcore-runtime", "agentcore-endpoint"}
+                if stage
+                in {
+                    "foundation-tools",
+                    "owned-tools",
+                    "agentcore-runtime",
+                    "agentcore-endpoint",
+                    "identity-secret",
+                }
                 else spec["monitor_region"],
                 "create_only": stage
                 in {

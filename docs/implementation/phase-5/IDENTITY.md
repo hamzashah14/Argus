@@ -1,12 +1,12 @@
-# Individual identity: first implementation slice
+# Individual identity and deployment wiring
 
-P5.01 remains IN_PROGRESS. This code is not a deployable identity release yet:
-owned infrastructure environment/role/secret wiring, a real IdP integration,
-origin tests and customer acceptance still need implementation/qualification.
-Existing releases do not provision the session table or identity settings.
-Deploying the new code in staging/production without them denies interactive
-chat and report access. Automatic incident execution retains its IAM and ledger
-fencing checks. Keep prior qualified releases until a complete candidate exists.
+P5.01 remains IN_PROGRESS pending real IdP/MFA/origin/IAM qualification. Optional
+identity-enabled releases now provision a separate encrypted session table,
+generated signing secret and scoped issuer/UI/runtime roles. Both standalone and
+AgentCore propagate the deployment environment and identity settings. Releases
+without identity configuration deny interactive staging/production access;
+automatic incidents retain their IAM and ledger fencing. This is locally verified
+implementation, not a qualified production release. See [customer setup](SETUP.md).
 
 ## Implemented behavior
 
@@ -48,36 +48,60 @@ Rotating the signing key invalidates all outstanding references.
 
 ## Private configuration contract
 
-The following is a contract for the next deployment-wiring slice, not a cloud
-setup command or authorization to provision anything:
+Configure identity using the optional `identity` block in the durable JSON; see
+`infra/identity.example.json`. Example inputs remain synthetic and undeployable.
 
 - Native OIDC settings live in ignored `.streamlit/secrets.toml`: HTTPS callback
   ending `/oauth2callback`, independent random cookie secret, client ID/secret
   and exact issuer discovery URL. Use the provider's MFA policy. Require recent
   authentication with provider-supported `max_age`; verify actual emitted claims.
-- `KIRA_ACCESS_POLICY_FILE` points to private, operator-owned JSON containing
+- Rendered `KIRA_ACCESS_POLICY_JSON` contains
   exactly `version: 1`, `binding: [environment, account, release]`, `issuer`
   (HTTPS) and `audience` (UI client ID). No credentials or user membership in it.
-  UI and remote runtime need the same immutable configuration/binding.
-- `KIRA_SESSION_SIGNING_KEY` is an independent random secret of at least 32 bytes,
-  supplied privately to UI and remote runtime. It is not APP_PASSWORD, the OIDC
-  cookie/client secret or the log cursor secret. Secret injection/versioning and
-  secure retrieval still need IaC wiring; never commit its value.
+  UI and remote runtime need the same immutable configuration/binding. The private
+  `KIRA_ACCESS_POLICY_FILE` alternative is retained; configuring both is denied.
+- `KIRA_SESSION_KEY_ARN` and `KIRA_SESSION_KEY_VERSION` bind the independent
+  Secrets Manager signing key. Workloads retrieve only that exact version under
+  a matching IAM condition; no `AWSCURRENT` fallback. Successful reads use a
+  bounded one-minute cache, failures are not cached. Per-action DynamoDB grant
+  checks still apply. A private `KIRA_SESSION_SIGNING_KEY` alternative is retained
+  for isolated fixtures; configuring both key mechanisms is denied. Never reuse
+  APP_PASSWORD, the OIDC cookie/client secret or the log cursor secret.
 - `KIRA_SESSION_TABLE`, `MONITOR_REGION` identify a dedicated encrypted DynamoDB
   table with string PK/SK, TTL attribute `ttl`, PITR and controlled retention.
-  This slice does not create it. Do not point it to the incident stream table.
+  The identity foundation creates it with AWS-managed KMS encryption, PITR,
+  deletion protection and retained deletion policy. It has no stream or indexes;
+  never point identity at the incident stream table. TTL is expiry cleanup,
+  not a grant-retention or backup-deletion policy (P5.03 remains pending).
 - Operator-managed grant row: PK=`IDENTITY#<actor>`, SK=`META`, `binding` as above,
   `enabled` boolean, `epoch` positive integer, `role` viewer/investigator and
   `instance_ids` a unique nonempty subset of `ALLOWED_INSTANCE_IDS` (maximum 100).
   Disabling/removing a grant or changing its epoch revokes existing sessions.
   Increasing permissions requires an explicit operator access decision.
 
-IAM wiring must distinguish grant management from session operations. The UI
+IAM wiring distinguishes grant management from session operations. The UI
 can read `IDENTITY#*` and create/read/update/delete `SESSION#*`; the runtime only
 reads `IDENTITY#*` and reads/updates `SESSION#*`. Neither workload may modify an
 identity grant. The customer access administrator owns grant writes. Bind all
 policies to exact table ARNs and leading-key conditions; verify denials live.
-No DynamoDB Scan permission is needed by these paths.
+No DynamoDB Scan permission is needed by these paths. A limited session-issuer
+role supports native OIDC login before routing promotion; it has no model, tool
+or report access. The operator grant CLI uses a separate customer administrator.
+Every reviewed grant update advances its epoch, including disabling access;
+do not delete/recreate grants and reset epochs. Conditional writes compare all
+authorization fields and reject concurrent changes. Raw subjects remain in
+private request files, absent from saved review diffs and console output.
+
+Release labels retain immutable signing versions for rollback. The pin operation
+does not move a label already attached to another version. Live candidate checks
+verify foundation template hashes, actual encryption/TTL/PITR/schema/stream
+settings, secret ownership/version/label and actual limited-role grants/trust.
+Post-promotion routing verification also checks the actual UI role and rejects
+extra attached/inline policies. These verifiers are tested with synthetic AWS
+responses; they have not been executed against customer resources. Render also
+rejects environments beyond a conservative JSON-size limit of 4 KiB, before an
+oversized configuration reaches Lambda's
+[environment quota](https://docs.aws.amazon.com/lambda/latest/dg/configuration-envvars.html).
 
 Run the UI behind customer TLS with exact callback/origin configuration and
 protected workload credentials. The default bind is loopback; container/proxy

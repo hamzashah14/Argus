@@ -11,8 +11,10 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import time
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import Path
 
 import boto3
@@ -52,10 +54,18 @@ class Sessions:
 
     def policy(self):
         try:
-            path = Path(os.environ["KIRA_ACCESS_POLICY_FILE"])
-            if path.stat().st_size > 128000:
+            inline = os.getenv("KIRA_ACCESS_POLICY_JSON")
+            filename = os.getenv("KIRA_ACCESS_POLICY_FILE")
+            if bool(inline) == bool(filename):
                 raise ValueError()
-            value = json.loads(path.read_text())
+            if filename:
+                path = Path(filename)
+                if path.stat().st_size > 128000:
+                    raise ValueError()
+                inline = path.read_text()
+            if len(inline.encode()) > 128000:
+                raise ValueError()
+            value = json.loads(inline)
             binding = [os.environ[k] for k in ("ENVIRONMENT", "EXPECTED_ACCOUNT_ID", "RUNTIME_RELEASE")]
             if (
                 set(value) != {"version", "binding", "issuer", "audience"}
@@ -110,8 +120,24 @@ class Sessions:
 
     def key(self):
         try:
-            key = os.environ["KIRA_SESSION_SIGNING_KEY"].encode()
-            if len(key) < 32:
+            arn = os.getenv("KIRA_SESSION_KEY_ARN")
+            direct = os.getenv("KIRA_SESSION_SIGNING_KEY")
+            if bool(arn) == bool(direct):
+                raise ValueError()
+            if arn:
+                version = os.environ["KIRA_SESSION_KEY_VERSION"]
+                region, account = os.environ["BEDROCK_REGION"], os.environ["EXPECTED_ACCOUNT_ID"]
+                if not re.fullmatch(
+                    rf"arn:aws:secretsmanager:{re.escape(region)}:{re.escape(account)}:secret:[A-Za-z0-9/_-]+-[A-Za-z0-9]{{6}}",
+                    arn,
+                ):
+                    raise ValueError()
+                if not re.fullmatch(r"[A-Za-z0-9-]{32,64}", version):
+                    raise ValueError()
+                key = signing_key(arn, version, int(time.monotonic() // 60)).encode()
+            else:
+                key = direct.encode()
+            if not 32 <= len(key) <= 4096:
                 raise ValueError()
             return key
         except Exception:
@@ -259,3 +285,48 @@ class Sessions:
             audit(value["actor"], "logout", "DENIED")
             raise AccessDenied() from None
         audit(value["actor"], "logout", "ALLOWED")
+
+    def save_staging_ticket(self, ticket, filename, server_address):
+        """Explicit local operator export; never a browser download or login bypass."""
+        temporary = None
+        try:
+            if os.getenv("ENVIRONMENT") != "staging" or server_address not in {
+                "127.0.0.1",
+                "localhost",
+                "::1",
+            }:
+                raise ValueError()
+            access = self.authorize(ticket, "chat", touch=False)
+            path = Path(filename).absolute()
+            parent = path.parent.stat()
+            if parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+                raise ValueError()
+            with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as output:
+                temporary = output.name
+                os.fchmod(output.fileno(), 0o600)
+                output.write(ticket + "\n")
+            os.replace(temporary, path)
+            temporary = None
+            audit(access["actor"], "canary_export", "ALLOWED")
+        except Exception:
+            raise AccessDenied() from None
+        finally:
+            if temporary:
+                Path(temporary).unlink(missing_ok=True)
+
+
+@lru_cache(maxsize=8)
+def signing_key(arn, version, cache_minute):
+    """Pinned version, bounded one-minute cache; cache time is never authorization."""
+    client = boto3.client(
+        "secretsmanager",
+        region_name=arn.split(":")[3],
+        config=Config(connect_timeout=3, read_timeout=5, retries={"total_max_attempts": 1}),
+    )
+    response = client.get_secret_value(SecretId=arn, VersionId=version)
+    if response.get("ARN") != arn or response.get("VersionId") != version:
+        raise AccessDenied()
+    value = response["SecretString"]
+    if not isinstance(value, str) or not 32 <= len(value.encode()) <= 4096:
+        raise AccessDenied()
+    return value

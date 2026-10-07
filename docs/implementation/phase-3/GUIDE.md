@@ -163,10 +163,14 @@ selection then invokes the actual host and host role. The request has bounded
 allowances and must produce a final answer plus successful logs/metrics contracts.
 Coverage checks must pass first. No initial/follow-up notification is sent by this
 chat canary. The Lambda canary path is disabled in production.
+Phase 5 code also requires a live individual investigator session ticket from an
+identity-enabled candidate. Complete the identity foundation/grant/OIDC bootstrap
+in [Phase 5 setup](../phase-5/SETUP.md), including its limited issuer role, before
+the first canary. A shared password or operator-supplied claim is insufficient.
 
 ```bash
 .venv/bin/python -m infra.durable_ops verify-candidate --bundle .local/customer/plan --review-hash REVIEW_HASH --output .local/customer/candidate.json
-.venv/bin/python -m infra.durable_ops canary --allow-model-invocation --bundle .local/customer/plan --review-hash REVIEW_HASH --output .local/customer/canary.json
+.venv/bin/python -m infra.durable_ops canary --allow-model-invocation --access-ticket-file .local/customer/private/canary.ticket --bundle .local/customer/plan --review-hash REVIEW_HASH --output .local/customer/canary.json
 .venv/bin/python -m infra.durable_ops retirement-plan --bundle .local/customer/plan --review-hash REVIEW_HASH --receipt .local/customer/canary.json --output .local/customer/retirement.json
 ```
 
@@ -183,11 +187,12 @@ re-canary and re-review routing for that exact promotion. Verify registration us
 is not delivery, latency or production acceptance.
 
 Copy the verified routing output `RuntimeConnection` into the UI environment,
-set APP_PASSWORD, and configure the incident storage values from the durable
+configure customer OIDC and identity settings, and configure incident storage from the durable
 foundation. Standalone UI calls Bedrock/tools with its scoped customer role;
 AgentCore UI only needs invocation on the exact Runtime and release endpoint.
-The UI's incident read role excludes raw EVENT records. Individual user identity
-and per-user durable work allowances remain Phase 5 requirements.
+The UI's incident read role excludes raw EVENT records. Shared-password access
+is development only. Phase 5 identity implementation is locally verified;
+real IdP/origin qualification and distributed work allowances remain pending.
 
 For deployments with Phase 4 observations, follow the corrected
 [bootstrap order](../review-phases-1-4/CORRECTIONS.md#bootstrap-and-deployment-changes):

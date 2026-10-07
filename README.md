@@ -198,8 +198,10 @@ The setup screen works before an agent exists. Opening it creates no cloud resou
 The connection shows “configured” until a request succeeds. Errors expose a short
 reference; partial responses remain visible. See the Phase 1 guide for session limits.
 Shared-password authentication and browser-local work limits are development controls.
-Phase 5 individual identity/session/backend access controls are implemented as an
-initial slice; deployment/secret/IAM wiring and distributed budgets remain in progress.
+Phase 5 individual identity/session/backend access controls and optional
+deployment/secret/IAM wiring are implemented locally. Customer OIDC/origin
+qualification and distributed budgets remain in progress; see the
+[identity setup guide](docs/implementation/phase-5/SETUP.md).
 Staging/production now deny chat/report access unless identity is configured. Read
 the [identity checkpoint](docs/implementation/phase-5/IDENTITY.md) before upgrading.
 This slice is not ready for broad production access.

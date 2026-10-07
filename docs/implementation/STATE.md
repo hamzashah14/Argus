@@ -1,9 +1,9 @@
 # Resume here
 
-Updated: 2026-10-07. **Phase 5 authorized and IN_PROGRESS: first P5.01
-identity/session/backend-access slice implemented locally.** 459 tests (49 new),
-64 existing templates, 13 deterministic package/import pairs and both synthetic
-release layouts pass. Deployment/IAM/secret/IdP/origin wiring remains unfinished;
+Updated: 2026-10-07. **Phase 5 authorized and IN_PROGRESS: P5.01
+identity/session/backend controls and optional deployment wiring implemented locally.**
+522 tests (63 new wiring tests), 82 templates, 13 deterministic package/import
+pairs and eight synthetic release bundles pass. Real IdP/MFA/origin/IAM qualification is pending;
 P5.02–P5.06 NOT_STARTED, G5 NOT_RUN. Read [Phase 5 checkpoint](phase-5/NOTES.md).
 
 Prior corrective batches A–C remain implemented locally; R01–R08 VERIFYING and
@@ -29,6 +29,21 @@ Floci remains proposed/deferred; no emulator image/container was created.
   The synthetic reference spec is not authorization or infrastructure.
 
 ## Current checkpoint and evidence
+
+- Current wiring slice follows `fc96a7a` on `codex/phase-5-identity-evidence`:
+  optional encrypted session table/generated secret, exact version IAM/retrieval,
+  release binding, limited issuer/UI/runtime roles, reviewed conditional grant
+  changes/tombstone revocation and release key labels. AgentCore receives
+  ENVIRONMENT explicitly. Local staging ticket export requires an investigator,
+  loopback bind and owner-only directory; no browser download or auth bypass.
+  Actual cloud verifiers check foundation settings and deployed issuer/UI roles,
+  but have only synthetic fixture evidence. **522 tests**, **82 templates**, 13
+  deterministic package/import pairs and old/new identity release layouts pass.
+  Zero unreviewed secrets; exactly three new dummy candidates reviewed (380 total).
+  Dependency locks are unchanged. [Setup](phase-5/SETUP.md),
+  [validation](evidence/phase-5/wiring-validation.json), [checkpoint](phase-5/NOTES.md).
+  P5.01 remains IN_PROGRESS; real IdP/origin/IAM acceptance pending. P5.02 next:
+  distributed issuance/chat allowances and separate automatic/chat capacity.
 
 - Phase 5 first identity slice at checkpoint `0a6ce44`, branch
   `codex/phase-5-identity-evidence` (parent `fff9cb3`): native OIDC with
@@ -88,8 +103,9 @@ Floci remains proposed/deferred; no emulator image/container was created.
 ## Next authorized work
 
 The user clarified “I guess next phase is Phase 5” on 7 October after asking to
-continue. Proceed with Phase 5 in task order, starting P5.01 identity/session
-controls. Read [Phase 5 checkpoint](phase-5/NOTES.md). Prior local corrective
+continue. Continue within Phase 5: retain the P5.01 identity wiring checkpoint and
+its pending real IdP/origin acceptance; next implement P5.02 distributed login/chat
+budgets and automatic/chat capacity isolation using offline fixtures. Read [Phase 5 checkpoint](phase-5/NOTES.md). Prior local corrective
 batches A–C remain intact; all live G2/G3/G4 gates and hosted CI remain pending.
 Do not start Phase 6 or deploy AWS. Floci batch D is deferred, not installed.
 Docker Desktop start returned already running; no emulator/image/container was
@@ -99,7 +115,7 @@ Customer identity provider/domain/MFA policy and actual retention/security owner
 remain unresolved. Implement portable controls using customer-owned OIDC, with
 synthetic offline fixtures and fail-closed production behavior. Keep development
 password compatibility explicitly outside production. Record each implementation
-slice and remaining wiring rather than claiming the entire phase complete.
+slice and remaining qualification rather than claiming the entire phase complete.
 
 ## Historical validation
 

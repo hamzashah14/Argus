@@ -19,6 +19,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tool-build-dir", type=Path, default=ROOT / ".build/reference-lambda")
     parser.add_argument("--observations", action="store_true")
+    parser.add_argument("--identity", action="store_true")
     args = parser.parse_args()
     spec_path = ROOT / (
         "infra/observability.example.json" if args.observations else "infra/deployment.example.json"
@@ -40,6 +41,15 @@ def main():
     for target, count in (("standalone", 6), ("agentcore", 8)):
         config = {**base, "runtime_target": target}
         _, bindings, artifacts, versions = examples(spec, config, include_bindings=True)
+        if args.identity:
+            from infra.identity import secret_name
+
+            config["identity"] = {"issuer": "https://identity.example.invalid", "audience": "customer-ui"}
+            bindings["identity"] = {
+                "SigningSecretArn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:{secret_name(spec)}-123abc",
+                "SigningSecretVersion": "a" * 32,
+            }
+            count += 2
         bindings.update(
             {
                 "artifacts": {n: pin(pipeline, "monitor", n) for n in artifacts},
@@ -70,9 +80,8 @@ def main():
                 for n, logical in FUNCTIONS.items()
             }
             count += 3
-        folder = (
-            ROOT / (".build/observation-render" if args.observations else ".build/durable-render") / target
-        )
+        kind = ("observation" if args.observations else "durable") + ("-identity" if args.identity else "")
+        folder = ROOT / f".build/{kind}-render" / target
         folder.mkdir(parents=True, exist_ok=True)
         config_path, bindings_path = folder / "config.json", folder / "bindings.json"
         config_path.write_text(json.dumps(config))
@@ -90,14 +99,7 @@ def main():
         checked = durable_ops.read_bundle(folder / "plan", bundle["review_hash"])
         assert checked == bundle and len(checked["stages"]) == count and checked["spec"]["reference_only"]
         evidence[target] = {"stages": count, "status": "PASS", "synthetic_only": True}
-    (
-        ROOT
-        / (
-            ".build/observation-render-validation.json"
-            if args.observations
-            else ".build/durable-render-validation.json"
-        )
-    ).write_text(json.dumps(evidence, indent=2) + "\n")
+    (ROOT / f".build/{kind}-render-validation.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print("PASS: complete release renders and bundle verification", evidence)
 
 

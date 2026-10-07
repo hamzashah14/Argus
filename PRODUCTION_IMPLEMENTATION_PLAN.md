@@ -301,6 +301,8 @@ Integrate the chosen SSO/OIDC or authenticated access gateway; enforce identity 
 
 Acceptance: Unauthenticated, expired, revoked, and unauthorized users cannot invoke tools or fetch reports; user identity appears in audit records.
 
+**P5.01 checkpoint (7 October 2026).** Individual session controls and optional deployment wiring are implemented locally: encrypted store/generated secret, pinned version IAM, scoped issuer/UI/runtime roles, reviewed grant changes, rollback key labels and a native staging-ticket canary path. 522 tests, 82 templates, 13 package pairs/imports and eight synthetic releases pass. P5.01 remains IN_PROGRESS pending actual customer IdP/MFA/origin/IAM qualification; P5.02–P5.06 NOT_STARTED. See [setup and pending gates](docs/implementation/phase-5/SETUP.md). No project AWS resources or paid invocations.
+
 **P5.02 — Enforce per-user access and work budgets.** Prerequisites: P5.01, P3.07. Suggested owner: Engineering. Findings: F07, F08.
 
 Enforce service/environment allowlists in the backend, not the prompt or frontend. Add distributed login/investigation limits and bounded chat work with separate capacity from automatic incidents. Record actor, purpose, and accessed scope.

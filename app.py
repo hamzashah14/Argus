@@ -1,6 +1,7 @@
 """Customer-operated Kira web client. Run with: streamlit run app.py."""
 
 import hmac
+import os
 import time
 import uuid
 
@@ -141,6 +142,24 @@ if identity.required():
         if st.button("Sign out from SSO"):
             sign_out()
         st.stop()
+
+    if os.getenv("KIRA_STAGING_TICKET_FILE") and settings.environment == "staging":
+        with st.expander("Operator staging canary"):
+            st.caption(
+                "Save your short-lived session to the private file configured by the local operator. This does not invoke a model."
+            )
+            if st.button("Save staging canary session"):
+                try:
+                    identity.Sessions().save_staging_ticket(
+                        st.session_state.access_ticket,
+                        os.environ["KIRA_STAGING_TICKET_FILE"],
+                        st.get_option("server.address"),
+                    )
+                    st.success("Session saved to the operator's private file. Remove it after the canary.")
+                except identity.AccessDenied:
+                    st.error(
+                        "Session export requires an investigator, a loopback staging UI and an owner-only directory."
+                    )
 
 if not identity.required() and len(settings.password) < 12:
     with st.container(border=True):

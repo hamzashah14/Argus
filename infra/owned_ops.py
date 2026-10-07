@@ -72,6 +72,9 @@ def verify_candidate(bundle, factory):
 
     assert_account(factory("sts", spec["monitor_region"]), spec)
     owned_runtime.validate_bindings(spec, config, bindings)
+    from infra.identity import verify_foundations
+
+    verify_foundations(bundle, factory)
     planned = sealed(bundle, "owned-tools", factory)
     for logical, function in (("Logs", "fetch_logs"), ("Metrics", "fetch_metrics")):
         arn = bindings["tools"][logical + "VersionArn"]
@@ -166,9 +169,11 @@ def verify_candidate(bundle, factory):
     }
 
 
-def canary(bundle, factory, *, allow_model_invocation=False, client=None):
+def canary(bundle, factory, *, allow_model_invocation=False, client=None, access_ticket=None):
     if not allow_model_invocation or bundle["spec"]["environment"] != "staging":
         raise VerificationError("Canary requires explicit paid invocation authorization in staging")
+    if not isinstance(access_ticket, str) or not 1 <= len(access_ticket) <= 1024:
+        raise VerificationError("A private individual-session ticket is required for the staging chat canary")
     verify_candidate(bundle, factory)
     coverage(bundle["spec"], factory)
     release_hash = owned_runtime.fingerprint(bundle["spec"], bundle["config"], bundle["bindings"])
@@ -177,6 +182,7 @@ def canary(bundle, factory, *, allow_model_invocation=False, client=None):
         "version": 1,
         "release": release_hash,
         "mode": "chat",
+        "access_ticket": access_ticket,
         "history": [],
         "prompt": f"Investigate instance {iid} using fetch_logs discovery/search and fetch_metrics. State missing data and uncertainty; use a window of at most {bundle['config']['runtime_limits']['window_minutes']} minutes per side.",
     }

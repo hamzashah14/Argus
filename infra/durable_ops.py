@@ -32,11 +32,19 @@ STAGES = {
     "foundation-tools",
     "foundation-monitor",
     "durable-foundation",
+    "identity-foundation",
+    "identity-secret",
     "routing",
     "observation-foundation",
     "observations",
 } | IMMUTABLE
-TOOLS_REGION = {"foundation-tools", "owned-tools", "agentcore-runtime", "agentcore-endpoint"}
+TOOLS_REGION = {
+    "foundation-tools",
+    "owned-tools",
+    "agentcore-runtime",
+    "agentcore-endpoint",
+    "identity-secret",
+}
 
 
 def stage_region(spec, stage):
@@ -358,6 +366,9 @@ def verify_routing(bundle):
     spec = bundle["spec"]
     assert_account(clients("sts", spec["monitor_region"]), spec)
     owned_stack(spec, "routing")
+    from infra.identity import verify_ui_role
+
+    verify_ui_role(bundle, clients)
     outputs = verify_capture(bundle)
     versions = bundle["bindings"]["versions"]
     desired = durable_templates.active_routing(
@@ -478,6 +489,7 @@ def main():
             "verify-candidate",
             "canary",
             "cursor-version",
+            "identity-version",
             "verify-observations",
             "verify-observation-routing",
             "attest-email",
@@ -494,6 +506,7 @@ def main():
     )
     parser.add_argument("--allow-model-invocation", action="store_true")
     parser.add_argument("--confirm-inbox-delivery", action="store_true")
+    parser.add_argument("--access-ticket-file", type=Path)
     parser.add_argument("--notification-id")
     parser.add_argument("--change-set")
     parser.add_argument("--change-set-hash")
@@ -538,7 +551,30 @@ def main():
                 {**bundle, "directory": str(args.bundle)},
                 clients,
                 allow_model_invocation=args.allow_model_invocation,
+                access_ticket=args.access_ticket_file.read_text().strip()
+                if args.access_ticket_file
+                else None,
             )
+        elif args.command == "identity-version":
+            from infra import identity
+
+            spec = bundle["spec"]
+            if "identity" not in bundle["config"]:
+                raise VerificationError("Identity configuration is required")
+            assert_account(clients("sts", spec["bedrock_region"]), spec)
+            _, stack = owned_stack(spec, "identity-secret")
+            outputs = {i["OutputKey"]: i["OutputValue"] for i in stack["Outputs"]}
+            arn = outputs["SigningSecretArn"]
+            secret = clients("secretsmanager", spec["bedrock_region"]).describe_secret(SecretId=arn)
+            versions = [v for v, stages in secret["VersionIdsToStages"].items() if "AWSCURRENT" in stages]
+            if (
+                secret.get("Name") != identity.secret_name(spec)
+                or secret.get("ARN") != arn
+                or len(versions) != 1
+            ):
+                raise VerificationError("Identity signing secret/version is not owned or unique")
+            value = {"SigningSecretArn": arn, "SigningSecretVersion": versions[0]}
+            identity.validate_bindings(spec, {"identity": value})
         elif args.command == "cursor-version":
             spec = bundle["spec"]
             assert_account(clients("sts", spec["bedrock_region"]), spec)

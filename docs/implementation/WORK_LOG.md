@@ -601,3 +601,69 @@ Append entries; retain previous outcomes when later work supersedes them.
   `fff9cb3`. Old and extended synthetic release renders passed again from this
   clean checkpoint; all four bundles show source_dirty false. Documentation
   follow-up records that result; no runtime changes or live qualification.
+
+## 2026-10-07 — Phase 5 identity deployment wiring and operator workflow
+
+- Resumed STATE/plan/tracker/WORK_LOG on user continuation; stayed within Phase 5
+  and the customer-operated model. Prior checkpoint `fc96a7a` on
+  `codex/phase-5-identity-evidence`. No customer IdP or project resources exist.
+- Added optional identity configuration/foundations in same/split-region release
+  layouts. Dedicated retained DynamoDB uses AWS-managed KMS, TTL, PITR and
+  deletion protection, with no incident stream/index. Independent generated
+  signing secret is bound by owned ARN/immutable version. UI/host/worker use
+  the same policy/release references; no actual key bytes rendered or logged.
+- Found AgentCore lacked ENVIRONMENT and could default to development when
+  admitting chat; fixed explicit propagation on every owned target, with a
+  regression. Identity metadata/version affect the release fingerprint.
+- Workload IAM separates read-only IDENTITY grants from session operations;
+  exact-table leading-key conditions include the missing-key Null guard. Secret
+  reads require secretsmanager:VersionId. UI may manage sessions, runtime only
+  reads/updates; neither workload writes grants. Successful signing-key reads
+  have a bounded minute cache; wrong ARN/version and conflicts fail closed.
+- Implemented actual-resource verifiers for foundation ownership/template hash,
+  table encryption/schema/TTL/PITR/stream and secret ownership/version/label.
+  Issuer and post-promotion UI role checks compare actual trust/inline policy
+  and reject extra policies/boundaries. All were exercised with synthetic clients,
+  never live AWS. Resource policies/SCPs/end-user denials remain a live gate.
+- Resolved new-deployment circularity: a native login ticket is required before
+  canary/promotion, while the primary UI role exists after promotion. A limited
+  foundation issuer role trusts only the customer UI workload and has no
+  model/tool/report grants. An explicit local staging investigator UI control
+  saves a ticket atomically to an owner-only directory/file; production/public
+  binds/viewers deny export. No browser download or raw-claims issuance endpoint.
+- Added separate customer operator grant plan/apply CLI. Plans omit raw subjects,
+  bind the complete bundle/actor/role/scope, advance epochs and compare every
+  authorization field under a conditional write. Disabled rows remain tombstones
+  to prevent epoch reset/session resurrection. Writes require clean reviewed
+  source/account/owned foundations; synthetic references deny before AWS clients.
+- Added explicit key pinning under a release label, without reading key bytes or
+  moving an existing label. Describe/collect is read-only. Reviewed AWS primary
+  docs for VersionId IAM conditions, DynamoDB multivalued/Null conditions,
+  DescribeSecret AWS-managed key metadata and version-label retention. No label
+  retirement or full credential rotation is claimed; those need P5.06 decisions.
+- Conservative Lambda environment JSON size gate catches oversized config before
+  cloud rendering/deployment. Identity CF lint/release variants are in CI.
+- Final validation: **522 tests (63 new this slice)**; **82 templates** (12 prior,
+  20 owned, 32 observations, 18 identity); 13 deterministic package pairs/imports;
+  complete old 6/8 and observation 9/11 plus identity 8/10 and identity-observation
+  11/13-stage synthetic renders with actual current ZIP hashes. Lint/format,
+  bundled shellcheck, OpenAPI, pip and whitespace PASS. No dependency changes;
+  prior same-day 100-package advisory scan remains the record, not rerun.
+- Initial full suite under restricted execution hit six loopback bind EPERM
+  failures; the authorized loopback execution passes. One new mock omitted
+  versions (fixed fixture). A render correctly rejected stale ZIPs after runtime
+  edits; rebuilt all packages after final formatting and reran dependent renders.
+  Shellcheck was absent from PATH; used installed .venv/bin/shellcheck. These are
+  recorded local environment/fixture/build-order corrections, not live results.
+- Secret scan initially identified exactly three new synthetic/documentation
+  candidates: dummy cookie placeholder, deliberately invalid URL credentials and
+  repeated fixture SecretString. Reviewed those exact baseline entries as false;
+  total 380, zero unreviewed candidates, no widened scan exclusions. Private
+  inputs/keys/customer responses remain ignored; sanitized evidence contains counts.
+- Updated STATE/plan/tracker/README/.env and corrected the Phase 3 identity/canary
+  upgrade instructions. Added Phase 5 SETUP and wiring-validation evidence. Real
+  customer IdP/MFA/origin/IAM qualification remains NOT_RUN; P5.01 IN_PROGRESS,
+  P5.02 next (distributed issuance/chat budgets and capacity isolation), P5.03–06
+  NOT_STARTED. All earlier gates/20 findings and R01–08 remain pending/open/VERIFYING.
+  No project cloud calls, provisioning, inference, notifications, emulator, push
+  or hosted CI. No Phase 6 advancement or DONE-count increase.

@@ -1,0 +1,22 @@
+{
+  "status_base_url": "https://customer.example.invalid/",
+  "fallback_email": "fallback@example.invalid",
+  "retention_days": 30,
+  "initial_reserved_concurrency": 2,
+  "investigation_paused": true,
+  "runtime_target": "standalone",
+  "runtime_limits": {
+    "tokens_reserved": 32000,
+    "model_steps": 8,
+    "tool_calls": 8,
+    "log_queries": 24,
+    "output_tokens": 1024,
+    "window_minutes": 15,
+    "context_bytes": 48000,
+    "tool_bytes": 20000
+  },
+  "identity": {
+    "issuer": "https://identity.example.invalid",
+    "audience": "customer-ui"
+  }
+}

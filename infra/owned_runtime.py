@@ -54,6 +54,11 @@ def fingerprint(spec, config, bindings):
             "tools": bindings["tools"],
             "limits": asdict(Limits(**config["runtime_limits"])),
             "runtime_target": config["runtime_target"],
+            **(
+                {"identity": config["identity"], "identity_secret": bindings.get("identity")}
+                if "identity" in config
+                else {}
+            ),
             "release_id": spec["release_id"],
             "contracts": {
                 p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()
@@ -65,7 +70,8 @@ def fingerprint(spec, config, bindings):
 
 def environment(spec, config, bindings):
     validate_bindings(spec, config, bindings)
-    return {
+    env = {
+        "ENVIRONMENT": spec["environment"],
         "RUNTIME_TARGET": config["runtime_target"],
         "BEDROCK_REGION": spec["bedrock_region"],
         "BEDROCK_MODEL_ID": spec["model_id"],
@@ -81,6 +87,12 @@ def environment(spec, config, bindings):
             else {}
         ),
     }
+
+    if "identity" in config:
+        from infra.identity import environment as identity_environment
+
+        env.update(identity_environment(spec, config, bindings, env["RUNTIME_RELEASE"]))
+    return env
 
 
 def model_permissions(spec, bindings):
@@ -135,6 +147,7 @@ def agentcore_release(spec, config, bindings, artifact, version=None):
         "bedrock-agentcore.amazonaws.com",
         [
             *model_permissions(spec, bindings),
+            *(identity_permissions(spec, config, bindings) if "identity" in config else []),
             statement(
                 ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:PutItem"], foundation["TableArn"]
             ),
@@ -231,3 +244,11 @@ def agentcore_endpoint(spec, runtime_id, version):
 
 def agentcore_log_group(runtime_id, endpoint):
     return f"/aws/bedrock-agentcore/runtimes/{runtime_id}-{endpoint}"
+
+
+def identity_permissions(spec, config, bindings, *, issuer=False):
+    if "identity" not in config:
+        return []
+    from infra.identity import permissions
+
+    return permissions(spec, bindings, issuer=issuer)

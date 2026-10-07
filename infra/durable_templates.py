@@ -509,7 +509,7 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
         ),
     }
     if owned_bindings is not None:
-        from infra.owned_runtime import caller_environment, caller_permissions
+        from infra.owned_runtime import caller_environment, caller_permissions, identity_permissions
 
         logical, previous_env, permissions, timeout = definitions["incident_investigate"]
         model_env = {key: value for key, value in previous_env.items() if not key.startswith("BEDROCK_")}
@@ -519,7 +519,9 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
         definitions["incident_investigate"] = (
             logical,
             model_env,
-            permissions + caller_permissions(spec, config, owned_bindings),
+            permissions
+            + caller_permissions(spec, config, owned_bindings)
+            + identity_permissions(spec, config, owned_bindings),
             timeout,
         )
     for function in FUNCTIONS:
@@ -560,11 +562,11 @@ def active_routing(
     del r["WorkerSubscription"]
     del r["WorkerFailure"]
     if owned_bindings is not None:
-        from infra.owned_runtime import caller_environment, caller_permissions
+        from infra.owned_runtime import caller_environment, caller_permissions, identity_permissions
 
         r["UiRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"] = caller_permissions(
             spec, config, owned_bindings
-        )
+        ) + identity_permissions(spec, config, owned_bindings, issuer=True)
         del t["Outputs"]["AgentConnection"]
         t["Outputs"]["RuntimeConnection"] = {
             "Value": json.dumps(caller_environment(spec, config, owned_bindings))

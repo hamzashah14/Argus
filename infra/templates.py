@@ -244,6 +244,10 @@ def foundation(spec, purpose):
 
 
 def add_function(t, spec, logical, function, artifact, env, region, policies, timeout):
+    if len(json.dumps(env, separators=(",", ":"), ensure_ascii=False).encode()) > 4096:
+        from infra.verify import VerificationError
+
+        raise VerificationError("Lambda environment exceeds the conservative 4 KiB rendering limit")
     r = t["Resources"]
     physical = name(spec, function.replace("_", "-"), release=True)
     group = f"/aws/lambda/{physical}"

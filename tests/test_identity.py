@@ -317,6 +317,56 @@ def test_production_shared_password_and_browser_flag_cannot_bypass_oidc(setup, m
     assert not test.text_input
 
 
+def staging(setup, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "staging")
+    setup.policy["binding"][0] = "staging"
+    setup.path.write_text(json.dumps(setup.policy))
+
+
+def test_staging_canary_export_is_private_and_contains_no_browser_download(
+    setup, monkeypatch, tmp_path, capsys
+):
+    import streamlit
+
+    staging(setup, monkeypatch)
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    path = private / "canary.ticket"
+    monkeypatch.setenv("KIRA_STAGING_TICKET_FILE", str(path))
+    monkeypatch.setattr(identity, "Sessions", lambda: setup.sessions)
+    monkeypatch.setattr(streamlit, "user", VerifiedUser({**setup.claims, "is_logged_in": True}))
+    test = AppTest.from_file(str(ROOT / "app.py")).run()
+    next(button for button in test.button if button.label == "Save staging canary session").click().run()
+    assert not test.exception and path.read_text().strip() == test.session_state["access_ticket"]
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert not test.get("download_button") and test.success
+    assert test.session_state["access_ticket"] not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("environment,address", [("production", "127.0.0.1"), ("staging", "0.0.0.0")])
+def test_canary_export_cannot_be_enabled_in_production_or_on_public_bind(
+    setup, monkeypatch, tmp_path, environment, address
+):
+    monkeypatch.setenv("ENVIRONMENT", environment)
+    with pytest.raises(identity.AccessDenied):
+        setup.sessions.save_staging_ticket("untrusted", str(tmp_path / "ticket"), address)
+    assert not (tmp_path / "ticket").exists()
+
+
+def test_viewer_and_unsafe_directory_cannot_export_ticket(setup, monkeypatch, tmp_path):
+    staging(setup, monkeypatch)
+    ticket = setup.sessions.issue(setup.claims)
+    path = tmp_path / "ticket"
+    tmp_path.chmod(0o755)
+    with pytest.raises(identity.AccessDenied):
+        setup.sessions.save_staging_ticket(ticket, str(path), "127.0.0.1")
+    tmp_path.chmod(0o700)
+    setup.table.rows["IDENTITY#" + ACTOR]["role"] = "viewer"
+    with pytest.raises(identity.AccessDenied):
+        setup.sessions.save_staging_ticket(ticket, str(path), "127.0.0.1")
+    assert not path.exists()
+
+
 class VerifiedUser(dict):
     def to_dict(self):
         return dict(self)
