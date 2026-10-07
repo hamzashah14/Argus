@@ -1,11 +1,13 @@
 # Customer identity setup and qualification
 
-P5.01 local implementation only; no deployment has occurred. These are operator
+P5.01–P5.06 local implementation complete; live verification pending. No deployment has occurred. These are operator
 procedures for an eventual customer staging environment. Never run the synthetic
 reference on AWS. Follow the Phase 3/4 bootstrap, reviewed change-set, sealing,
 coverage and promotion gates; this guide adds identity ordering. Keep automatic
-investigation paused until its acceptance gates pass. Phase 5 budgets/redaction
-remain pending, so do not enable broad access or sensitive-data evaluation.
+investigation paused until its acceptance gates pass. Local budgets/redaction/diagnostic controls are implemented, but actual customer
+identity, policy, model and retention acceptance remain pending. See
+[local completion](LOCAL_COMPLETION.md) and [security operations](SECURITY_OPERATIONS.md)
+before enabling broad access or sensitive-data evaluation.
 
 ## What the customer supplies
 
@@ -68,8 +70,8 @@ Do not enable token exposure in Streamlit secrets or add identity headers at a p
    unique current version; the release thereafter uses that immutable version.
 3. Re-render with these bindings and update `identity-foundation` through another
    reviewed change set. It now creates `SessionIssuerRole`, trusting only the
-   declared UI workload principal. This role can read grants, manage sessions and
-   read the exact signing version. It cannot modify grants, invoke models/tools or
+   declared UI workload principal. This role can read grants, manage sessions, reserve distributed login allowances,
+   retain classified access records and read the exact signing version. It cannot modify grants, invoke models/tools or
    retrieve reports. Verify ownership and trust; never give it to browser users.
 4. Pin the selected signing version using `infra.identity_ops pin-secret-version`.
    The release-specific label protects it from becoming an unlabeled deprecated
@@ -79,23 +81,33 @@ Do not enable token exposure in Streamlit secrets or add identity headers at a p
    Unlabeled versions can be removed by AWS; see
    [version-label semantics](https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_UpdateSecretVersionStage.html).
 5. Continue the Phase 3/4 build/upload/collect sequence for tools, durable runtime,
-   optional AgentCore host/endpoint, and observations. Re-render complete bindings
-   and seal immutable candidate stages. Run `verify-candidate`: identity checks
-   now require the exact release key label, table configuration and issuer role.
+   optional automatic AgentCore host/endpoint, and observations. Identity-enabled
+   releases additionally create a separate immutable `chat-runtime` Lambda; AgentCore
+   mode also creates `agentcore-chat-runtime` then `agentcore-chat-endpoint` before
+   the chat gateway. Collect each output using its exact stage name, including
+   `ChatVersionArn` under `bindings.chat_version`; bind/seal all candidates before
+   routing. Chat uses the already verified incident-investigate ZIP, without creating
+   an unverified new package. Re-render complete bindings and seal immutable stages.
+   Run `verify-candidate`: it requires the exact key label, identity grants/roles,
+   isolated chat function/host, capacity and access trail settings. Actual audit
+   receipt and model behavior still require the live gates.
 6. Prepare the local UI environment from the reviewed routing template's
    `Outputs.RuntimeConnection.Value` JSON; it contains references, never key bytes.
    Add `INCIDENT_TABLE`/`REPORT_BUCKET` and `MONITOR_REGION` from verified foundation
    bindings for eventual report access. Remove stale policy-file/direct-key
    overrides. Required shared values include `ENVIRONMENT`, `BEDROCK_REGION`,
    `EXPECTED_ACCOUNT_ID`, `RUNTIME_RELEASE`, `ALLOWED_INSTANCE_IDS`, identity
-   inline JSON/table/key references and target connection settings. Use the same
+   inline JSON/table/key references `KIRA_WORK_POLICY`/`KIRA_DIAGNOSTIC_POLICY` and the qualified `CHAT_FUNCTION_ARN`. Use the same
    release fingerprint as the backend. Initially assume only `SessionIssuerRole`
    through the customer UI workload principal; chat/report attempts will lack
-   model/report grants until promotion. Do not synthesize a backend session.
+   chat/report grants until promotion. The production UI role has no direct model,
+   tool or AgentCore invocation permission. Do not synthesize a backend session.
 7. Have the customer access administrator review/apply the investigator grant
    below, using the exact complete candidate bundle. Sign into the loopback UI
    with native OIDC/MFA and obtain the private canary ticket as below. Run the
-   explicitly paid staging canary, review its receipt, and promote through the
+   explicitly paid staging canary using a separately scoped operator IAM principal
+   permitted to invoke the exact candidate chat version (the issuer role cannot),
+   review its receipt, and promote through the
    unchanged retirement/change-set gates. Delete the private ticket afterward.
 8. After promotion, assume the routing output `UiRoleArn` instead of the limited
    issuer role, copy the verified `RuntimeConnection` and run `verify-routing`.
@@ -154,8 +166,8 @@ it invalidates the actor's old-release sessions. Coordinate cutover in a custome
 maintenance window. Rollback similarly requires reviewed rebinding and a fresh
 OIDC session, plus retirement of obsolete caller permissions/endpoints. Restoring
 a database backup can restore revoked grants/epochs: isolate restored storage and
-reconcile current access decisions before reconnecting it. P5.03/P5.06 must still
-qualify restore/deletion and full credential-rotation procedures.
+reconcile current access decisions before reconnecting it. Local restore/deletion and rotation controls are documented in
+[security operations](SECURITY_OPERATIONS.md); actual rehearsals remain pending.
 
 ## Private staging canary ticket
 
@@ -174,8 +186,9 @@ rm .local/customer/private/canary.ticket
 ```
 
 Remove the export setting after staging. The limited issuer role creates the
-session; the existing paid canary exercises the investigation Lambda's actual
-role and optional AgentCore host. No notification is sent by that chat canary.
+session; the paid canary invokes the dedicated chat Lambda's actual
+role and optional separate AgentCore chat host. Its operator principal needs exact
+qualified candidate InvokeFunction permission, not direct model/tool permissions. No notification is sent by that chat canary.
 
 ## Live acceptance still NOT_RUN
 
@@ -196,5 +209,7 @@ credentials or raw claims. Exercise:
   backup restoration, access logging and customer security-owner review.
 
 Synthetic tests cannot satisfy these gates. No real IdP or origin exists yet;
-distributed budgets, evidence redaction and retained audit collection remain
-P5.02/P5.03 work. No findings or Phase 5 task is closed by this guide.
+distributed budgets, redaction, retained audit and structured diagnosis now have
+local evidence, but no real provider/AWS/model/inbox qualification. All six tasks
+remain VERIFYING and G5 NOT_RUN. Follow the full pending matrix in
+[local completion](LOCAL_COMPLETION.md). No findings are closed by this guide.

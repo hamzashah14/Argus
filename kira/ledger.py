@@ -13,6 +13,7 @@ from boto3.dynamodb.types import TypeSerializer
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
+from kira import safety
 from kira.transport import dumps
 
 SERIALIZE = TypeSerializer()
@@ -50,6 +51,7 @@ class Ledger:
         return self.table.get_item(Key={"PK": pk, "SK": sk}, ConsistentRead=True).get("Item")
 
     def accept(self, event, retention_days):
+        event.update(safety.bounded(event))
         eid, iid = event["event_id"], event["incident_id"]
         expires = int(time.time()) + retention_days * 86400
         previous, alarm_pk, recovery = None, None, None
@@ -941,6 +943,7 @@ class Ledger:
         now = int(time.time())
         if (
             not incident
+            or incident.get("status") in {"DELETING", "DELETED"}
             or not row
             or min(incident.get("ttl", 0), row.get("ttl", 0)) <= now
             or row["status"] not in {"FAILED", "AMBIGUOUS"}
@@ -970,6 +973,15 @@ class Ledger:
         due = datetime.fromtimestamp(now, timezone.utc).isoformat().replace("+00:00", "Z")
         self.client.transact_write_items(
             TransactItems=[
+                {
+                    "ConditionCheck": {
+                        "TableName": self.name,
+                        "Key": item({"PK": pk, "SK": "META"}),
+                        "ConditionExpression": "attribute_exists(PK) AND #s<>:deleting AND #s<>:deleted",
+                        "ExpressionAttributeNames": {"#s": "status"},
+                        "ExpressionAttributeValues": item({":deleting": "DELETING", ":deleted": "DELETED"}),
+                    }
+                },
                 {
                     "Update": {
                         "TableName": self.name,

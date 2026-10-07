@@ -13,6 +13,7 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from kira import cursor
+from kira.metrics import catalog
 from kira.time import parse_utc
 from kira.transport import bounded_envelope, error_result, fits, parameters
 
@@ -153,6 +154,16 @@ def discover_log_groups(client, instance_id, continuation=None, event=None):
         "complete": not bool(token),
         "truncated": False,
     }
+    hints = [
+        {"metric_id": m["id"], "metric_name": m["metric_name"]}
+        for m in catalog()
+        if m["instance_id"] == instance_id
+    ]
+    result["metric_catalog_complete"] = len(json.dumps(hints).encode()) <= 4000
+    result["metric_catalog"] = hints if result["metric_catalog_complete"] else []
+    if not fits(event or {}, result):
+        result["metric_catalog"] = []
+        result["metric_catalog_complete"] = False
     if token:
         result["next_token"] = cursor.encode(token, bound_scope)
     if not names and not token:

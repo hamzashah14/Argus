@@ -77,6 +77,8 @@ def fits(event, result, limit=MAX_ENVELOPE_BYTES):
 
 
 def bounded_envelope(event, result, status=200, limit=MAX_ENVELOPE_BYTES):
+    from kira.safety import bounded
+
     result = copy.deepcopy(result)
     while not fits(event, result, limit):
         # Keep evidence closest to the incident. Never silently trim discovery
@@ -96,4 +98,7 @@ def bounded_envelope(event, result, status=200, limit=MAX_ENVELOPE_BYTES):
         result["truncated"] = True
         result["complete"] = False
         result["status"] = "partial"
+    result = bounded(result)
+    if not fits(event, result, limit):
+        return bounded_envelope(event, result, status, limit)
     return envelope(event, result, status)

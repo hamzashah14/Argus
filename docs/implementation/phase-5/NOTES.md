@@ -1,5 +1,12 @@
 # Phase 5 checkpoint
 
+**Current: P5.01–P5.06 local implementation complete, VERIFYING; G5 NOT_RUN.**
+The user requested local completion and explicitly deferred live verification.
+See [completion record](LOCAL_COMPLETION.md), [security operations](SECURITY_OPERATIONS.md),
+[evaluations](EVALUATIONS.md) and [validation](../evidence/phase-5/local-completion-validation.json).
+Everything below is the historical sequence of earlier partial checkpoints.
+
+
 Started 7 October 2026 by user direction. P5.01 IN_PROGRESS; P5.02–P5.06
 NOT_STARTED; G5 NOT_RUN. Earlier live gates remain pending.
 

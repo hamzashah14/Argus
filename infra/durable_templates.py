@@ -95,6 +95,10 @@ def foundation(spec, config):
         },
         retain=True,
     )
+    if "identity" in config:
+        from infra.evidence_audit import add
+
+        add(t, spec, config, report_bucket(spec))
     r["EvidencePolicy"] = resource(
         "S3::BucketPolicy",
         {
@@ -113,6 +117,25 @@ def foundation(spec, config):
             },
         },
     )
+    if "identity" in config:
+        r["EvidencePolicy"]["Properties"]["PolicyDocument"]["Statement"] += [
+            {
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": "s3:PutObject",
+                "Resource": {"Fn::Sub": "${Evidence.Arn}/incidents/*"},
+                "Condition": {"StringNotEquals": {"s3:x-amz-server-side-encryption": "aws:kms"}},
+            },
+            {
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": "s3:PutObject",
+                "Resource": {"Fn::Sub": "${Evidence.Arn}/incidents/*"},
+                "Condition": {
+                    "StringNotEquals": {"s3:x-amz-server-side-encryption-aws-kms-key-id": att("EvidenceKey")}
+                },
+            },
+        ]
     r["Incidents"] = resource(
         "DynamoDB::Table",
         {
@@ -139,6 +162,7 @@ def foundation(spec, config):
             ],
             "StreamSpecification": {"StreamViewType": "KEYS_ONLY"},
             "PointInTimeRecoverySpecification": {"PointInTimeRecoveryEnabled": True},
+            "DeletionProtectionEnabled": True,
             "SSESpecification": {"SSEEnabled": True, "SSEType": "KMS", "KMSMasterKeyId": att("EvidenceKey")},
             "TimeToLiveSpecification": {"AttributeName": "ttl", "Enabled": True},
             "Tags": tagged(spec),
@@ -532,6 +556,8 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
     t["Resources"]["Initial"]["Properties"]["ReservedConcurrentExecutions"] = config[
         "initial_reserved_concurrency"
     ]
+    if "identity" in config:
+        t["Resources"]["Investigate"]["Properties"]["ReservedConcurrentExecutions"] = 2
     t["Resources"]["ReconcileFailure"] = resource(
         "Lambda::EventInvokeConfig",
         {
@@ -567,9 +593,20 @@ def active_routing(
         r["UiRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"] = caller_permissions(
             spec, config, owned_bindings
         ) + identity_permissions(spec, config, owned_bindings, issuer=True)
+        if "identity" in config:
+            from infra import chat
+
+            r["UiRole"]["Properties"]["Policies"][0]["PolicyDocument"]["Statement"] = [
+                statement("lambda:InvokeFunction", chat.version(spec, owned_bindings)),
+                *identity_permissions(spec, config, owned_bindings, issuer=True),
+            ]
         del t["Outputs"]["AgentConnection"]
         t["Outputs"]["RuntimeConnection"] = {
-            "Value": json.dumps(caller_environment(spec, config, owned_bindings))
+            "Value": json.dumps(
+                chat.ui_environment(spec, config, owned_bindings)
+                if "identity" in config
+                else caller_environment(spec, config, owned_bindings)
+            )
         }
     r["Ec2Down"]["Properties"]["Targets"][0].update(
         {
@@ -581,7 +618,10 @@ def active_routing(
         statement(
             "dynamodb:GetItem",
             foundation_outputs["TableArn"],
-            Condition={"ForAllValues:StringLike": {"dynamodb:LeadingKeys": ["INCIDENT#*"]}},
+            Condition={
+                "ForAllValues:StringLike": {"dynamodb:LeadingKeys": ["INCIDENT#*"]},
+                "Null": {"dynamodb:LeadingKeys": "false"},
+            },
         ),
         statement("s3:GetObjectVersion", f"arn:aws:s3:::{foundation_outputs['EvidenceBucket']}/incidents/*"),
         statement("kms:Decrypt", foundation_outputs["EvidenceKeyArn"]),

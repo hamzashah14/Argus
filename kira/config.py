@@ -236,6 +236,7 @@ class AppConfig:
     runtime_release: str = ""
     agentcore_arn: str = ""
     agentcore_endpoint: str = ""
+    chat_arn: str = ""
 
     @classmethod
     def from_env(cls):
@@ -255,6 +256,7 @@ class AppConfig:
             os.getenv("RUNTIME_RELEASE", ""),
             os.getenv("AGENTCORE_RUNTIME_ARN", ""),
             os.getenv("AGENTCORE_ENDPOINT", ""),
+            os.getenv("CHAT_FUNCTION_ARN", ""),
         )
 
     def problems(self):
@@ -291,7 +293,13 @@ class AppConfig:
                 ids = self.allowed_ids.split(",")
                 if not ids or len(ids) > 100 or any(not INSTANCE.fullmatch(i) for i in ids):
                     raise ValueError("Invalid inventory")
-                if self.runtime_target == "standalone":
+                if self.environment in {"staging", "production"}:
+                    if not re.fullmatch(
+                        rf"arn:aws:lambda:{re.escape(os.getenv('MONITOR_REGION', self.region))}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",
+                        self.chat_arn,
+                    ):
+                        raise ValueError("Invalid dedicated chat version")
+                elif self.runtime_target == "standalone":
                     for arn in (self.logs_arn, self.metrics_arn):
                         if not re.fullmatch(
                             rf"arn:aws:lambda:{re.escape(self.region)}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",

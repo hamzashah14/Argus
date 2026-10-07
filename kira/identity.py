@@ -48,9 +48,42 @@ def audit(actor, action, outcome, instance=None):
 
 
 class Sessions:
-    def __init__(self, *, table=None, clock=time.time):
+    def __init__(self, *, table=None, clock=time.time, quotas=None):
         self.clock = clock
         self._table = table
+        self._quotas = quotas
+
+    def quotas(self):
+        if self._quotas is None:
+            from kira.quotas import Quotas
+
+            self._quotas = Quotas(self.table(), clock=self.clock)
+        return self._quotas
+
+    def record(self, actor, action, outcome, instance=None):
+        from kira.work_policy import configured
+
+        now = int(self.clock())
+        # The table is encrypted and TTL governed; no prompts/claims/tickets.
+        event = {
+            "component": "access",
+            "actor": actor,
+            "action": action,
+            "outcome": outcome,
+            "binding": self.policy()["binding"],
+            "classification": "access-metadata",
+            "ttl": now + configured()["audit_days"] * 86400,
+        }
+        if instance:
+            event["instance_id"] = instance
+        self.table().put_item(
+            Item={
+                "PK": "AUDIT#" + time.strftime("%Y-%m-%d", time.gmtime(now)),
+                "SK": f"{now}#{secrets.token_hex(16)}",
+                **event,
+            }
+        )
+        audit(actor, action, outcome, instance)
 
     def policy(self):
         try:
@@ -208,6 +241,7 @@ class Sessions:
                 raise ValueError()
             actor = actor_id(issuer, subject)
             grant = self.grant(policy, actor)
+            self.quotas().admit(actor, "login")
             expiry = min(claims["exp"], claims["auth_time"] + ABSOLUTE_SECONDS)
             value = {"v": 1, "sid": secrets.token_hex(16), "actor": actor, "binding": policy["binding"]}
             ticket = self.sign(value)  # Validate secret before creating state.
@@ -224,9 +258,16 @@ class Sessions:
                 ConditionExpression="attribute_not_exists(PK)",
             )
         except Exception:
-            audit(actor, "login", "DENIED")
+            try:
+                self.record(actor, "login", "DENIED")
+            except Exception:
+                audit(actor, "login", "DENIED")
             raise AccessDenied() from None
-        audit(actor, "login", "ALLOWED")
+        try:
+            self.record(actor, "login", "ALLOWED")
+        except Exception:
+            # Issued-but-unreturned references expire; fail closed on audit outage.
+            raise AccessDenied() from None
         return ticket
 
     def authorize(self, ticket, action, instance=None, *, touch=True):
@@ -270,10 +311,16 @@ class Sessions:
                     },
                 )
         except Exception:
-            audit(actor, action if action in {"session", "chat", "report"} else "invalid", "DENIED")
+            try:
+                self.record(actor, action if action in {"session", "chat", "report"} else "invalid", "DENIED")
+            except Exception:
+                audit(actor, "access", "DENIED")
             raise AccessDenied() from None
         if action != "session":
-            audit(actor, action, "ALLOWED", instance)
+            try:
+                self.record(actor, action, "ALLOWED", instance)
+            except Exception:
+                raise AccessDenied() from None
         return {"actor": actor, "role": grant["role"], "instance_ids": set(grant["instance_ids"])}
 
     def revoke(self, ticket):
@@ -284,7 +331,10 @@ class Sessions:
         except Exception:
             audit(value["actor"], "logout", "DENIED")
             raise AccessDenied() from None
-        audit(value["actor"], "logout", "ALLOWED")
+        try:
+            self.record(value["actor"], "logout", "ALLOWED")
+        except Exception:
+            raise AccessDenied() from None
 
     def save_staging_ticket(self, ticket, filename, server_address):
         """Explicit local operator export; never a browser download or login bypass."""

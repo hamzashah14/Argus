@@ -31,6 +31,7 @@ jobs:
           python scripts/validate_durable.py
           python scripts/validate_observations.py
           python scripts/validate_identity.py
+          python scripts/evaluate_phase5.py --output .build/phase5-evaluation.json
       - name: Unit, contract and UI regression tests (no AWS access)
         run: python -m pytest --junitxml=.build/tests.xml
       - name: Secret candidate scan
@@ -65,6 +66,7 @@ jobs:
           name: implementation-validation
           path: |
             .build/tests.xml
+            .build/phase5-evaluation.json
             .build/dependency-audit.json
             .build/build-validation.json
             .build/pipeline-build-validation.json

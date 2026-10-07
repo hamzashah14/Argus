@@ -8,7 +8,8 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
-from kira import identity
+from kira import identity, safety
+from kira.runtime import RuntimeStop
 from kira.transport import clip_utf8, error_result
 
 MAX_PROMPT_CHARS = 4000
@@ -27,6 +28,9 @@ class ChatResult:
     code: str = ""
     message: str = ""
     reference: str = ""
+
+    def __post_init__(self):
+        object.__setattr__(self, "text", safety.text(self.text))
 
 
 def failure(code, message, partial=""):
@@ -78,7 +82,11 @@ def invoke(
             }
             if identity.required():
                 payload["access_ticket"] = access_ticket
-            if settings.runtime_target == "standalone":
+            if identity.required():
+                from kira.chat_gateway import invoke as invoke_gateway
+
+                result = invoke_gateway(payload)
+            elif settings.runtime_target == "standalone":
                 result = execution.execute(payload)
             else:
                 result = agentcore.invoke(
@@ -92,7 +100,20 @@ def invoke(
                 )
             text = clip_utf8(result["text"], MAX_OUTPUT_BYTES)
             if result["complete"]:
+                if len(result["text"].encode()) > MAX_OUTPUT_BYTES:
+                    return failure(
+                        "OUTPUT_LIMIT",
+                        "The validated report exceeds the display budget. Narrow the investigation.",
+                        text,
+                    )
                 return ChatResult(text, "ok")
+            if result.get("code") in {"USER_OR_SHARED_ALLOWANCE_EXHAUSTED", "ADMISSION_UNAVAILABLE"}:
+                return failure(
+                    "WORK_ALLOWANCE",
+                    "Your user or shared work allowance is unavailable. Wait for the next window or contact your operator.",
+                )
+            if result.get("code") == "ACCESS_DENIED":
+                return failure("ACCESS_DENIED", "Sign in again or ask your operator to review access.")
             return failure(
                 "INVESTIGATION_INCOMPLETE",
                 "Investigation stopped with incomplete evidence or an execution limit.",
@@ -105,7 +126,7 @@ def invoke(
             agentId=settings.agent_id,
             agentAliasId=settings.alias_id,
             sessionId=session_id,
-            inputText=prompt.strip(),
+            inputText=safety.text(prompt.strip()),
         )
         stream = response.get("completion")
         if stream is None:
@@ -153,6 +174,13 @@ def invoke(
                 "EMPTY_RESPONSE", "The agent returned no answer. You can retry in a new conversation."
             )
         return ChatResult(clip_utf8(text, MAX_OUTPUT_BYTES), "ok")
+    except RuntimeStop as exc:
+        if str(exc) in {"USER_OR_SHARED_ALLOWANCE_EXHAUSTED", "ADMISSION_UNAVAILABLE"}:
+            return failure(
+                "WORK_ALLOWANCE",
+                "Your user or shared work allowance is unavailable. Wait for the next window or contact your operator.",
+            )
+        return failure("INVESTIGATION_INCOMPLETE", "Investigation stopped at an execution limit.")
     except identity.AccessDenied:
         return failure("ACCESS_DENIED", "Sign in again or ask your operator to review access.")
     except (NoCredentialsError, PartialCredentialsError):
@@ -207,7 +235,7 @@ def append_exchange(messages, prompt, result):
     return (
         messages
         + [
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": safety.text(prompt)},
             {
                 "role": "assistant",
                 "content": result.text,

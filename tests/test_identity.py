@@ -23,9 +23,10 @@ class SessionTable:
         self.fail = False
 
     def put_item(self, Item, **kwargs):
-        if self.fail or Item["PK"] in self.rows:
+        key = Item["PK"] if Item["SK"] == "META" else Item["PK"] + "/" + Item["SK"]
+        if self.fail or key in self.rows:
             raise RuntimeError("storage rejected")
-        self.rows[Item["PK"]] = copy.deepcopy(Item)
+        self.rows[key] = copy.deepcopy(Item)
 
     def get_item(self, Key, **kwargs):
         if self.fail:
@@ -50,6 +51,11 @@ class SessionTable:
 
 @pytest.fixture
 def setup(monkeypatch, tmp_path):
+    from kira.work_policy import DEFAULT
+
+    monkeypatch.setenv("KIRA_WORK_POLICY", json.dumps(DEFAULT))
+    monkeypatch.setenv("EXECUTION_PURPOSE", "chat")
+    monkeypatch.setenv("KIRA_DIAGNOSTIC_POLICY", "diagnosis-v1")
     policy = {
         "version": 1,
         "binding": ["production", "123456789012", RELEASE],
@@ -77,7 +83,7 @@ def setup(monkeypatch, tmp_path):
         "instance_ids": [IID],
         "binding": policy["binding"],
     }
-    sessions = identity.Sessions(table=table, clock=lambda: now[0])
+    sessions = identity.Sessions(table=table, clock=lambda: now[0], quotas=Mock())
     claims = {
         "iss": ISSUER,
         "sub": "subject-1",

@@ -9,7 +9,7 @@
     "/fetch_cloudwatch_logs": {
       "get": {
         "summary": "Discover an instance's log groups, or search one for log lines and activity gaps",
-        "description": "Discover log groups using instance_id. Results are paginated: continue with next_token until complete=true, keeping the same instance. Never guess group names. Search a discovered log_group_name around time_string for logs and activity. Partial results explicitly state complete=false. A silent gap alone does not establish a cause; check traffic and telemetry freshness.",
+        "description": "Discover log groups using instance_id. Results are paginated: continue with next_token until complete=true, keeping the same instance. Never guess group names. Search a discovered log_group_name around time_string for logs and activity. Partial results explicitly state complete=false. A silent gap alone does not establish a cause; check traffic and telemetry freshness. Discovery includes scoped metric_catalog hints (metric_id/name). Use these IDs for exact configured Health metrics. If metric_catalog_complete=false, descriptor hints were omitted to fit the transport budget; declare incomplete coverage.",
         "operationId": "fetch_cloudwatch_logs",
         "parameters": [
           {
@@ -244,6 +244,28 @@
                         "required": [
                           "timestamp",
                           "message"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metric_catalog_complete": {
+                      "type": "boolean"
+                    },
+                    "metric_catalog": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "metric_id": {
+                            "type": "string"
+                          },
+                          "metric_name": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "metric_id",
+                          "metric_name"
                         ],
                         "additionalProperties": false
                       }

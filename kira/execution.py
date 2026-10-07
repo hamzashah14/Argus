@@ -46,6 +46,13 @@ def execute(payload, *, store=None, checkpoint=None):
         raise RuntimeStop("RELEASE_MISMATCH")
     policy = limits()
     mode = payload.get("mode")
+    purpose = os.getenv("EXECUTION_PURPOSE", "both")
+    if (
+        mode not in {"chat", "incident"}
+        or (purpose != "both" and purpose != mode)
+        or (identity.required() and purpose == "both")
+    ):
+        raise RuntimeStop("PURPOSE_MISMATCH")
     if mode == "incident":
         if set(payload) != {"version", "release", "mode", "incident_id", "owner", "fence", "deadline"}:
             raise RuntimeStop("INVALID_EXECUTION_REQUEST")
@@ -140,6 +147,24 @@ def execute(payload, *, store=None, checkpoint=None):
             if identity.required()
             else None
         )
+        admission = identity.Sessions() if access else None
+        if admission:
+            from kira.work_policy import configured
+
+            policy = Limits(**configured()["chat_limits"])
+        lease = None
+        if admission:
+            try:
+                lease = admission.quotas().admit(access["actor"], "chat")
+                admission.record(access["actor"], "chat_budget", "ALLOWED")
+            except Exception:
+                if lease:
+                    admission.quotas().release(lease)
+                try:
+                    admission.record(access["actor"], "chat_budget", "DENIED")
+                except Exception:
+                    identity.audit(access["actor"], "chat_budget", "DENIED")
+                raise
         budget = MemoryBudget(policy)
 
         def guard(instance=None):
@@ -153,22 +178,26 @@ def execute(payload, *, store=None, checkpoint=None):
             guard()
             return budget.reserve(delta)
 
-        result = run(
-            payload["prompt"],
-            model_id=required("BEDROCK_MODEL_ID"),
-            region=required("BEDROCK_REGION"),
-            tools=tools(
-                policy,
-                reserve,
-                allowed=access["instance_ids"] if access else None,
+        try:
+            result = run(
+                payload["prompt"],
+                model_id=required("BEDROCK_MODEL_ID"),
+                region=required("BEDROCK_REGION"),
+                tools=tools(
+                    policy,
+                    reserve,
+                    allowed=access["instance_ids"] if access else None,
+                    access_guard=guard if access else None,
+                ),
+                reserve=reserve,
+                limits=policy,
+                deadline=time.time() + 180,
+                history=history,
                 access_guard=guard if access else None,
-            ),
-            reserve=reserve,
-            limits=policy,
-            deadline=time.time() + 180,
-            history=history,
-            access_guard=guard if access else None,
-        )
+            )
+        finally:
+            if admission:
+                admission.quotas().release(lease)
     else:
         raise RuntimeStop("INVALID_EXECUTION_MODE")
     return {**result, "release": release}
@@ -184,3 +213,34 @@ def incident_request(claim, seconds):
         "fence": int(claim["fencing_token"]),
         "deadline": time.time() + seconds,
     }
+
+
+def safe_chat(executor, payload):
+    """Expected access/allowance denials cross adapters without private exceptions."""
+    try:
+        return executor(payload)
+    except (identity.AccessDenied, RuntimeStop) as exc:
+        code = "ACCESS_DENIED" if isinstance(exc, identity.AccessDenied) else str(exc)
+        allowed = {
+            "ACCESS_DENIED",
+            "USER_OR_SHARED_ALLOWANCE_EXHAUSTED",
+            "ADMISSION_UNAVAILABLE",
+            "RELEASE_MISMATCH",
+            "PURPOSE_MISMATCH",
+            "INVALID_EXECUTION_REQUEST",
+            "INVALID_HISTORY",
+            "INVALID_PROMPT",
+            "DEADLINE",
+        }
+        if code not in allowed:
+            code = "EXECUTION_STOPPED"
+        return {
+            "version": 1,
+            "release": required("RUNTIME_RELEASE"),
+            "complete": False,
+            "code": code,
+            "text": "No validated diagnosis; access or execution allowance could not be verified. Operator review required.",
+            "tools": [],
+            "evidence": [],
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+        }

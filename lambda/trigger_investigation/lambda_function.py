@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.config import Config
 
+from kira import safety
 from kira.metrics import alarm_metric_id
 from kira.time import iso_utc, parse_utc
 from kira.transport import SNS_MESSAGE_BYTES, clip_utf8, dumps, error_result
@@ -176,7 +177,7 @@ def publish_report(instance_id, time_str, reason, body, incident=None):
     boto3.client("sns", region_name=REGION, config=SNS_CONFIG).publish(
         TopicArn=REPORTS_TOPIC_ARN,
         Subject=subject,
-        Message=message,
+        Message=safety.text(clip_utf8(message, safety.LIMIT)),
     )
 
 

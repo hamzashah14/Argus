@@ -10,7 +10,7 @@ import queue
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from kira.execution import execute
+from kira.execution import execute, safe_chat
 
 SLOTS = threading.BoundedSemaphore(2)
 STATE_LOCK = threading.Lock()
@@ -25,7 +25,14 @@ def events(payload, executor=execute):
     def perform():
         global ACTIVE
         try:
-            mailbox.put({"event": "result", "result": executor(payload)})
+            mailbox.put(
+                {
+                    "event": "result",
+                    "result": safe_chat(executor, payload)
+                    if os.getenv("EXECUTION_PURPOSE") == "chat"
+                    else executor(payload),
+                }
+            )
         except Exception:
             mailbox.put({"event": "error", "code": "EXECUTION_FAILED"})
         finally:

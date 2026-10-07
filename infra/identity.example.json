@@ -18,5 +18,24 @@
   "identity": {
     "issuer": "https://identity.example.invalid",
     "audience": "customer-ui"
+  },
+  "security": {
+    "login_user": 10,
+    "login_global": 100,
+    "chat_user": 4,
+    "chat_global": 8,
+    "tokens_user": 96000,
+    "tokens_global": 192000,
+    "audit_days": 30,
+    "chat_limits": {
+      "tokens_reserved": 24000,
+      "model_steps": 6,
+      "tool_calls": 6,
+      "log_queries": 12,
+      "output_tokens": 1024,
+      "window_minutes": 15,
+      "context_bytes": 48000,
+      "tool_bytes": 20000
+    }
   }
 }

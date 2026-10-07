@@ -1,8 +1,8 @@
 # AIOps Assistant — Kira
 
-Implementation status: Phases 3–4 durable incidents, shared Python orchestration
-and detection/observability are implemented locally with standalone and AWS AgentCore
-execution options.
+Implementation status: Phases 3–5 durable incidents, shared Python orchestration,
+detection/observability and identity/evidence/diagnostic controls are implemented
+locally with standalone and optional AWS AgentCore execution.
 Hosted CI and AWS staging remain pending. See [implementation state](docs/implementation/STATE.md),
 [task tracker](IMPLEMENTATION_TRACKER.md) and [deployment guide](docs/implementation/phase-3/GUIDE.md) and [observation guide](docs/implementation/phase-4/GUIDE.md).
 This is not a qualified production release. Customers operate their own
@@ -11,7 +11,8 @@ packaging is planned later.
 
 Kira investigates EC2 incidents using customer-owned Bedrock models and CloudWatch
 logs/metrics. Customers select where the same Python orchestration runs:
-`standalone` (incident Lambda; web chat directly) or `agentcore` (their AWS Runtime).
+`standalone` (separate incident/chat Lambdas) or `agentcore` (separate customer
+incident/chat Runtimes, with the chat Lambda as a scoped gateway).
 
 - **Chat** — use Streamlit with customer OIDC in staging/production; development retains a local password flow.
 - **Automatic** — accepted alarms/events enter a durable incident ledger. Initial
@@ -25,11 +26,13 @@ flowchart LR
     Ingress --> Ledger[DynamoDB ledger / outbox]
     Ledger --> Initial[Independent initial alert]
     Ledger --> Work[Investigation queue / fenced worker]
-    UI[Customer web UI] --> Core[Shared Python orchestration]
-    Work --> Core
-    Core --> Target[Standalone or AgentCore]
-    Target --> Model[Bedrock Converse]
-    Target --> Tools[Pinned read-only tools]
+    UI[Customer OIDC web UI] --> Chat[Qualified chat Lambda / bounded allowances]
+    Chat --> ChatTarget[Standalone chat or dedicated AgentCore host]
+    Work --> Target[Standalone incident or dedicated AgentCore host]
+    ChatTarget --> Model[Bedrock Converse]
+    Target --> Model
+    ChatTarget --> Tools[Pinned read-only tools]
+    Target --> Tools
     Tools --> CW[Customer CloudWatch]
     Work --> Evidence[Private versioned evidence]
     Evidence --> Followup[Separate follow-up notification]
@@ -183,28 +186,27 @@ Exactly the 504 line should match. If your `log_format` adds or removes fields, 
 
 ## 6. Customer-operated chat UI
 
-Copy `.env.example` to the ignored `.env`. Set `APP_PASSWORD` (12–256 characters),
-`ENVIRONMENT`, `BEDROCK_REGION`, `BEDROCK_AGENT_ID`, and a versioned
-`BEDROCK_AGENT_ALIAS_ID`. Use your AWS profile/SSO session locally or a workload
-role when hosting it. The credential provider chain stays on the server running
-Streamlit; opening the web page does not connect to the browser user's AWS profile.
-The identity needs `bedrock:InvokeAgent` on the intended agent-alias ARN.
+For the current owned runtime, follow [customer identity setup](docs/implementation/phase-5/SETUP.md)
+and copy verified routing `RuntimeConnection` references into private local configuration.
+Production/staging require customer OIDC/MFA and scoped grants. The UI uses a scoped
+customer AWS role to invoke only the qualified dedicated chat Lambda and read
+in-scope reports. AWS credentials stay on the machine running the UI; browser users
+cannot supply workload permissions. The local development password path remains
+available, separately from production identity.
 
 ```bash
 .venv/bin/streamlit run app.py --server.address 127.0.0.1
 ```
 
-The setup screen works before an agent exists. Opening it creates no cloud resources.
-The connection shows “configured” until a request succeeds. Errors expose a short
-reference; partial responses remain visible. See the Phase 1 guide for session limits.
-Shared-password authentication and browser-local work limits are development controls.
-Phase 5 individual identity/session/backend access controls and optional
-deployment/secret/IAM wiring are implemented locally. Customer OIDC/origin
-qualification and distributed budgets remain in progress; see the
-[identity setup guide](docs/implementation/phase-5/SETUP.md).
-Staging/production now deny chat/report access unless identity is configured. Read
-the [identity checkpoint](docs/implementation/phase-5/IDENTITY.md) before upgrading.
-This slice is not ready for broad production access.
+Opening the setup screen creates no cloud resources. Local UI hosting is enough
+for a pilot; always-on workers belong to the customer's AWS account. Phase 5 local
+implementation now includes distributed allowances, isolated chat capacity,
+redaction, retained access audit, reviewed deletion, structured evidence validation
+and security operations. All six tasks are VERIFYING with live/customer acceptance
+pending. See [completion and limits](docs/implementation/phase-5/LOCAL_COMPLETION.md),
+[security runbooks](docs/implementation/phase-5/SECURITY_OPERATIONS.md) and
+[evaluation procedures](docs/implementation/phase-5/EVALUATIONS.md). This is not a
+qualified production release; synthetic examples cannot be deployed.
 
 ## 7. Test end to end
 

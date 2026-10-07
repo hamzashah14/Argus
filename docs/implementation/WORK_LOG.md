@@ -673,3 +673,108 @@ Append entries; retain previous outcomes when later work supersedes them.
   from clean committed source (source_dirty false, exact source SHA). The
   synthetic identity CLI denied pinning before cloud operations and created no
   success artifact. Documentation follow-up only; no runtime change or live gate.
+
+### 2026-10-07 — Phase 5 full local completion authorized; implementation in progress
+
+- User explicitly requested completion of P5.01–P5.06 locally; all live verification
+  remains pending. No Phase 6/cloud deployment is authorized by this work.
+- Added atomic distributed issuance/chat admission, separate chat Lambda/AgentCore
+  capacity, full upfront token charges, retained access metadata and end-to-end
+  redaction. Structured diagnoses reject invented references/unsupported causal
+  classifications and persist safe evidence rather than model drafts.
+- New immutable chat stages reuse the existing verified investigation ZIP. The UI
+  invokes only the qualified chat gateway; automatic incident IAM/budgets remain
+  separate. Narrow private encrypted data-access trail added to identity deployments.
+- In-flight code is not yet a validated checkpoint. Deletion/restore workflow,
+  evaluation fixtures, security operations and full regression/build/render evidence
+  still in progress. Initial targeted suite: 137 pass, two old expectations require
+  updates for retained audits/new chat binding. An initial command referenced a
+  nonexistent test file and ran no tests; corrected command used existing paths.
+
+## 2026-10-07 — P5.01–P5.06 complete locally; live verification deferred
+
+- User expressly requested every Phase 5 task locally with live verification
+  pending. Preserved P5.01 wiring and earlier Phases 1–4 corrective work; no Phase 6,
+  AWS deploy/model/notification, emulator or push. All six tasks now VERIFYING;
+  G5 NOT_RUN, 13/52 DONE unchanged, 20 original findings OPEN and R01–R08 VERIFYING.
+- Added immutable dedicated chat Lambda and separate optional AgentCore chat
+  Runtime/endpoint, distinct purpose and reserved capacity. UI IAM invokes only
+  the exact chat version; automatic workers/hosts reject interactive payloads.
+  Candidate verification checks real planned artifacts/env/roles/capacity and both
+  AgentCore targets but was exercised only with offline synthetic SDK responses.
+- Atomic low-level DynamoDB transactions charge user/shared hourly login/chat
+  counts and full request tokens before work; chat actor/shared slot leases recover
+  after expiry, no token refunds/ambiguous retries. Explicit typed SDK Stubber
+  verifies serialization; concurrent fake-store tests enforce global cap. Default
+  24k/6-step/6-tool chat allowance supports discovery plus four hang corroborations
+  and a final diagnosis; smaller initial budget failed that engineering review.
+- Retained pseudonymous application access audit fails closed on storage outage;
+  identity-enabled durable foundations add private encrypted finite-retention
+  CloudTrail data-access destination and narrow actual table/S3 selectors. Customer
+  receipt/digest/cost approval remains pending. Workload IAM excludes grant writes
+  and membership scans; transaction IAM uses underlying actions, per AWS docs.
+- Added bounded/deep/idempotent redaction before model/tool/checkpoint/report/
+  status/delivery and legacy text notification boundaries. Preserve pagination
+  continuations; reject excessive encoding/depth/size/nonfinite content. Structured
+  model drafts are not checkpoints. Review caught escaped-quoted credentials,
+  IPv6 and session/access token field cases; negative fixtures now cover them.
+- Reviewed terminal-incident all-version erasure checks quiescence/pending delivery,
+  exact row/event digests, account/bucket/version scope and an execution fence;
+  partial deletion retains DELETING denial, new review resumes. Deleted reports,
+  workers and replay deny. Minimal anti-replay tombstones last 35 days; live erasure
+  does not delete PITR/export/provider/inbox copies. Runbooks require a private
+  purge registry and isolated restore with new signing key/release and reconciled
+  grants; restored-old-grant denial is tested, actual restoration NOT_RUN.
+- Deterministic diagnosis enforces exact source/scalar/time citations and separate
+  facts/hypotheses/limitations/recommendations. Correlated hang needs complete
+  historical silence, fresh telemetry, request traffic and independent failed
+  health in the same service/window, with actual samples inside the gap. Missing,
+  dropped, delayed, contradictory, unrelated or fabricated evidence is qualified
+  or rejected; no confirmed root cause or automatic remediation.
+- Final contract review found AWS metrics use an array of dimensions, not the
+  earlier toy dictionary. Fixed validation and every fixture to actual tool schema,
+  added bounded instance-scoped discovery metric ID hints so configured Health
+  series are usable, and validated response instance/scope. Existing tool fake was
+  corrected to contain its authorized instance rather than weakening the guard.
+- Added 16 versioned reference/security cases, offline CI grading and explicit
+  opt-in repeated paid synthetic-model evaluator with global/per-case allowance,
+  no real tool/data calls and private validated report/source evidence. Offline
+  model=null; 90% generated-quality proposal/customer review and paid runs PENDING.
+- Added private access-review, exact stale primary/both fallback recipient plan/
+  apply, and erasure CLIs. Rotation/epoch/release restore and recipient simulations
+  pass; policy/cadence/classification/ownership/residual/rotation/restore runbooks
+  document actual required actions. No named customer owner or accepted risk was
+  invented; proposed register review due 2026-11-07. README/setup now use dedicated
+  chat rather than direct UI inference; limited issuer can issue a canary ticket
+  but separately scoped operator IAM invokes the candidate chat version.
+- Regression repairs preserve older behavior: trim oversized log lines before
+  bounded redaction; mutate the accepted event as existing recovery links expect;
+  copy identity fixture binding before simulated restore so it cannot alias the
+  grant; replay tests now check the new terminal-metadata transaction condition.
+- Validation commands: ruff check/format; shellcheck the five entry scripts;
+  validate_schemas (2); validate_infrastructure (12), validate_durable (20),
+  validate_observations (32), validate_identity (30); pip check; git diff --check;
+  pytest full suite with JUnit in ignored .build; targeted identity/runtime/controls;
+  evaluate_phase5 offline; four verify_*_build scripts; two inventory-bound infra
+  tool builds; four verify_durable_render modes covering both targets. A mistyped
+  validate_infra.py command was corrected to validate_infrastructure.py.
+- Results: **631 tests PASS in 88.85 seconds, 109 new Phase 5 controls**, targeted
+  suite 248 PASS, 94 templates, 13 independent ZIP pairs/isolated imports, both tool
+  inventories and eight reference releases PASS; 16 offline reference cases PASS.
+  Full pytest uses approved sandbox escalation only for local loopback socket
+  tests; restricted-sandbox socket EPERM is not an application defect. ARM64 host
+  package imports are pure Python checks, not native/live AgentCore boot.
+- Zero unreviewed secret candidates after exact review of two synthetic log-group
+  paths plus six deliberately dummy credential/key test strings: baseline 388
+  (previous 380), no broadened exclusion. Locks unchanged; retained prior same-day
+  advisory audit covers 100 locked environment packages, zero known vulnerabilities.
+  No new network advisory scan or hosted CI. Private .build logs/XML/build evidence
+  remain ignored; sanitized completion evidence and continuity/tracker updated.
+- Final local commit and clean-source release re-render are recorded below after
+  they complete. Live OIDC/AWS/IAM/quota/model/audit/deletion/restore/rotation/inbox,
+  customer ownership/classification/cost/quality approval and all prior live gates
+  remain NOT_RUN/PENDING. No production-readiness claim.
+
+- Final synthetic CLI guard: all eight rendered bundles rejected verify-candidate
+  before any mocked client construction. The check first assumed exit 2; actual
+  durable CLI contract is exit 1 on refusal, corrected and all eight PASS.

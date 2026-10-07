@@ -8,7 +8,7 @@ import time
 import boto3
 from botocore.config import Config
 
-from kira import identity
+from kira import identity, safety
 
 INCIDENT = re.compile(r"[0-9a-f]{32}\Z")
 READ_CONFIG = Config(connect_timeout=3, read_timeout=8, retries={"total_max_attempts": 2})
@@ -26,7 +26,11 @@ def load(incident_id, *, access_ticket=None):
     table = boto3.resource("dynamodb", region_name=region, config=READ_CONFIG).Table(table_name)
     pk = f"INCIDENT#{incident_id}"
     incident = table.get_item(Key={"PK": pk, "SK": "META"}, ConsistentRead=True).get("Item")
-    if incident is None or int(incident.get("ttl", 0)) <= time.time():
+    if (
+        incident is None
+        or incident.get("status") in {"DELETING", "DELETED"}
+        or int(incident.get("ttl", 0)) <= time.time()
+    ):
         return None
     if identity.required():
         identity.Sessions().authorize(access_ticket, "report", incident.get("instance_id"))
@@ -56,7 +60,14 @@ def load(incident_id, *, access_ticket=None):
             and evidence.get("key", "").startswith(f"incidents/{incident_id}/")
         ):
             response = boto3.client("s3", region_name=region, config=READ_CONFIG).get_object(
-                Bucket=evidence["bucket"], Key=evidence["key"], VersionId=evidence["version_id"]
+                Bucket=evidence["bucket"],
+                Key=evidence["key"],
+                VersionId=evidence["version_id"],
+                **(
+                    {"ExpectedBucketOwner": os.environ["EXPECTED_ACCOUNT_ID"]}
+                    if os.getenv("EXPECTED_ACCOUNT_ID")
+                    else {}
+                ),
             )
             stream = response["Body"]
             try:
@@ -67,6 +78,6 @@ def load(incident_id, *, access_ticket=None):
                 raise ValueError("Stored report exceeds the UI read limit")
             if hashlib.sha256(data).hexdigest() != evidence.get("sha256"):
                 raise ValueError("Stored report checksum differs from its evidence record")
-            result["report"] = data.decode("utf-8", errors="replace")
+            result["report"] = safety.text(data.decode("utf-8", errors="replace"))
             result["partial"] = not bool(incident.get("report_version"))
     return result

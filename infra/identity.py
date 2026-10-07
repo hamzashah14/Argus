@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 from infra.spec import name, prefix
 from infra.templates import att, resource, role, statement, tagged, template
 from infra.verify import VerificationError
+from kira.work_policy import DEFAULT
 
 
 def validate_config(value):
@@ -116,6 +117,11 @@ def environment(spec, config, bindings, release):
     secret = validate_bindings(spec, bindings)
     return {
         "KIRA_AUTH_MODE": "oidc",
+        "KIRA_WORK_POLICY": json.dumps(
+            config.get("security", DEFAULT),
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
         "MONITOR_REGION": spec["monitor_region"],
         "KIRA_SESSION_TABLE": table_name(spec),
         "KIRA_ACCESS_POLICY_JSON": json.dumps(
@@ -128,7 +134,7 @@ def environment(spec, config, bindings, release):
     }
 
 
-def permissions(spec, bindings, *, issuer=False):
+def permissions(spec, bindings, *, issuer=False, purpose=None):
     secret = validate_bindings(spec, bindings)
 
     def rows(actions, prefixes):
@@ -147,6 +153,18 @@ def permissions(spec, bindings, *, issuer=False):
             ["dynamodb:GetItem", "dynamodb:UpdateItem"]
             + (["dynamodb:PutItem", "dynamodb:DeleteItem"] if issuer else []),
             ["SESSION#*"],
+        ),
+        rows("dynamodb:PutItem", ["AUDIT#*"]),
+        *([rows("dynamodb:UpdateItem", ["QUOTA#login#*"])] if issuer else []),
+        *(
+            [
+                rows(
+                    ["dynamodb:UpdateItem", "dynamodb:PutItem", "dynamodb:DeleteItem"],
+                    ["QUOTA#chat#*", "SLOT#*"],
+                )
+            ]
+            if purpose == "chat"
+            else []
         ),
         statement(
             "secretsmanager:GetSecretValue",

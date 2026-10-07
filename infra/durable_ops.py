@@ -25,8 +25,11 @@ IMMUTABLE = {
     "durable-runtime",
     "owned-tools",
     "agentcore-runtime",
+    "agentcore-chat-runtime",
+    "agentcore-chat-endpoint",
     "agentcore-endpoint",
     "observation-runtime",
+    "chat-runtime",
 }
 STAGES = {
     "foundation-tools",
@@ -42,6 +45,8 @@ TOOLS_REGION = {
     "foundation-tools",
     "owned-tools",
     "agentcore-runtime",
+    "agentcore-chat-runtime",
+    "agentcore-chat-endpoint",
     "agentcore-endpoint",
     "identity-secret",
 }
@@ -117,10 +122,12 @@ def collect(bundle, stage, factory=clients):
         }
     elif stage == "owned-tools":
         required = {"LogsVersionArn", "MetricsVersionArn"}
-    elif stage == "agentcore-runtime":
+    elif stage in {"agentcore-runtime", "agentcore-chat-runtime"}:
         required = {"RuntimeArn", "RuntimeId", "RuntimeVersion"}
-    elif stage == "agentcore-endpoint":
+    elif stage in {"agentcore-endpoint", "agentcore-chat-endpoint"}:
         required = {"RuntimeArn", "EndpointArn", "EndpointName", "RuntimeVersion"}
+    elif stage == "chat-runtime":
+        required = {"ChatVersionArn"}
     elif stage == "observation-runtime":
         required = {k + "VersionArn" for k in ("Observer", "Canary", "Receipt")}
     else:
@@ -196,8 +203,13 @@ def change_set(bundle, directory, stage):
     region = stage_region(spec, stage)
     assert_account(clients("sts", region), spec)
     if stage == "durable-runtime":
-        assert_concurrency(clients("lambda", region), bundle["config"]["initial_reserved_concurrency"])
+        assert_concurrency(
+            clients("lambda", region),
+            bundle["config"]["initial_reserved_concurrency"] + (2 if "identity" in bundle["config"] else 0),
+        )
         verify_capture(bundle)
+    if stage == "chat-runtime":
+        assert_concurrency(clients("lambda", region), 1)
     cfn = clients("cloudformation", region)
     stack = bundle["stages"][stage]["stack"]
     kind = "CREATE"

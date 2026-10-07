@@ -1,6 +1,6 @@
 # Individual identity and deployment wiring
 
-P5.01 remains IN_PROGRESS pending real IdP/MFA/origin/IAM qualification. Optional
+P5.01 is VERIFYING: local implementation complete, real IdP/MFA/origin/IAM qualification pending. Optional
 identity-enabled releases now provision a separate encrypted session table,
 generated signing secret and scoped issuer/UI/runtime roles. Both standalone and
 AgentCore propagate the deployment environment and identity settings. Releases
@@ -72,7 +72,7 @@ Configure identity using the optional `identity` block in the durable JSON; see
   The identity foundation creates it with AWS-managed KMS encryption, PITR,
   deletion protection and retained deletion policy. It has no stream or indexes;
   never point identity at the incident stream table. TTL is expiry cleanup,
-  not a grant-retention or backup-deletion policy (P5.03 remains pending).
+  not a grant-retention or backup-deletion policy; see [security operations](SECURITY_OPERATIONS.md).
 - Operator-managed grant row: PK=`IDENTITY#<actor>`, SK=`META`, `binding` as above,
   `enabled` boolean, `epoch` positive integer, `role` viewer/investigator and
   `instance_ids` a unique nonempty subset of `ALLOWED_INSTANCE_IDS` (maximum 100).
@@ -120,9 +120,19 @@ unauthorized report reads and browser-state bypass. It does not validate a real
 OIDC signature/callback, MFA enrollment, IAM permissions, encrypted table, TLS,
 load, eventual cloud delivery or a deployed origin boundary.
 
-P5.02 distributed login/chat budgets, automatic/chat capacity isolation and
-session-issuance abuse controls remain NOT_STARTED. P5.03 redaction and retained
-security-audit collection remain NOT_STARTED. Existing request MemoryBudget and
-browser limits are not per-user/distributed quotas. Native Streamlit may log
-upstream errors outside Kira's allowlisted audit events; secure log handling and
-real-data qualification remain pending. Do not enable broad access on this slice.
+P5.02 distributed budgets and separate chat capacity, P5.03 redaction/access audit,
+and P5.04–P5.06 diagnostic/evaluation/security operations are now implemented
+locally. Their actual deployed behavior and customer policy approvals remain
+pending. Native Streamlit may log upstream errors outside Kira's allowlisted audit
+events; customer log handling and representative sensitive-data qualification
+remain required. Do not enable broad access before the recorded live gates pass.
+
+## Current Phase 5 completion
+
+Distributed login/chat allowances and retained pseudonymous access records share
+the dedicated encrypted identity table with separate leading-key IAM scopes.
+The UI invokes only the exact dedicated chat version; automatic and interactive
+workers/AgentCore hosts are separate. No workload can write identity grants or
+scan membership. See [local completion](LOCAL_COMPLETION.md) for current defaults,
+validation and pending gates; earlier descriptions above concern the identity
+contract, not the complete quota/audit policy.

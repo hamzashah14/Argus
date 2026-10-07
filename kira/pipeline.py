@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.config import Config
 
+from kira import safety
 from kira.incident import InvalidEvent, normalize_sns
 from kira.ledger import MAX_ATTEMPTS, Ledger
 from kira.telemetry import emit
@@ -19,7 +20,6 @@ from kira.transport import clip_utf8
 CLIENT_CONFIG = Config(connect_timeout=3, read_timeout=8, retries={"total_max_attempts": 1})
 REPORT_LIMIT = 64 * 1024
 STATUS_LINK = re.compile(r"https://[^\s#?]+\Z")
-TOKEN = re.compile(r"(?i)(password|api[_-]?key|authorization|secret)\s*[:=]\s*\S+")
 
 
 def env(name):
@@ -229,7 +229,7 @@ def reconcile(event=None, context=None):
 def redact(text):
     if not isinstance(text, str):
         return "No usable investigation response."
-    value = TOKEN.sub(lambda match: match.group(1) + "=[redacted]", text)
+    value = safety.text(text)
     return clip_utf8(value, REPORT_LIMIT, "\n[truncated]")
 
 
@@ -247,7 +247,10 @@ def work(event, context):
         current = store.get(pk)
         if current is None:
             raise RuntimeError("Accepted incident is unavailable")
-        if current.get("status") in {"COMPLETE", "DEGRADED"} or current.get("work_intent_sk") != sk:
+        if (
+            current.get("status") in {"COMPLETE", "DEGRADED", "DELETING", "DELETED"}
+            or current.get("work_intent_sk") != sk
+        ):
             return
         owner = str(uuid.uuid4())
         now = int(time.time())
@@ -303,7 +306,7 @@ def work(event, context):
                 "bucket": bucket,
                 "key": key,
                 "sha256": hashlib.sha256(data).hexdigest(),
-                "classification": "best-effort-redacted-investigation",
+                "classification": safety.VERSION,
             },
             version,
             status,
@@ -342,7 +345,7 @@ def checkpoint_writer(store, claim, s3=None):
                 "bucket": bucket,
                 "key": key,
                 "sha256": hashlib.sha256(data).hexdigest(),
-                "classification": "best-effort-redacted-investigation",
+                "classification": safety.VERSION,
             },
             version,
             int(time.time()),
@@ -448,6 +451,8 @@ def notify(event, context, kind):
         incident = store.get(pk)
         if incident is None:
             raise RuntimeError("Notification incident missing")
+        if incident.get("status") in {"DELETING", "DELETED"}:
+            return
         link = f"{base}?incident={iid}"
         notification_id = f"{iid}-{kind.lower()}"
         if kind == "INITIAL":

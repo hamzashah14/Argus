@@ -135,7 +135,12 @@ def tool_client():
                         "responseBody": {
                             "application/json": {
                                 "body": json.dumps(
-                                    {"status": "no_log_groups_found", "complete": True, "truncated": False}
+                                    {
+                                        "status": "no_log_groups_found",
+                                        "instance_id": IID,
+                                        "complete": True,
+                                        "truncated": False,
+                                    }
                                 )
                             }
                         },

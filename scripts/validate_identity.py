@@ -25,13 +25,21 @@ def main():
                 cfg = {**config, "runtime_target": target}
                 # Build legacy fixtures before adding the mandatory identity binding.
                 _, data, arts, versions = examples(
-                    current, {k: v for k, v in cfg.items() if k != "identity"}, include_bindings=True
+                    current,
+                    {k: v for k, v in cfg.items() if k not in {"identity", "security"}},
+                    include_bindings=True,
                 )
                 data["identity"] = {
                     "SigningSecretArn": f"arn:aws:secretsmanager:{current['bedrock_region']}:{current['account_id']}:secret:{prefix(current)}/session-signing-123abc",
                     "SigningSecretVersion": "a" * 32,
                 }
+                from infra.chat import fixture_bindings
+                from infra.chat import runtime as chat_runtime
+
+                fixture_bindings(current, data)
                 stages = {
+                    "durable-foundation": durable_templates.foundation(current, cfg),
+                    "chat-runtime": chat_runtime(current, cfg, data, arts["incident_investigate"]),
                     "identity-foundation": identity.foundation(current, data),
                     "identity-secret": identity.signing_secret(current),
                     "durable-runtime": durable_templates.runtime(
@@ -51,6 +59,12 @@ def main():
                 if target == "agentcore":
                     stages["agentcore-runtime"] = owned_runtime.agentcore_release(
                         current, cfg, data, arts["incident_ingress"]
+                    )
+                    stages["agentcore-chat-runtime"] = owned_runtime.agentcore_release(
+                        current, cfg, data, arts["incident_ingress"], purpose="chat"
+                    )
+                    stages["agentcore-chat-endpoint"] = owned_runtime.agentcore_endpoint(
+                        current, data["agentcore_chat_candidate"]["RuntimeId"], "1"
                     )
                 for stage, value in stages.items():
                     path = Path(tmp) / f"{mode}-{target}-{stage}.json"

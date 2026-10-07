@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "date": "2026-10-07",
+  "phase": 5,
+  "local_status": "COMPLETE",
+  "task_status": "VERIFYING",
+  "gate": "G5 NOT_RUN",
+  "branch": "codex/phase-5-identity-evidence",
+  "base_checkpoint": "b0efe8f",
+  "code_checkpoint": "PENDING_LOCAL_COMMIT",
+  "tasks": {
+    "P5.01": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    },
+    "P5.02": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    },
+    "P5.03": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    },
+    "P5.04": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    },
+    "P5.05": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    },
+    "P5.06": {
+      "local": "COMPLETE",
+      "live": "PENDING",
+      "owner": "Codex (engineering); customer operational owner pending"
+    }
+  },
+  "validation": {
+    "python": "3.12.14",
+    "pytest": {
+      "passed": 631,
+      "new_phase5_controls": 109,
+      "duration_seconds": 88.85,
+      "loopback_tests": "PASS outside restricted socket sandbox"
+    },
+    "targeted_identity_runtime_controls": 248,
+    "openapi_schemas": 2,
+    "cfn_templates": 94,
+    "cfn_groups": {
+      "prior": 12,
+      "owned": 20,
+      "observations": 32,
+      "identity": 30
+    },
+    "deterministic_zip_pairs": 13,
+    "isolated_package_imports": 13,
+    "arm64_host_import_limit": "Pure Python import check; native/live AgentCore boot NOT_RUN",
+    "inventory_bound_tool_builds": 2,
+    "synthetic_releases": {
+      "base": {
+        "standalone": 6,
+        "agentcore": 8
+      },
+      "identity": {
+        "standalone": 9,
+        "agentcore": 13
+      },
+      "observations": {
+        "standalone": 9,
+        "agentcore": 11
+      },
+      "identity_observations": {
+        "standalone": 12,
+        "agentcore": 16
+      }
+    },
+    "clean_source_rerender": "PENDING_LOCAL_COMMIT",
+    "synthetic_cloud_guard": "PASS: eight bundles rejected before AWS client creation",
+    "offline_evaluation": {
+      "cases": 16,
+      "status": "PASS",
+      "model": null,
+      "source": "reference answers and deterministic controls",
+      "suite": "phase5-v1",
+      "policy": "diagnosis-v1"
+    },
+    "ruff": "PASS",
+    "format": "PASS",
+    "shellcheck": "PASS",
+    "pip_check": "PASS",
+    "whitespace": "PASS",
+    "dependency_locks": "UNCHANGED",
+    "advisory_scan": {
+      "packages": 100,
+      "known_vulnerabilities": 0,
+      "record": "Same-day prior Phase 5 locked-environment audit retained; no new advisory network scan"
+    },
+    "secret_scan": {
+      "new_unreviewed_candidates": 0,
+      "reviewed_total": 388,
+      "new_exact_reviews": 8,
+      "review_types": "Two synthetic log-group paths and six explicitly dummy hostile-test credential patterns; no changed exclusions"
+    }
+  },
+  "controls": [
+    "Native OIDC/MFA and authoritative grant/session scope/expiry/epoch/release",
+    "Atomic user/global login/chat/token admission and bounded work",
+    "Dedicated chat Lambda and independent optional AgentCore chat host",
+    "Purpose isolation and UI qualified-version IAM only",
+    "Bounded redaction and rejected-draft checkpoint isolation",
+    "Retained attributed application audit and narrow CloudTrail data access",
+    "Authenticated scoped/checksummed report access and deletion denials",
+    "Reviewed all-version terminal incident erasure and backup exclusion procedures",
+    "Exact source/scalar/window diagnosis citations and conservative correlation gates",
+    "Schema-matching 16-case reference evaluations and explicitly opt-in paid runner",
+    "Access review, conditional grant offboarding, pinned key rotation/rollback tests and reviewed primary/fallback recipient retirement"
+  ],
+  "not_run": [
+    "Real AWS deployment or verification",
+    "Actual OIDC/MFA/browser origin/proxy qualification",
+    "IAM/resource-policy/SCP live denial matrix",
+    "Real DynamoDB contention/TTL/PITR and S3 lifecycle/delete/restore",
+    "Actual CloudTrail records/digests and access audit receipt",
+    "Live Bedrock inference or AgentCore boot/runtime qualification",
+    "Paid repeated model quality evaluation and human threshold acceptance",
+    "Actual provider/cookie/cursor/workload signing-secret rotation and rollback",
+    "Real SNS inbox/recipient retirement",
+    "Named customer owner/classification/budget/risk acceptance",
+    "Hosted CI",
+    "Floci/emulator validation"
+  ],
+  "external_effects": {
+    "project_aws_calls": 0,
+    "resources_created": 0,
+    "paid_inference_calls": 0,
+    "notifications_sent": 0,
+    "git_pushes": 0
+  },
+  "qualification": {
+    "tasks_done_total": "13/52 unchanged",
+    "original_findings": "20 OPEN",
+    "review_findings": "R01-R08 VERIFYING",
+    "production_ready": false,
+    "phase6_started": false,
+    "customer_risk_acceptance": "NONE"
+  },
+  "private_artifacts": "Ignored .build logs/builds/XML; no credentials, claims, private configuration or raw cloud responses in public evidence"
+}

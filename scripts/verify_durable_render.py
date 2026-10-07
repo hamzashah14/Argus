@@ -49,7 +49,10 @@ def main():
                 "SigningSecretArn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:{secret_name(spec)}-123abc",
                 "SigningSecretVersion": "a" * 32,
             }
-            count += 2
+            from infra.chat import fixture_bindings
+
+            fixture_bindings(spec, bindings)
+            count += 3 if target == "standalone" else 5
         bindings.update(
             {
                 "artifacts": {n: pin(pipeline, "monitor", n) for n in artifacts},

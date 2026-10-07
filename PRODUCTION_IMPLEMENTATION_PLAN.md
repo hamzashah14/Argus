@@ -254,7 +254,7 @@ batches A–C now have local implementation and regression evidence, with R01–
 VERIFYING pending live acceptance. R01 originally overstated full promotion scope;
 its actual gap was standalone verification and exact role binding. See the
 [corrective checkpoint](docs/implementation/review-phases-1-4/CORRECTIONS.md).
-Emulator integration remains proposed and deferred. Phase 5 was authorized on 7 October 2026; P5.01 is IN_PROGRESS. Prior live acceptance gates remain pending.
+Emulator integration remains proposed and deferred. Phase 5 was authorized on 7 October 2026; all six tasks are now locally complete and VERIFYING. Prior live acceptance gates remain pending.
 
 **P4.01 — Add availability and dependency probes.** Prerequisites: P0.02, P2.05, P3.04. Suggested owner: Engineering + Operations. Findings: F05.
 
@@ -301,7 +301,7 @@ Integrate the chosen SSO/OIDC or authenticated access gateway; enforce identity 
 
 Acceptance: Unauthenticated, expired, revoked, and unauthorized users cannot invoke tools or fetch reports; user identity appears in audit records.
 
-**P5.01 checkpoint (7 October 2026).** Individual session controls and optional deployment wiring are implemented locally: encrypted store/generated secret, pinned version IAM, scoped issuer/UI/runtime roles, reviewed grant changes, rollback key labels and a native staging-ticket canary path. 522 tests, 82 templates, 13 package pairs/imports and eight synthetic releases pass. P5.01 remains IN_PROGRESS pending actual customer IdP/MFA/origin/IAM qualification; P5.02–P5.06 NOT_STARTED. See [setup and pending gates](docs/implementation/phase-5/SETUP.md). No project AWS resources or paid invocations.
+**Phase 5 local completion (7 October 2026).** The user requested all local tasks and deferred live verification. P5.01–P5.06 are VERIFYING with local implementation complete: identity/IAM/key wiring; distributed allowances and separate chat capacity/AgentCore host; redaction, retained access audit and reviewed deletion; qualified structured diagnosis; versioned deterministic and optional paid evaluation tooling; access/rotation/offboarding/restore runbooks. **631 tests**, 94 templates, 13 deterministic package pairs/imports, eight synthetic release layouts and 16 reference evaluation cases pass. G5 NOT_RUN; customer provider/model/policy/owner decisions, actual AWS/IAM/retention/audit/rotation/inbox and repeated paid-model quality gates remain pending. No AWS resources or paid inference. See [completion](docs/implementation/phase-5/LOCAL_COMPLETION.md), [operations](docs/implementation/phase-5/SECURITY_OPERATIONS.md) and [evidence](docs/implementation/evidence/phase-5/local-completion-validation.json). No Phase 6 advancement or finding closure.
 
 **P5.02 — Enforce per-user access and work budgets.** Prerequisites: P5.01, P3.07. Suggested owner: Engineering. Findings: F07, F08.
 

@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from infra import owned_runtime, release
+from infra import chat, owned_runtime, release
 from infra.verify import VerificationError, coverage, verify_function
 from kira.runtime import sdk_client
 
@@ -75,6 +75,9 @@ def verify_candidate(bundle, factory):
     from infra.identity import verify_foundations
 
     verify_foundations(bundle, factory)
+    from infra.evidence_audit import verify as verify_audit
+
+    verify_audit(bundle, factory)
     planned = sealed(bundle, "owned-tools", factory)
     for logical, function in (("Logs", "fetch_logs"), ("Metrics", "fetch_metrics")):
         arn = bindings["tools"][logical + "VersionArn"]
@@ -92,72 +95,12 @@ def verify_candidate(bundle, factory):
             planned["Resources"][logical + "Role"]["Properties"],
         )
     if config["runtime_target"] == "agentcore":
-        remote = bindings["agentcore"]
-        planned = sealed(bundle, "agentcore-runtime", factory)
-        sealed(bundle, "agentcore-endpoint", factory)
-        verify_agentcore_logs(spec, remote, factory)
-        control = factory("bedrock-agentcore-control", spec["bedrock_region"])
-        runtime_id = remote["RuntimeArn"].split("/")[-1]
-        actual = control.get_agent_runtime(
-            agentRuntimeId=runtime_id, agentRuntimeVersion=remote["RuntimeVersion"]
-        )
-        expected = planned["Resources"]["Runtime"]["Properties"]
-        artifact = bindings["host_artifact"]
-        wanted_artifact = {
-            "codeConfiguration": {
-                "code": {
-                    "s3": {
-                        "bucket": artifact["bucket"],
-                        "prefix": artifact["key"],
-                        "versionId": artifact["version_id"],
-                    }
-                },
-                "runtime": "PYTHON_3_12",
-                "entryPoint": ["kira_agentcore.py"],
-            }
-        }
-        if (
-            actual.get("status") != "READY"
-            or actual.get("agentRuntimeArn") != remote["RuntimeArn"]
-            or actual.get("agentRuntimeVersion") != remote["RuntimeVersion"]
-            or actual.get("agentRuntimeArtifact") != wanted_artifact
-            or actual.get("environmentVariables") != expected["EnvironmentVariables"]
-            or actual.get("networkConfiguration") != {"networkMode": "PUBLIC"}
-            or actual.get("protocolConfiguration") != "HTTP"
-            or actual.get("lifecycleConfiguration") != {"idleRuntimeSessionTimeout": 60, "maxLifetime": 600}
-            or actual.get("authorizerConfiguration")
-        ):
-            raise VerificationError("AgentCore runtime artifact/configuration/authentication drifted")
-        endpoint = control.get_agent_runtime_endpoint(
-            agentRuntimeId=runtime_id, endpointName=remote["EndpointName"]
-        )
-        if (
-            endpoint.get("status") != "READY"
-            or endpoint.get("liveVersion") != remote["RuntimeVersion"]
-            or endpoint.get("targetVersion") != remote["RuntimeVersion"]
-            or endpoint.get("agentRuntimeEndpointArn") != remote["EndpointArn"]
-        ):
-            raise VerificationError("AgentCore endpoint version drifted")
-        verify_role(
-            factory("iam", spec["bedrock_region"]),
-            actual["roleArn"],
-            planned["Resources"]["ExecutionRole"]["Properties"],
-        )
-        s3 = factory("s3", spec["bedrock_region"])
-        import hashlib
+        verify_remote(bundle, factory, "agentcore")
+        if "identity" in config:
+            verify_remote(bundle, factory, "agentcore_chat")
+    if "identity" in config:
+        verify_chat(bundle, factory)
 
-        body = s3.get_object(
-            Bucket=artifact["bucket"],
-            Key=artifact["key"],
-            VersionId=artifact["version_id"],
-            ExpectedBucketOwner=spec["account_id"],
-        )["Body"]
-        try:
-            data = body.read(40 * 1024 * 1024 + 1)
-        finally:
-            body.close()
-        if len(data) > 40 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != artifact["sha256"]:
-            raise VerificationError("AgentCore host artifact differs from its reviewed checksum")
     # Verify the six queue consumers, especially the actual caller's IAM role.
     from infra.durable_ops import verify_runtime
 
@@ -169,11 +112,112 @@ def verify_candidate(bundle, factory):
     }
 
 
+def verify_remote(bundle, factory, key):
+    spec, bindings = bundle["spec"], bundle["bindings"]
+    stage = "agentcore-chat" if key == "agentcore_chat" else "agentcore"
+    remote = bindings[key]
+    planned = sealed(bundle, stage + "-runtime", factory)
+    sealed(bundle, stage + "-endpoint", factory)
+    verify_agentcore_logs(spec, remote, factory)
+    control = factory("bedrock-agentcore-control", spec["bedrock_region"])
+    runtime_id = remote["RuntimeArn"].split("/")[-1]
+    actual = control.get_agent_runtime(
+        agentRuntimeId=runtime_id, agentRuntimeVersion=remote["RuntimeVersion"]
+    )
+    expected = planned["Resources"]["Runtime"]["Properties"]
+    artifact = bindings["host_artifact"]
+    wanted_artifact = {
+        "codeConfiguration": {
+            "code": {
+                "s3": {
+                    "bucket": artifact["bucket"],
+                    "prefix": artifact["key"],
+                    "versionId": artifact["version_id"],
+                }
+            },
+            "runtime": "PYTHON_3_12",
+            "entryPoint": ["kira_agentcore.py"],
+        }
+    }
+    if (
+        actual.get("status") != "READY"
+        or actual.get("agentRuntimeArn") != remote["RuntimeArn"]
+        or actual.get("agentRuntimeVersion") != remote["RuntimeVersion"]
+        or actual.get("agentRuntimeArtifact") != wanted_artifact
+        or actual.get("environmentVariables") != expected["EnvironmentVariables"]
+        or actual.get("networkConfiguration") != {"networkMode": "PUBLIC"}
+        or actual.get("protocolConfiguration") != "HTTP"
+        or actual.get("lifecycleConfiguration") != {"idleRuntimeSessionTimeout": 60, "maxLifetime": 600}
+        or actual.get("authorizerConfiguration")
+    ):
+        raise VerificationError("AgentCore runtime artifact/configuration/authentication drifted")
+    endpoint = control.get_agent_runtime_endpoint(
+        agentRuntimeId=runtime_id, endpointName=remote["EndpointName"]
+    )
+    if (
+        endpoint.get("status") != "READY"
+        or endpoint.get("liveVersion") != remote["RuntimeVersion"]
+        or endpoint.get("targetVersion") != remote["RuntimeVersion"]
+        or endpoint.get("agentRuntimeEndpointArn") != remote["EndpointArn"]
+    ):
+        raise VerificationError("AgentCore endpoint version drifted")
+    verify_role(
+        factory("iam", spec["bedrock_region"]),
+        actual["roleArn"],
+        planned["Resources"]["ExecutionRole"]["Properties"],
+    )
+    s3 = factory("s3", spec["bedrock_region"])
+    import hashlib
+
+    body = s3.get_object(
+        Bucket=artifact["bucket"],
+        Key=artifact["key"],
+        VersionId=artifact["version_id"],
+        ExpectedBucketOwner=spec["account_id"],
+    )["Body"]
+    try:
+        data = body.read(40 * 1024 * 1024 + 1)
+    finally:
+        body.close()
+    if len(data) > 40 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != artifact["sha256"]:
+        raise VerificationError("AgentCore host artifact differs from its reviewed checksum")
+
+
+def verify_chat(bundle, factory):
+    from infra.chat import version
+
+    spec, bindings = bundle["spec"], bundle["bindings"]
+    planned = sealed(bundle, "chat-runtime", factory)
+    from infra.durable_ops import collect
+
+    if collect(bundle, "chat-runtime", factory) != bindings["chat_version"]:
+        raise VerificationError("Dedicated chat version differs from its owned stack output")
+    arn = version(spec, bindings)
+    client = factory("lambda", spec["monitor_region"])
+    actual = client.get_function_configuration(FunctionName=arn)
+    result = verify_function(client, arn, bindings["artifacts"]["incident_investigate"])
+    props = planned["Resources"]["Chat"]["Properties"]
+    if (
+        result["configuration"] != props["Environment"]["Variables"]
+        or any(actual.get(k) != props[k] for k in ("Timeout", "MemorySize", "Architectures"))
+        or client.get_function_concurrency(FunctionName=arn.rsplit(":", 1)[0]).get(
+            "ReservedConcurrentExecutions"
+        )
+        != 1
+    ):
+        raise VerificationError("Dedicated chat configuration/capacity drifted")
+    verify_role(
+        factory("iam", spec["monitor_region"]), actual["Role"], planned["Resources"]["ChatRole"]["Properties"]
+    )
+
+
 def canary(bundle, factory, *, allow_model_invocation=False, client=None, access_ticket=None):
     if not allow_model_invocation or bundle["spec"]["environment"] != "staging":
         raise VerificationError("Canary requires explicit paid invocation authorization in staging")
     if not isinstance(access_ticket, str) or not 1 <= len(access_ticket) <= 1024:
         raise VerificationError("A private individual-session ticket is required for the staging chat canary")
+    if "identity" not in bundle.get("config", {}):
+        raise VerificationError("Canary requires an identity-enabled dedicated chat release")
     verify_candidate(bundle, factory)
     coverage(bundle["spec"], factory)
     release_hash = owned_runtime.fingerprint(bundle["spec"], bundle["config"], bundle["bindings"])
@@ -188,9 +232,15 @@ def canary(bundle, factory, *, allow_model_invocation=False, client=None, access
     }
     client = client or sdk_client("lambda", bundle["spec"]["monitor_region"], 210)
     response = client.invoke(
-        FunctionName=bundle["bindings"]["versions"]["InvestigateVersionArn"],
+        FunctionName=(
+            chat.version(bundle["spec"], bundle["bindings"])
+            if "identity" in bundle["config"]
+            else bundle["bindings"]["versions"]["InvestigateVersionArn"]
+        ),
         InvocationType="RequestResponse",
-        Payload=json.dumps({"runtime_canary": payload}).encode(),
+        Payload=json.dumps(
+            {"runtime_chat" if "identity" in bundle["config"] else "runtime_canary": payload}
+        ).encode(),
     )
     stream = response["Payload"]
     try:
@@ -206,6 +256,8 @@ def canary(bundle, factory, *, allow_model_invocation=False, client=None, access
         or set(result.get("tools", [])) != {"fetch_logs", "fetch_metrics"}
         or set(result.get("evidence", [])) != {"fetch_logs", "fetch_metrics"}
         or not result.get("text")
+        or result.get("diagnosis", {}).get("status") != "VALID"
+        or result.get("diagnosis", {}).get("policy") != "diagnosis-v1"
     ):
         raise VerificationError("Canary did not prove both successful tool contracts and model completion")
     return {

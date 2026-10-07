@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "date": "2026-10-07",
+  "engineering_owner": "Codex (local implementation and evidence)",
+  "customer_owners": "PENDING_ASSIGNMENT_BEFORE_DEPLOYMENT",
+  "risk_acceptance": "NONE",
+  "review_due": "2026-11-07",
+  "items": [
+    {"id": "P5-S01", "status": "LIVE_VERIFICATION_PENDING", "owner": "Codex; customer identity administrator required", "constraint": "Actual OIDC/MFA/origin/cookie/provider and IAM acceptance not exercised", "mitigation": "Fail-closed native identity and scoped role contracts; gate broad access"},
+    {"id": "P5-S02", "status": "CUSTOMER_APPROVAL_PENDING", "owner": "Codex; customer security/data owner required", "constraint": "Pattern redaction cannot recognize arbitrary proprietary secret/PII formats", "mitigation": "Bounded redaction and no raw public evidence; approve profile and representative private fixtures before real data"},
+    {"id": "P5-S03", "status": "LIVE_VERIFICATION_PENDING", "owner": "Codex; customer incident/budget owner required", "constraint": "Chat and automatic work still share regional provider quotas and model throughput", "mitigation": "Separate worker/host capacity, distributed chat allowance and bounded work; qualify provider capacity before activation"},
+    {"id": "P5-S04", "status": "LIVE_VERIFICATION_PENDING", "owner": "Codex; customer security/data owner required", "constraint": "Live erasure does not erase PITR/exports/provider/email copies; TTL/lifecycle is asynchronous", "mitigation": "Minimal anti-replay tombstones, private purge registry, isolated restore with new signing key/release and grant reconciliation"},
+    {"id": "P5-S05", "status": "CUSTOMER_APPROVAL_PENDING", "owner": "Codex; customer diagnostic reviewer required", "constraint": "Reference-answer tests do not establish generated diagnosis quality or eliminate prompt injection", "mitigation": "Exact citations/corroboration, no execution, rejected-draft isolation; repeated paid synthetic evaluation and human approval remain gated"},
+    {"id": "P5-S06", "status": "LIVE_VERIFICATION_PENDING", "owner": "Codex; customer security/access owner required", "constraint": "Actual key/provider/workload rotation, rollback and recipient removal unqualified", "mitigation": "Conditional epoch/release rebinding, retained version labels and exact reviewed subscription diffs; rehearse with independent operator"},
+    {"id": "P5-S07", "status": "LIVE_VERIFICATION_PENDING", "owner": "Codex; customer audit/budget owner required", "constraint": "Access trail configuration is not proof of delivery and data events incur customer costs", "mitigation": "Narrow selectors, retained encrypted audit destination, fail-closed application records; require receipt/digest and budget approval"}
+  ],
+  "original_findings": "20 OPEN; R01-R08 VERIFYING; no finding closure or production exception acceptance"
+}

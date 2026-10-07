@@ -30,6 +30,9 @@ def bindings(spec=SPEC, target="standalone"):
             SPEC["bedrock_region"], spec["bedrock_region"]
         ),
     }
+    from infra.chat import fixture_bindings
+
+    fixture_bindings(spec, data)
     return data
 
 
@@ -96,16 +99,23 @@ def test_workloads_cannot_write_identity_grants_or_scan_session_table():
             actions = [actions] if isinstance(actions, str) else actions
             assert "dynamodb:Scan" not in actions and "dynamodb:Query" not in actions
             if any(a in actions for a in ["dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:UpdateItem"]):
-                assert policy["Condition"]["ForAllValues:StringLike"]["dynamodb:LeadingKeys"] == ["SESSION#*"]
+                assert policy["Condition"]["ForAllValues:StringLike"]["dynamodb:LeadingKeys"] in (
+                    ["SESSION#*"],
+                    ["AUDIT#*"],
+                    ["QUOTA#login#*"],
+                )
             if policy["Action"] == "secretsmanager:GetSecretValue":
                 assert policy["Resource"] == SECRET["SigningSecretArn"]
                 assert policy["Condition"] == {
                     "StringEquals": {"secretsmanager:VersionId": SECRET["SigningSecretVersion"]}
                 }
         if not issuer:
-            assert "dynamodb:PutItem" not in json.dumps(policies) and "dynamodb:DeleteItem" not in json.dumps(
-                policies
-            )
+            assert "dynamodb:DeleteItem" not in json.dumps(policies)
+            assert [
+                p["Condition"]["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+                for p in policies
+                if p["Action"] == "dynamodb:PutItem"
+            ] == [["AUDIT#*"]]
 
 
 def test_identity_foundations_are_encrypted_retained_and_separate_from_incident_stream():

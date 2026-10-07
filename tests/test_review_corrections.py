@@ -588,9 +588,10 @@ def test_reviewed_notification_replay_only_writes_notification_intent_and_audit(
     plan = store.notification_replay_plan(IID, "INITIAL")
     assert store.replay_notification(plan, "synthetic-operator")["status"] == "NOTIFICATION_REPLAY_RECORDED"
     writes = client.transact_write_items.call_args.kwargs["TransactItems"]
-    assert writes[0]["Update"]["Key"]["SK"]["S"] == "NOTIFICATION#INITIAL"
-    assert writes[1]["Put"]["Item"]["SK"]["S"].startswith("INTENT#INITIAL#")
-    assert writes[2]["Put"]["Item"]["record_type"]["S"] == "notification_replay"
+    assert writes[0]["ConditionCheck"]["Key"]["SK"]["S"] == "META"
+    assert writes[1]["Update"]["Key"]["SK"]["S"] == "NOTIFICATION#INITIAL"
+    assert writes[2]["Put"]["Item"]["SK"]["S"].startswith("INTENT#INITIAL#")
+    assert writes[3]["Put"]["Item"]["record_type"]["S"] == "notification_replay"
     assert "model_calls" not in str(writes) and "INTENT#WORK" not in str(writes)
     notification["fencing_token"] += 1
     with pytest.raises(ValueError, match="changed"):

@@ -1,10 +1,13 @@
 # Resume here
 
-Updated: 2026-10-07. **Phase 5 authorized and IN_PROGRESS: P5.01
-identity/session/backend controls and optional deployment wiring implemented locally.**
-522 tests (63 new wiring tests), 82 templates, 13 deterministic package/import
-pairs and eight synthetic release bundles pass. Real IdP/MFA/origin/IAM qualification is pending;
-P5.02–P5.06 NOT_STARTED, G5 NOT_RUN. Read [Phase 5 checkpoint](phase-5/NOTES.md).
+Updated: 2026-10-07. **Phase 5 P5.01–P5.06 local implementation COMPLETE; all six tasks VERIFYING and G5 NOT_RUN.**
+The user requested local completion and explicitly deferred live verification.
+**631 tests (109 new controls), 94 templates, 13 deterministic package/import pairs,
+eight synthetic release layouts and 16 reference evaluation cases PASS.** No actual
+AWS, IdP, paid model, inbox, emulator or hosted-CI qualification; no Phase 6 work.
+Read [local completion](phase-5/LOCAL_COMPLETION.md),
+[security operations](phase-5/SECURITY_OPERATIONS.md), [evaluations](phase-5/EVALUATIONS.md)
+and [sanitized evidence](evidence/phase-5/local-completion-validation.json).
 
 Prior corrective batches A–C remain implemented locally; R01–R08 VERIFYING and
 all live gates/hosted CI pending. [Corrective checkpoint](review-phases-1-4/CORRECTIONS.md).
@@ -29,6 +32,24 @@ Floci remains proposed/deferred; no emulator image/container was created.
   The synthetic reference spec is not authorization or infrastructure.
 
 ## Current checkpoint and evidence
+
+- Current local-completion checkpoint on `codex/phase-5-identity-evidence` (code commit
+  recorded after final validation): dedicated chat Lambda/independent optional
+  AgentCore chat host, qualified UI IAM, atomic per-user/shared hourly allowances,
+  reserved tokens and concurrency leases; bounded redaction and retained audit;
+  scoped CloudTrail; reviewed versioned-evidence erasure with fenced tombstones;
+  source/time/scalar-cited structured diagnosis and health metric discovery hints;
+  16 schema-matching reference evaluations and opt-in paid runner; private access,
+  recipient, rotation/rollback and isolated restore procedures. Full suite **631**,
+  **94** templates, 13 build/import pairs and eight release layouts PASS. Secret
+  scan: zero unreviewed candidates, 388 exact reviewed entries (eight new synthetic
+  fixture patterns/paths, no changed exclusions). Locks unchanged; prior same-day
+  100-package advisory scan reports zero known vulnerabilities. Live acceptance,
+  customer policy/owners and provider-wide throughput/budget remain pending.
+  [Completion](phase-5/LOCAL_COMPLETION.md), [evidence](evidence/phase-5/local-completion-validation.json).
+
+The checkpoints below are historical partial slices; their old task statuses do
+not supersede the current local-completion record.
 
 - Current wiring code checkpoint `d7a9996` (parent `fc96a7a`) on `codex/phase-5-identity-evidence`:
   optional encrypted session table/generated secret, exact version IAM/retrieval,
@@ -103,20 +124,18 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Next authorized work
 
-The user clarified “I guess next phase is Phase 5” on 7 October after asking to
-continue. Continue within Phase 5: retain the P5.01 identity wiring checkpoint and
-its pending real IdP/origin acceptance; next implement P5.02 distributed login/chat
-budgets and automatic/chat capacity isolation using offline fixtures. Read [Phase 5 checkpoint](phase-5/NOTES.md). Prior local corrective
-batches A–C remain intact; all live G2/G3/G4 gates and hosted CI remain pending.
-Do not start Phase 6 or deploy AWS. Floci batch D is deferred, not installed.
-Docker Desktop start returned already running; no emulator/image/container was
-created. This is not a Floci validation result.
+Local Phase 5 work is complete. Retain P5.01–P5.06 as VERIFYING; do not mark
+production acceptance or the original findings closed. Live verification remains
+pending by explicit user instruction. Resume from the pending matrix in
+[LOCAL_COMPLETION](phase-5/LOCAL_COMPLETION.md) when the user authorizes it; do not
+start Phase 6 or deploy AWS without that direction. Floci remains deferred.
 
-Customer identity provider/domain/MFA policy and actual retention/security owners
-remain unresolved. Implement portable controls using customer-owned OIDC, with
-synthetic offline fixtures and fail-closed production behavior. Keep development
-password compatibility explicitly outside production. Record each implementation
-slice and remaining qualification rather than claiming the entire phase complete.
+Customer IdP/origin/MFA, actual inventory/regions/model, responsible security/access/
+incident/budget owners, classification/redaction/retention and quality threshold
+approval remain deployment inputs. No customer risk acceptance is inferred;
+[security register](phase-5/SECURITY_REGISTER.json) has proposed constraints and a
+review due date, not accepted exceptions. The prior concurrency quota gap and
+all earlier live gates remain unresolved. Private evidence stays ignored.
 
 ## Historical validation
 

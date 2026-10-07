@@ -288,7 +288,23 @@ for message in st.session_state.messages:
 
 now = time.monotonic()
 st.session_state.attempts = chat.recent_attempts(st.session_state.attempts, now)
-work_limit = len(st.session_state.attempts) >= chat.MAX_REQUESTS_PER_HOUR
+work_cap = chat.MAX_REQUESTS_PER_HOUR
+if identity.required():
+    from kira.work_policy import configured
+
+    try:
+        work = configured()
+        work_cap = work["chat_user"]
+    except Exception:
+        st.error("Work allowances are unavailable. Ask your operator to review the deployment.")
+        st.stop()
+    st.caption(
+        f"Your access: {access['role']} · {len(access['instance_ids'])} authorized instance(s) · up to {work_cap} investigations per UTC hour. Shared capacity limits also apply."
+    )
+    st.caption(
+        "Evidence is redacted. Diagnoses separate observations from hypotheses; review recommendations before taking action."
+    )
+work_limit = len(st.session_state.attempts) >= work_cap
 scope_limit = identity.required() and access["role"] != "investigator"
 if scope_limit:
     st.info("Your viewer role allows report access. Ask your operator for investigation access.")
