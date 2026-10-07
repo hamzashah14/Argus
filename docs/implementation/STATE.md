@@ -33,6 +33,15 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
+- User requested a local app run and SSO explanation. Development-password UI
+  is started on `http://127.0.0.1:8501`; generated password exists only in ignored
+  `.env` (0600). Restart via `.venv/bin/python .local/dev/start_ui.py`; inspect
+  ignored `.local/dev/streamlit.log`. No provider or runtime/cloud bindings were
+  fabricated: actual local login browser page and AppTest login/setup checks pass,
+  chat remains disabled. [Preview evidence](evidence/phase-5/local-ui-preview.json).
+  No SSO/AWS/Phase 6 qualification. Preserve the user's pre-existing untracked
+  logo image files; this task changed no application code.
+
 - Before Phase 6, the user requested a concise full project evolution/onboarding
   document. Completed [project overview](../PROJECT_EVOLUTION_AND_ONBOARDING.md):
   preserved original design, Phase 0–5 changes/corrective review, current automatic

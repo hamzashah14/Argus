@@ -813,3 +813,29 @@ Append entries; retain previous outcomes when later work supersedes them.
   evidence remains unchanged; no runtime changes justify rerunning the suite.
 - No Phase 6 implementation, AWS API/deploy, paid model, email, emulator or push.
   Live verification remains pending; user will direct the next phase afterward.
+
+## 2026-10-07 — User-requested local UI run and SSO explanation
+
+- User asked how SSO is built and requested running the application with local
+  environment configured. Read continuity/Phase 5 identity task and actual UI,
+  identity/configuration paths. Streamlit native OIDC/Authlib handles provider
+  login; Kira checks issuer/audience/recent MFA, authoritative grants and signed
+  sessions. No configured provider/project tables exist, so did not fabricate SSO.
+- Created new ignored .env (0600) with generated development-only password,
+  development/standalone, known region eu-central-1 and metadata lookup disabled;
+  real model/account/inventory/version/runtime/storage fields intentionally empty.
+  No existing environment/secret file overwritten, no user AWS credentials read
+  or copied. Password is never included in committed records or logs.
+- Added ignored private .local/dev/start_ui.py to load exact .env into the child
+  and launch installed Streamlit on 127.0.0.1:8501, headless and without file watcher.
+  Runtime Python 3.12.14/Streamlit 1.64.0 already installed; no new dependencies.
+  Restricted-sandbox socket binding raised EPERM; approved escalation started
+  only the requested loopback server. Launcher/log/directory remain private.
+- AppTest passed real development login and disconnected setup page; chat input
+  disabled and patched runtime invocation not called. Opened actual localhost UI
+  in the in-app browser, verified rendered password login screen and retained tab
+  as user-facing output. Server is intentionally left running for user testing.
+- Added sanitized local-ui-preview.json and continuity records. Local UI evidence
+  is not live AWS or real IdP qualification. No model, AWS resource, database,
+  notification, emulator, production credential or Phase 6 work. Preserve the
+  three pre-existing untracked logo PNG assets; no app/runtime source changed.
