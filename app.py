@@ -7,7 +7,7 @@ import uuid
 import streamlit as st
 from dotenv import load_dotenv
 
-from kira import chat
+from kira import chat, identity
 from kira import status as incident_status
 from kira.config import AppConfig
 
@@ -36,12 +36,27 @@ def clear_conversation():
 
 
 def sign_out():
+    ticket = st.session_state.get("access_ticket")
     st.session_state.authenticated = False
     st.session_state.pop("auth_at", None)
     clear_conversation()
+    if ticket:
+        try:
+            identity.Sessions().revoke(ticket)
+        except identity.AccessDenied:
+            # Preserve the reference so a later retry can revoke it. Do not
+            # silently discard it or claim global logout during a storage outage.
+            st.session_state.logout_failed = True
+            return
+    st.session_state.pop("access_ticket", None)
+    st.session_state.pop("logout_failed", None)
+    if identity.required() and st.user.get("is_logged_in", False):
+        st.logout()
 
 
 def authenticate():
+    if identity.required():
+        return
     password = st.session_state.get("workspace_password", "")
     accepted = hmac.compare_digest(password.encode(), settings.password.encode())
     st.session_state.authenticated = accepted
@@ -58,7 +73,8 @@ if "messages" not in st.session_state:
 if "attempts" not in st.session_state:
     st.session_state.attempts = []
 if (
-    st.session_state.get("authenticated")
+    not identity.required()
+    and st.session_state.get("authenticated")
     and time.monotonic() - st.session_state.get("auth_at", 0) > chat.SESSION_SECONDS
 ):
     sign_out()
@@ -91,7 +107,42 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-if len(settings.password) < 12:
+if identity.required():
+    # Native OIDC verifies state/nonce/signature. Never trust browser headers or
+    # session_state's authenticated flag as an individual identity.
+    st.session_state.authenticated = False
+    if st.get_option("server.trustedUserHeaders") or not st.get_option("server.enableXsrfProtection"):
+        clear_conversation()
+        st.error("SSO requires XSRF protection and disabled trusted-header identity overrides.")
+        st.stop()
+    if st.session_state.get("logout_failed", False):
+        st.error("Session revocation failed. Retry sign-out or ask the operator to revoke access.")
+        st.button("Retry sign-out", on_click=sign_out)
+        st.stop()
+    if not st.user.get("is_logged_in", False):
+        st.subheader("Sign in to your workspace")
+        st.caption("Use your organization's identity provider and multi-factor authentication.")
+        if st.button("Sign in with SSO", type="primary"):
+            try:
+                st.login()
+            except Exception:
+                st.error("SSO is not configured. Ask the deployment operator to check identity settings.")
+        st.stop()
+    try:
+        if "access_ticket" not in st.session_state:
+            st.session_state.access_ticket = identity.Sessions().issue(st.user.to_dict())
+        access = identity.Sessions().authorize(st.session_state.access_ticket, "session", touch=False)
+        if access["actor"] != identity.actor_id(st.user["iss"], st.user["sub"]):
+            raise identity.AccessDenied()
+        st.session_state.authenticated = True
+    except (identity.AccessDenied, KeyError, TypeError):
+        clear_conversation()
+        st.error("Access is expired, revoked, or unavailable. Sign out and contact the deployment operator.")
+        if st.button("Sign out from SSO"):
+            sign_out()
+        st.stop()
+
+if not identity.required() and len(settings.password) < 12:
     with st.container(border=True):
         st.subheader("Set up your workspace")
         st.info("Set APP_PASSWORD to at least 12 characters in your private .env file before signing in.")
@@ -122,7 +173,11 @@ if requested_incident:
     with st.container(border=True):
         st.subheader("Incident status")
         try:
-            snapshot = incident_status.load(requested_incident)
+            snapshot = (
+                incident_status.load(requested_incident, access_ticket=st.session_state.access_ticket)
+                if identity.required()
+                else incident_status.load(requested_incident)
+            )
             if snapshot is None:
                 st.info("This incident was not found or has passed its retention period.")
             else:
@@ -215,6 +270,9 @@ for message in st.session_state.messages:
 now = time.monotonic()
 st.session_state.attempts = chat.recent_attempts(st.session_state.attempts, now)
 work_limit = len(st.session_state.attempts) >= chat.MAX_REQUESTS_PER_HOUR
+scope_limit = identity.required() and access["role"] != "investigator"
+if scope_limit:
+    st.info("Your viewer role allows report access. Ask your operator for investigation access.")
 history_limit = len(st.session_state.messages) >= chat.MAX_HISTORY_MESSAGES
 if work_limit:
     st.info(
@@ -226,11 +284,11 @@ if history_limit:
     )
 retry = False
 if st.session_state.messages and st.session_state.messages[-1].get("status") in {"error", "partial"}:
-    retry = st.button("Retry in a new conversation", disabled=work_limit)
+    retry = st.button("Retry in a new conversation", disabled=work_limit or scope_limit)
 prompt = st.chat_input(
     "Describe the incident. Include an instance ID and timestamp…",
     max_chars=chat.MAX_PROMPT_CHARS,
-    disabled=work_limit or history_limit,
+    disabled=work_limit or history_limit or scope_limit,
 )
 if retry:
     prompt = st.session_state.last_prompt
@@ -239,7 +297,15 @@ if prompt and prompt.strip():
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
     with st.spinner("Reading evidence from your cloud…"):
-        if settings.runtime_target == "classic":
+        if identity.required():
+            result = chat.invoke(
+                prompt,
+                st.session_state.session_id,
+                settings,
+                history=st.session_state.messages,
+                access_ticket=st.session_state.access_ticket,
+            )
+        elif settings.runtime_target == "classic":
             result = chat.invoke(prompt, st.session_state.session_id, settings)
         else:
             result = chat.invoke(

@@ -254,7 +254,7 @@ batches A–C now have local implementation and regression evidence, with R01–
 VERIFYING pending live acceptance. R01 originally overstated full promotion scope;
 its actual gap was standalone verification and exact role binding. See the
 [corrective checkpoint](docs/implementation/review-phases-1-4/CORRECTIONS.md).
-Emulator integration remains proposed. Phase 5 remains NOT_STARTED pending user direction.
+Emulator integration remains proposed and deferred. Phase 5 was authorized on 7 October 2026; P5.01 is IN_PROGRESS. Prior live acceptance gates remain pending.
 
 **P4.01 — Add availability and dependency probes.** Prerequisites: P0.02, P2.05, P3.04. Suggested owner: Engineering + Operations. Findings: F05.
 

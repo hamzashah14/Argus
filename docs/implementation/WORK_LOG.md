@@ -543,3 +543,56 @@ Append entries; retain previous outcomes when later work supersedes them.
   its system Python 3.14.7. Actual tests/builds/validators used `.venv` Python
   3.12.14 throughout. Corrected the evidence field after checking that runtime;
   all recorded source hashes still match. This changes no implementation/result.
+
+## 2026-10-07 — Phase 5 authorized; first identity/session implementation slice
+
+- User asked to continue, then clarified “I guess next phase is Phase 5”. Started
+  P5.01; deferred the previously proposed Floci batch D. No Phase 6 advancement.
+  Docker Desktop start reported already running; no Floci image/container or AWS
+  resource was created. Primary Floci release/config docs were read before the
+  user's correction; this is not emulator integration evidence.
+- Read STATE, task plan/tracker, work log and AGENTS before changes. Preserved
+  corrective A–C and historical evidence. First slice intentionally remains
+  P5.01 IN_PROGRESS because deployment/environment/IAM/secret wiring is unfinished.
+- Added native Streamlit OIDC admission for staging/production (and explicit
+  development opt-in), exact issuer/audience/recent auth/expiry/MFA requirements,
+  hashed issuer/subject identity and signed opaque backend session references.
+  Shared-password compatibility remains development only; legacy Classic chat is
+  denied in the individual path. Customer IdP/domain/MFA/origin are not configured.
+- Authoritative grants and sessions use central strongly consistent DynamoDB
+  reads, role/instance scope and revocation epoch. Conditional idle renewal avoids
+  resurrecting a deleted session; idle/absolute/ID-token expiry is independent of
+  TTL deletion. Logout failures clear conversation, block access and retain the
+  reference for an explicit retry. Signing-key rotation invalidates old tickets.
+- Backend execution/report entry points require sessions, limit tools to user
+  scope and recheck grants before model iterations/reservations and tool calls.
+  Report authorization precedes evidence/S3 reads. Audit records omit claims,
+  email/name, prompts and bearer references. Revocation gates subsequent calls;
+  it does not cancel an already accepted SDK operation.
+- Inspected installed Streamlit 1.64 source: native claims can be overridden by
+  server.trustedUserHeaders. The app rejects nonempty mappings and disabled XSRF.
+  Default UI bind is loopback, CORS/XSRF stay enabled, browser exception detail is
+  hidden. Tested forged browser flags and configuration bypasses offline.
+- Used real boto3 TypeSerializer/TypeDeserializer in a regression to catch the
+  Decimal representation of DynamoDB integer epochs. Integer Decimal grants are
+  accepted; malformed epochs, storage failure and invalid keys deny issuance.
+- Added Streamlit auth extra. Public downloads and pip-compile generated app/dev
+  hash locks, adding Authlib, cffi, cryptography, httpcore, httpx, joserfc and
+  pycparser without changing any existing pin or Lambda lock. Installed new wheels
+  offline with --require-hashes. pip check passes. pip-audit reports 100 packages,
+  zero known vulnerabilities; this is advisory evidence, not a security guarantee.
+- Final offline validation: **459 tests (49 new)**, lint/format/shell, OpenAPI,
+  64 existing CF templates, 13 independent deterministic package pairs and bundled
+  imports, old 6/8 and extended 9/11-stage synthetic renders with actual hashes,
+  pip/whitespace PASS. Build/render console logs and actual manifests are in ignored
+  .build/phase5-*.log and .build/*-validation.json. Secret scan: zero new candidates
+  against unchanged 377-entry baseline. Full suite's loopback tests used approved
+  execution; parent AWS is mocked and no customer data was sent.
+- Added identity contract/limits and sanitized evidence under phase-5; updated
+  STATE, plan, tracker, README, .env example and secret ignores. No project cloud
+  SDK call, provisioning, paid model request, notification, push or hosted CI.
+- Next: finish P5.01 deployment/role/secret/policy wiring and customer IdP/origin
+  qualification, then P5.02 distributed login/chat budgets and capacity isolation.
+  P5.03–P5.06 remain pending: redaction/retention/deletion, evidence validation,
+  evaluations and security operating procedures. G5 and earlier live gates remain
+  NOT_RUN/pending; no findings were closed or DONE percentage increased.

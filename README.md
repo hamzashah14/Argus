@@ -13,7 +13,7 @@ Kira investigates EC2 incidents using customer-owned Bedrock models and CloudWat
 logs/metrics. Customers select where the same Python orchestration runs:
 `standalone` (incident Lambda; web chat directly) or `agentcore` (their AWS Runtime).
 
-- **Chat** — ask through the password-protected Streamlit UI.
+- **Chat** — use Streamlit with customer OIDC in staging/production; development retains a local password flow.
 - **Automatic** — accepted alarms/events enter a durable incident ledger. Initial
   notifications run independently; investigations save private versioned reports
   and queue a separate follow-up notification.
@@ -197,9 +197,12 @@ The identity needs `bedrock:InvokeAgent` on the intended agent-alias ARN.
 The setup screen works before an agent exists. Opening it creates no cloud resources.
 The connection shows “configured” until a request succeeds. Errors expose a short
 reference; partial responses remain visible. See the Phase 1 guide for session limits.
-Shared-password authentication and browser-local work limits are development controls;
-individual identity, authorization and shared budgets remain Phase 5 work. Do not
-expose this baseline to the public internet as a production service.
+Shared-password authentication and browser-local work limits are development controls.
+Phase 5 individual identity/session/backend access controls are implemented as an
+initial slice; deployment/secret/IAM wiring and distributed budgets remain in progress.
+Staging/production now deny chat/report access unless identity is configured. Read
+the [identity checkpoint](docs/implementation/phase-5/IDENTITY.md) before upgrading.
+This slice is not ready for broad production access.
 
 ## 7. Test end to end
 

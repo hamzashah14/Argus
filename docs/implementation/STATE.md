@@ -1,12 +1,15 @@
 # Resume here
 
-Updated: 2026-10-06. **User-authorized Phases 1–4 corrective batches A–C are
-implemented locally; R01–R08 VERIFYING pending live qualification.**
-**410 tests**, 64 templates and 13 deterministic package pairs/import checks
-pass; both old and extended owned releases render with actual local hashes. Read the
-[corrective checkpoint](review-phases-1-4/CORRECTIONS.md). Phase 5 is not started.
-No AWS project calls/resources, live probes, inference or notifications occurred.
-Floci integration remains proposed, not installed.
+Updated: 2026-10-07. **Phase 5 authorized and IN_PROGRESS: first P5.01
+identity/session/backend-access slice implemented locally.** 459 tests (49 new),
+64 existing templates, 13 deterministic package/import pairs and both synthetic
+release layouts pass. Deployment/IAM/secret/IdP/origin wiring remains unfinished;
+P5.02–P5.06 NOT_STARTED, G5 NOT_RUN. Read [Phase 5 checkpoint](phase-5/NOTES.md).
+
+Prior corrective batches A–C remain implemented locally; R01–R08 VERIFYING and
+all live gates/hosted CI pending. [Corrective checkpoint](review-phases-1-4/CORRECTIONS.md).
+No project AWS calls/resources, paid inference or notifications occurred.
+Floci remains proposed/deferred; no emulator image/container was created.
 
 ## User decisions
 
@@ -26,6 +29,19 @@ Floci integration remains proposed, not installed.
   The synthetic reference spec is not authorization or infrastructure.
 
 ## Current checkpoint and evidence
+
+- Phase 5 first identity slice on the current working tree: native OIDC with
+  verified issuer/audience/expiry/recent authentication/MFA claims; signed session
+  references; central consistent DynamoDB grants and sessions; conditional idle
+  renewal; revocation/logout retry; per-user tool and report scope; model/tool
+  rechecks. Shared development password denied in staging/production. Trusted
+  identity header overrides denied; loopback UI bind and protected browser errors.
+  **459 tests (49 new)**, 64 templates, 13 build pairs/imports, both release layouts
+  PASS locally. App/dev locks add seven OIDC packages without changing prior pins;
+  Lambda lock unchanged. 100-package advisory scan has zero known vulnerabilities;
+  secret scan has zero new candidates against the unchanged 377-entry baseline.
+  P5.01 IN_PROGRESS: deployment/IAM/secrets/IdP/origin wiring/verification remain;
+  P5.02–P5.06 NOT_STARTED and G5 NOT_RUN. See [Phase 5 checkpoint](phase-5/NOTES.md).
 
 - Corrective implementation checkpoint **`99695cf`** on the existing Phase 4
   branch. **410 tests (61 new)**, 64 templates, 13 deterministic ZIP pairs/imports,
@@ -69,42 +85,19 @@ Floci integration remains proposed, not installed.
 
 ## Next authorized work
 
-The user said “Continue with the Project” after review. Authorized scope was
-corrective batches A–C within existing phases, now complete locally. This did
-not authorize Phase 5 or live AWS deployment. All eight have repository fixes
-and positive tests; final local validation and clean-source checkpoint pass. Preserve current evidence. Batches
-A–C need customer acceptance to close findings; no additional phase is authorized. Read
-[CORRECTIONS.md](review-phases-1-4/CORRECTIONS.md), tracker and WORK_LOG.
+The user clarified “I guess next phase is Phase 5” on 7 October after asking to
+continue. Proceed with Phase 5 in task order, starting P5.01 identity/session
+controls. Read [Phase 5 checkpoint](phase-5/NOTES.md). Prior local corrective
+batches A–C remain intact; all live G2/G3/G4 gates and hosted CI remain pending.
+Do not start Phase 6 or deploy AWS. Floci batch D is deferred, not installed.
+Docker Desktop start returned already running; no emulator/image/container was
+created. This is not a Floci validation result.
 
-R01 scope correction: full promotion already verified six pipeline role grants;
-the historical diagnostic exercised standalone verify-runtime. Checks now live in
-the shared verifier, with exact owned role binding and sealed template validation.
-Recovery uses four independent CAS-progress scans; AgentCore has a killable SDK
-child; notifications have expired-lease ambiguity and audited notification-only
-replay; health uses per-service invocations, separate guarded delivery checks and
-explicit bootstrap; duplicate receipt identity and remote-region/log/retention
-bindings are corrected. Read corrected Phase 3/4 guides before cloud commands.
-
-Historical review evidence at source `175d7e9` remains unchanged. The original
-defect runner is historical, not the current acceptance suite. Floci batch D is
-still a proposal; customer staging batch E requires real inputs and budget.
-The user will decide when Phase 5 starts; do not start it automatically.
-
-Resume Phase 4 staging qualification when actual customer prerequisites and budget
-exist. Follow the Phase 3 deployment guide and Phase 4 additions; resolve quotas,
-prove exact telemetry and IAM, activate only reviewed qualified candidates, perform
-fault/recovery drills, receive real primary/fallback emails and have a second
-operator rehearse the runbooks. G4 needs those receipts and timings; G1/G2/G3 and
-later production qualification remain separate. Do not provision synthetic resources,
-repeat the account preflight unnecessarily, claim production-grade completion or
-start Phase 5 without the user's direction.
-
-Keep initial notification/capture and independent fallback operating when expensive
-model work is paused. Query/window bounds are not hard billed-byte/dollar limits;
-chat per-user controls remain Phase 5. Recovery observations do not cancel active
-work. Manual telemetry installation, readiness semantics, subscription confirmation,
-private inputs, IAM/quota setup and customer operation remain necessary. See
-[complete deployment/cost explanation](phase-3/DEPLOYMENT_AND_COST.md).
+Customer identity provider/domain/MFA policy and actual retention/security owners
+remain unresolved. Implement portable controls using customer-owned OIDC, with
+synthetic offline fixtures and fail-closed production behavior. Keep development
+password compatibility explicitly outside production. Record each implementation
+slice and remaining wiring rather than claiming the entire phase complete.
 
 ## Historical validation
 

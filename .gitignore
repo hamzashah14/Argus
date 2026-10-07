@@ -10,3 +10,7 @@ docs/implementation/evidence/private/
 .build/
 .pytest_cache/
 .ruff_cache/
+
+# Individual identity secrets and customer access policy.
+.streamlit/secrets.toml
+config/access-policy.json

@@ -1,0 +1,83 @@
+{
+  "date": "2026-10-07",
+  "scope": "Phase 5 P5.01 first identity implementation slice",
+  "status": "IN_PROGRESS",
+  "source_parent": "fff9cb3",
+  "validation_source_dirty": true,
+  "python": "3.12.14",
+  "tests": {
+    "passed": 459,
+    "new_identity_tests": 49,
+    "failed": 0
+  },
+  "existing_templates": {
+    "phase2": 12,
+    "owned": 20,
+    "observation": 32,
+    "total": 64,
+    "status": "PASS"
+  },
+  "packages": {
+    "independent_pairs": 13,
+    "bundled_imports": 13,
+    "status": "PASS",
+    "manifest_location": ".build/*-build-validation.json"
+  },
+  "release_renders": {
+    "standalone": [
+      6,
+      9
+    ],
+    "agentcore": [
+      8,
+      11
+    ],
+    "actual_local_artifact_hashes": true,
+    "synthetic_only": true,
+    "status": "PASS"
+  },
+  "lint_format_shell_schema_pip_whitespace": "PASS",
+  "dependencies": {
+    "new": [
+      "authlib==1.8.0",
+      "cffi==2.1.1",
+      "cryptography==50.0.2",
+      "httpcore==1.0.9",
+      "httpx==0.28.1",
+      "joserfc==1.7.5",
+      "pycparser==3.0"
+    ],
+    "existing_pins_changed": false,
+    "lambda_lock_changed": false,
+    "hash_verified_local_install": "PASS",
+    "advisory_packages": 100,
+    "known_vulnerabilities": 0
+  },
+  "secret_scan": {
+    "reviewed_existing_candidates": 377,
+    "new_candidates": 0,
+    "baseline_changed": false
+  },
+  "commands": [
+    ".venv/bin/python -m pytest -q --junitxml=.build/phase5-tests.xml",
+    "ruff check .; ruff format --check .",
+    "shellcheck setup-iam.sh setup-lambdas.sh deploy.sh setup-alerts.sh scripts/common.sh",
+    "scripts/validate_{schemas,infrastructure,durable,observations}.py",
+    "scripts/verify_{build,pipeline_build,agentcore_build,observation_build}.py",
+    "infra build both synthetic specs; scripts/verify_durable_render.py with and without --observations",
+    "pip-compile --generate-hashes --allow-unsafe --strip-extras for app/dev locks",
+    "pip install --require-hashes --no-index --find-links .build/identity-wheels -r requirements/dev.lock",
+    "pip-audit -r requirements/dev.lock --disable-pip --no-deps --format json",
+    "scripts/check_secrets.py; git diff --check"
+  ],
+  "limits": [
+    "No project AWS SDK calls, infrastructure, paid model inference or notifications.",
+    "OIDC signature/callback/MFA/origin testing is synthetic; no customer IdP configured.",
+    "Session/grant table, encrypted storage, secrets and IAM environment wiring not yet implemented in IaC.",
+    "Distributed login/chat budgets and automatic/chat capacity isolation pending P5.02.",
+    "Redaction/evidence governance and security audit retention pending P5.03.",
+    "P5.01 remains IN_PROGRESS; P5.02-P5.06 NOT_STARTED; G5 NOT_RUN; all earlier live gates unchanged.",
+    "Floci integration deferred; no image or emulator container created; Docker Desktop reported already running.",
+    "No hosted CI or push. Existing release renders validate packaging, not identity deployment support."
+  ]
+}

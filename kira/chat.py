@@ -8,6 +8,7 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
+from kira import identity
 from kira.transport import clip_utf8, error_result
 
 MAX_PROMPT_CHARS = 4000
@@ -43,7 +44,9 @@ def make_client(settings):
     )
 
 
-def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.monotonic, history=()):
+def invoke(
+    prompt, session_id, settings, *, factory=make_client, clock=time.monotonic, history=(), access_ticket=None
+):
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         return failure("INVALID_PROMPT", f"Enter a question of 1–{MAX_PROMPT_CHARS} characters.")
     if settings.problems():
@@ -55,6 +58,10 @@ def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.mono
     text = ""
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     try:
+        if identity.required():
+            identity.Sessions().authorize(access_ticket, "chat")
+            if settings.runtime_target == "classic":
+                return failure("ACCESS_DENIED", "Individual access requires the owned runtime.")
         if settings.runtime_target in {"standalone", "agentcore"}:
             from kira import agentcore, execution
 
@@ -69,6 +76,8 @@ def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.mono
                     if m.get("content")
                 ],
             }
+            if identity.required():
+                payload["access_ticket"] = access_ticket
             if settings.runtime_target == "standalone":
                 result = execution.execute(payload)
             else:
@@ -144,6 +153,8 @@ def invoke(prompt, session_id, settings, *, factory=make_client, clock=time.mono
                 "EMPTY_RESPONSE", "The agent returned no answer. You can retry in a new conversation."
             )
         return ChatResult(clip_utf8(text, MAX_OUTPUT_BYTES), "ok")
+    except identity.AccessDenied:
+        return failure("ACCESS_DENIED", "Sign in again or ask your operator to review access.")
     except (NoCredentialsError, PartialCredentialsError):
         return failure(
             "CREDENTIALS_UNAVAILABLE",

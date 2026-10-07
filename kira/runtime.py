@@ -141,7 +141,9 @@ def validate(value, schema):
 
 
 class LambdaTools:
-    def __init__(self, region, account, arns, allowed_ids, limits, reserve, anchor=None, client=None):
+    def __init__(
+        self, region, account, arns, allowed_ids, limits, reserve, anchor=None, client=None, access_guard=None
+    ):
         if set(arns) != {"fetch_logs", "fetch_metrics"} or not allowed_ids:
             raise ValueError("Both tools and an explicit instance inventory are required")
         for arn in arns.values():
@@ -151,6 +153,7 @@ class LambdaTools:
                 raise ValueError("Tools must be numeric Lambda versions in the intended account/region")
         self.arns, self.allowed = arns, set(allowed_ids)
         self.limits, self.reserve, self.anchor = limits, reserve, anchor
+        self.access_guard = access_guard
         self.client = client or sdk_client("lambda", region, 35)
 
     def invoke(self, name, args, deadline):
@@ -163,6 +166,8 @@ class LambdaTools:
             ],
         )
         params = dict(args)
+        if self.access_guard:
+            self.access_guard(params.get("instance_id"))
         if params.get("instance_id") not in self.allowed:
             raise RuntimeStop("UNAUTHORIZED_INSTANCE")
         if "hours_back" in params:
@@ -236,6 +241,7 @@ def run(
     client=None,
     require_evidence=False,
     record_usage=None,
+    access_guard=None,
 ):
     """All side effects go through injected authorization/budget-aware adapters."""
     client = client or sdk_client("bedrock-runtime", region)
@@ -257,6 +263,8 @@ def run(
     complete_evidence = True
     try:
         for _ in range(limits.model_steps):
+            if access_guard:
+                access_guard()
             if deadline - time.time() < 30:
                 raise RuntimeStop("DEADLINE")
             request = {"messages": messages, "system": system, "toolConfig": tool_configuration()}

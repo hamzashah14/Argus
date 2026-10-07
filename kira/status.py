@@ -8,13 +8,17 @@ import time
 import boto3
 from botocore.config import Config
 
+from kira import identity
+
 INCIDENT = re.compile(r"[0-9a-f]{32}\Z")
 READ_CONFIG = Config(connect_timeout=3, read_timeout=8, retries={"total_max_attempts": 2})
 
 
-def load(incident_id):
+def load(incident_id, *, access_ticket=None):
     if not isinstance(incident_id, str) or not INCIDENT.fullmatch(incident_id):
         raise ValueError("Invalid incident reference")
+    if identity.required():
+        identity.Sessions().authorize(access_ticket, "session", touch=False)
     table_name = os.getenv("INCIDENT_TABLE")
     region = os.getenv("MONITOR_REGION")
     if not table_name or not region:
@@ -24,6 +28,8 @@ def load(incident_id):
     incident = table.get_item(Key={"PK": pk, "SK": "META"}, ConsistentRead=True).get("Item")
     if incident is None or int(incident.get("ttl", 0)) <= time.time():
         return None
+    if identity.required():
+        identity.Sessions().authorize(access_ticket, "report", incident.get("instance_id"))
     result = {
         key: incident.get(key)
         for key in (
