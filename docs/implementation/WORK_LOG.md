@@ -996,3 +996,6 @@ Append entries; retain previous outcomes when later work supersedes them.
   temporary checkout. 247 current local links/anchors and 34 shell blocks PASS.
   Private configuration/logo assets and local UI preview remain preserved.
   [Final evidence](evidence/deployment-automation/local-validation.json).
+- Final metadata scan flagged the full public Git commit ID as hex entropy; used
+  its documented short revision in committed metadata, retaining the full ID in
+  ignored local evidence. No secret exclusion/baseline changes. Final scan PASS.
