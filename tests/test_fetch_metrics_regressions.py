@@ -1,4 +1,4 @@
-"""Migrated original self-checks; behavior changes are documented in Phase 1 notes."""
+"""Read-only tool regression checks using synthetic inputs."""
 
 import json
 from unittest.mock import MagicMock, patch

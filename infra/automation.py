@@ -51,11 +51,8 @@ def private_json(path, value):
 
 def private_dir(path):
     path = Path(path).resolve()
-    if not (
-        path.is_relative_to(ROOT / ".local")
-        or path.is_relative_to(ROOT / "docs/implementation/evidence/private")
-    ):
-        raise VerificationError("Deployment files must live under ignored .local/ or private evidence")
+    if not path.is_relative_to(ROOT / ".local"):
+        raise VerificationError("Deployment files must live under ignored .local/")
     path.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(path, 0o700)
     return path

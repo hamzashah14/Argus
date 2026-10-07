@@ -6,16 +6,12 @@ private configuration templates, offline dry-run, read-only checks, staged backe
 provisioning, initial grants and UI connection output. The checklist still defines
 customer IAM/bootstrap, server telemetry, provider/native-login and mailbox duties.
 
-Updated: 7 October 2026. Applies to the current Phase 5 implementation.
-
 This is the ordered manual setup guide for a customer operating Kira in their
 own AWS account. The administrator can be the customer themselves. Maintainers
 do not provision or manage a customer account, database, identity provider or UI.
 
 **Current status:** repository implementation is locally tested; live AWS, SSO,
-model, telemetry and inbox qualification remain pending. No project resources
-have been deployed in this user's account. This document does not execute a
-deployment or start Phase 6. The committed example configurations are synthetic
+model, telemetry and inbox qualification remain pending. Backend provisioning does not establish production acceptance. The committed example configurations are synthetic
 and must not be deployed unchanged.
 
 ## 1. Understand what you are setting up
@@ -126,9 +122,8 @@ and private storage/source revision are ready.
       `bedrock-runtime CountTokens` path for its exact requests. A model listing
       alone does not prove compatibility; the paid staging canary proves execution.
 - [ ] Verify Lambda concurrency, model throughput and other relevant service
-      quotas against the rendered capacity. The previous account check reported
-      Lambda concurrency **10**; this is an unresolved prerequisite for this user's
-      deployment, not a recommended reservation.
+      quotas against the rendered capacity. Ensure enough headroom for configured reservations and the
+      required unreserved capacity; request quota increases if needed.
 
 Use the normal AWS credential chain: local profile/SSO, assumed roles or host
 workload roles. Do not put AWS access keys into inventory JSON or browser inputs.
@@ -136,8 +131,8 @@ Browser SSO identifies the user; the UI process separately needs an authorized
 AWS workload identity. Signing in with OIDC does not grant AWS IAM permissions.
 
 **Complete when:** account, ownership, permissions, model prerequisites and quotas
-are checked. See [deployment permissions and model requirements](implementation/phase-3/GUIDE.md)
-and [resource ownership](implementation/phase-2/OWNERSHIP.md).
+are checked. See [deployment permissions and model requirements](DEPLOYMENT.md)
+and [resource ownership](DEPLOYMENT.md#resource-ownership-and-iam).
 
 ## 5. Create the private deployment configuration
 
@@ -209,7 +204,7 @@ The cookie, provider client, runtime signing and log-cursor secrets are separate
 
 **Complete when:** registration, callback, MFA and claim contract are established;
 actual browser login is checked after identity deployment and user grants.
-See [current SSO setup](implementation/phase-5/SETUP.md).
+See [current SSO setup](IDENTITY.md).
 
 ## 7. Build and review the deployment plan
 
@@ -275,8 +270,8 @@ and backup/restore procedures.
 
 **Complete when:** foundations completed, outputs/versions are bound, and the
 limited session issuer trust/permissions are correct. Follow the detailed
-[identity ordering](implementation/phase-5/SETUP.md#ordered-infrastructure-wiring)
-alongside [foundation deployment](implementation/phase-3/GUIDE.md).
+[identity ordering](IDENTITY.md#ordered-infrastructure-wiring)
+alongside [foundation deployment](DEPLOYMENT.md).
 
 ## 9. Confirm all notification subscriptions
 
@@ -338,7 +333,7 @@ work. Current examples do not qualify Windows collectors, arbitrary AWS service
 types or automatic autoscaling discovery.
 
 **Complete when:** actual logs, metric dimensions, heartbeat and readiness are
-verified. See [server telemetry instructions](implementation/phase-4/GUIDE.md#prepare-actual-customer-telemetry).
+verified. See [server telemetry instructions](TELEMETRY.md#prepare-actual-customer-telemetry).
 
 ## 11. Deploy immutable tools, incident/chat runtimes and observers
 
@@ -363,9 +358,9 @@ verified. See [server telemetry instructions](implementation/phase-4/GUIDE.md#pr
 Use `seal-runtime --stage STAGE` for immutable stages after completion. Do not
 update sealed release stacks: changes require a new release, reviewed bindings
 and cutover. The detailed artifact/binding instructions are in
-[runtime deployment](implementation/phase-3/GUIDE.md),
-[observation deployment](implementation/phase-4/GUIDE.md#deploy-and-verify-the-additional-stages)
-and [Phase 5 chat additions](implementation/phase-5/SETUP.md).
+[runtime deployment](DEPLOYMENT.md),
+[observation deployment](TELEMETRY.md#deploy-and-verify-the-additional-stages)
+and [isolated chat setup](IDENTITY.md).
 
 **Complete when:** deployed code/configuration/roles match the exact candidate,
 versions are sealed and actual telemetry coverage passes. Verification of
@@ -458,8 +453,8 @@ the UI successfully is not operational readiness.
       before broad production access.
 
 Exact verification/canary/promotion commands are in
-[runtime qualification](implementation/phase-3/GUIDE.md#verify-canary-and-promote)
-and [identity bootstrap](implementation/phase-5/SETUP.md). Automatic investigations
+[runtime qualification](DEPLOYMENT.md#verify-canary-and-promote)
+and [identity bootstrap](IDENTITY.md). Automatic investigations
 stay paused until their relevant gates and budget are approved.
 
 **Complete when:** the selected runtime/model/tools and promoted UI role are
@@ -489,8 +484,8 @@ actually qualified. The current project's live checks are still pending.
 **Complete when:** real notifications, authenticated UI access and the required
 release checks pass. A local UI may be enough for chat, but the full notification
 link workflow requires the configured reachable HTTPS status UI. See
-[observation acceptance](implementation/phase-4/ACCEPTANCE.md) and
-[identity live acceptance](implementation/phase-5/SETUP.md#live-acceptance-still-not_run).
+[observation acceptance](PRODUCTION_CHECKLIST.md) and
+[identity live acceptance](IDENTITY.md#live-acceptance).
 
 ## Final readiness and routine administration
 
@@ -510,8 +505,8 @@ recipients, monitors failures/DLQs and spend, maintains backups, updates depende
 and qualifies releases. Static inventory changes require a rebuilt reviewed release;
 there is no automatic fleet discovery. Revoke departing users and retire obsolete
 recipients through the reviewed procedures. Follow
-[security operations](implementation/phase-5/SECURITY_OPERATIONS.md) and
-[operational runbooks](implementation/phase-4/RUNBOOKS.md).
+[security operations](SECURITY_OPERATIONS.md) and
+[operational runbooks](OPERATIONS.md).
 
 For **today's local preview only**, none of the cloud steps has been performed.
 Open `http://127.0.0.1:8501`, use the private `.env` file's `APP_PASSWORD`, and click

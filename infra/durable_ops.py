@@ -1,4 +1,4 @@
-"""Reviewed Phase 3 cloud operations; the synthetic reference is never deployable."""
+"""Reviewed durable pipeline cloud operations; the synthetic reference is never deployable."""
 
 import argparse
 import base64

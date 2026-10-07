@@ -1,4 +1,4 @@
-"""Customer-owned Phase 3 foundation, immutable candidate and gated routing templates."""
+"""Customer-owned durable pipeline foundation, immutable candidate and gated routing templates."""
 
 import json
 

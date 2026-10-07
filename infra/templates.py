@@ -157,7 +157,7 @@ def foundation(spec, purpose):
         )
     else:
         # Identities are provisioned now; their durable runtime bindings belong
-        # to Phase 3. No queue or asynchronous pipeline is implied here.
+        # to the separately rendered pipeline. No queue or asynchronous pipeline is implied here.
         r["IngestionRole"] = role(
             spec,
             "lambda.amazonaws.com",
@@ -399,7 +399,7 @@ def service_routing(spec):
                                 if s["instance_id"] == alarm["instance_id"]
                             )
                         )
-                        + "; docs/implementation/phase-4/RUNBOOKS.md"
+                        + "; docs/OPERATIONS.md"
                     }
                     if "observability" in spec
                     else {}

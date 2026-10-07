@@ -34,7 +34,7 @@ def test_unsupported_runtime_cannot_enable_chat(configured, monkeypatch, target)
     assert "RUNTIME_TARGET must be standalone or agentcore." in AppConfig.from_env().problems()
 
 
-def test_legacy_agent_variables_do_not_select_an_unsupported_runtime(monkeypatch):
+def test_unsupported_agent_variables_do_not_select_an_unsupported_runtime(monkeypatch):
     monkeypatch.delenv("RUNTIME_TARGET", raising=False)
     monkeypatch.setenv("BEDROCK_AGENT_ID", "ABCDEFGHIJ")
     assert AppConfig.from_env().runtime_target == "standalone"

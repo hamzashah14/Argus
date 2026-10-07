@@ -70,7 +70,10 @@ def verify_runtime(bundle, factory):
             actual["Role"],
             planned["Resources"][logical + "Role"]["Properties"],
         )
-    return {"status": "PASS", "scope": "pinned observation runtime only; actual detection/delivery need G4"}
+    return {
+        "status": "PASS",
+        "scope": "pinned observation runtime only; actual detection/delivery require customer acceptance",
+    }
 
 
 def seed_health(bundle, factory):
@@ -235,7 +238,10 @@ def verify_registration(bundle, factory):
             or attrs.get("FilterPolicyScope", "MessageAttributes") != "MessageAttributes"
         ):
             raise VerificationError("Independent recipient envelope/redrive settings drifted")
-    return {"status": "PASS", "scope": "registration only; G4 failure injection and real delivery pending"}
+    return {
+        "status": "PASS",
+        "scope": "registration only; failure injection and real delivery require customer acceptance",
+    }
 
 
 def attest_email(bundle, factory, notification_id, *, confirm=False):

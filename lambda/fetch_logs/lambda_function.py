@@ -272,7 +272,7 @@ def _format_lines(rows):
 def configured_log_scope():
     path = os.getenv("LOG_SCOPE_FILE")
     if not path:
-        return None  # Legacy workflow only; Phase 2 always sets a packaged scope.
+        return None  # Development only; deployed tools require a packaged scope.
     value = json.loads(Path(path).read_text())
     if not isinstance(value, list) or not value or any(not isinstance(item, str) for item in value):
         raise BadInput("Deployment log scope is invalid.")

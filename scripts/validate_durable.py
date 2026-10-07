@@ -1,4 +1,4 @@
-"""Lint complete Phase 3 templates in same-region and split-region synthetic layouts."""
+"""Lint complete durable pipeline templates in same-region and split-region synthetic layouts."""
 
 import json
 import subprocess
@@ -89,7 +89,7 @@ def examples(spec, config, *, include_bindings=False):
         owned_bindings=bindings,
     )
     if "bedrock:InvokeAgent" in json.dumps(result) or "AWS::Bedrock::Agent" in json.dumps(result):
-        raise AssertionError("Owned target retained a Classic dependency")
+        raise AssertionError("Unexpected agent resource in the owned runtime plan")
     return (result, bindings, artifacts, versions) if include_bindings else result
 
 

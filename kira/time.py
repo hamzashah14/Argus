@@ -1,4 +1,4 @@
-"""One timestamp contract: ISO-8601 offsets normalize to UTC; legacy naive is UTC."""
+"""One timestamp contract: ISO-8601 offsets normalize to UTC; naive timestamps is UTC."""
 
 import re
 from datetime import datetime, timezone

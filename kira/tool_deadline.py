@@ -1,4 +1,4 @@
-"""Absolute caller deadlines for tool invocations; legacy calls retain Lambda bounds."""
+"""Absolute caller deadlines for tool invocations; calls without caller deadlines retain Lambda bounds."""
 
 import math
 import time

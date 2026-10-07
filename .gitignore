@@ -14,3 +14,21 @@ docs/implementation/evidence/private/
 # Individual identity secrets and customer access policy.
 .streamlit/secrets.toml
 config/access-policy.json
+
+# Private cloud configuration and credentials.
+.env.*
+!.env.example
+.aws/
+*.pem
+*.key
+*.ticket
+
+# Local conversation, audit and implementation continuity records.
+/AGENTS.md
+/PRODUCTION_READINESS_AUDIT.md
+/PRODUCTION_IMPLEMENTATION_PLAN.md
+/IMPLEMENTATION_TRACKER.md
+/OPEN_SOURCE_PRODUCT_PLAN.md
+/PRODUCT_ROADMAP_TRACKER.md
+/docs/PROJECT_EVOLUTION_AND_ONBOARDING.md
+/docs/implementation/

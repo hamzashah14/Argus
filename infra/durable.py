@@ -1,4 +1,4 @@
-"""Render the Phase 3 staged resource plan from customer-owned, private bindings."""
+"""Render the durable pipeline staged resource plan from customer-owned, private bindings."""
 
 import argparse
 import hashlib

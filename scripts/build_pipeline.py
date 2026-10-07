@@ -1,4 +1,4 @@
-"""Build the six Phase 3 Lambda packages from the verified wheelhouse."""
+"""Build the six durable pipeline Lambda packages from the verified wheelhouse."""
 
 import argparse
 import sys

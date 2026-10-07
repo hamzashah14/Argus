@@ -30,7 +30,8 @@ jobs:
           python scripts/validate_durable.py
           python scripts/validate_observations.py
           python scripts/validate_identity.py
-          python scripts/evaluate_phase5.py --output .build/phase5-evaluation.json
+          python scripts/check_public_repository.py
+          python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
       - name: Unit, contract and UI regression tests (no AWS access)
         run: python -m pytest --junitxml=.build/tests.xml
       - name: Secret candidate scan
@@ -62,10 +63,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: implementation-validation
+          name: quality-validation
           path: |
             .build/tests.xml
-            .build/phase5-evaluation.json
+            .build/diagnostics-evaluation.json
             .build/dependency-audit.json
             .build/build-validation.json
             .build/pipeline-build-validation.json

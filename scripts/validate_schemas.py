@@ -1,4 +1,4 @@
-"""Validate both Bedrock action-group OpenAPI documents offline."""
+"""Validate both read-only tool OpenAPI contracts offline."""
 
 import json
 from pathlib import Path

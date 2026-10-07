@@ -1,4 +1,4 @@
-"""Phase 4 resources: independent delivery witness, observers and monitored escalation."""
+"""observation resources: independent delivery witness, observers and monitored escalation."""
 
 import json
 
@@ -289,7 +289,7 @@ def active(spec, outputs, versions, pipeline_versions, *, runtime_target="standa
             "CloudWatch::Alarm",
             {
                 "AlarmName": name(spec, "obs-" + logical.lower()),
-                "AlarmDescription": "Owner: deployment-oncall; docs/implementation/phase-4/RUNBOOKS.md",
+                "AlarmDescription": "Owner: deployment-oncall; docs/OPERATIONS.md",
                 "Namespace": namespace,
                 "MetricName": metric,
                 "Dimensions": [{"Name": k, "Value": v} for k, v in dimensions.items()],

@@ -1,4 +1,4 @@
-"""Build customer-owned Phase 4 observers without AWS access."""
+"""Build customer-owned observation observers without AWS access."""
 
 import argparse
 import sys

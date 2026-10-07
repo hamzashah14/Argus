@@ -1,6 +1,6 @@
 # Deployment automation and settings
 
-Customer-owned backend deployment, implemented locally after Phase 5. Live AWS
+Customer-owned backend deployment, with local automated validation. Live AWS
 qualification remains pending. This CLI does not install software on monitored
 EC2 instances, create an EC2 UI host, register an identity provider or operate a
 managed service. Run it from a clean, reviewed macOS/Linux checkout with Python
@@ -95,7 +95,7 @@ Register the OIDC client, exact callback, provider MFA/claims and allowed origin
 with the customer's IdP. Put client/cookie secrets in owner-only ignored
 `.streamlit/secrets.toml`. They are separate from the cursor/session-signing secrets
 AWS generates automatically. Browser login cannot be substituted by a fabricated
-user/session or a shared production password. See [identity setup](implementation/phase-5/SETUP.md).
+user/session or a shared production password. See [identity setup](IDENTITY.md).
 
 ## 2. Preview without deploying
 
@@ -163,7 +163,7 @@ candidate is ready.
 The approved plan authorizes these additive/nonreplacement steps without repeated
 per-step prompts. Every change set still passes existing template/role/account
 inspection and digest checks. Deletions, replacements, foreign ownership, failed
-stacks, drift and nonempty legacy-retirement diffs stop automation. It never deletes
+stacks, drift and nonempty obsolete-resource retirement diffs stop automation. It never deletes
 queues/evidence/subscriptions to recover a failure. CFN requests carry stable
 idempotency tokens; resume reconciles actual owned stack status/template rather
 than treating local journal entries as proof of success. Lost responses can still
@@ -180,7 +180,7 @@ this deployment, and existing per-stage checks remain active.
 The private work directory includes atomic `state.json`, rendered `bundle/`,
 artifact builds, `preflight.json`, actual change-set reviews, canary/key/grant
 receipts and `operations.log`. Keep it: do not edit or discard the journal to force
-a retry. All paths stay under ignored `.local/` or private evidence. A file lock
+a retry. Deployment paths stay under ignored `.local/`. A file lock
 prevents two processes using the same work directory. Do not concurrently run the
 same release from two different directories; AWS ownership/create-only checks are
 additional defenses, not a distributed deployment lock.
@@ -244,6 +244,5 @@ confirmation cannot be completed on the user's behalf by a backend deployment CL
 Production configuration can provision paused candidates, but the existing paid
 canary gate is staging-only. It stops at the explicit staging/production-cutover
 handoff. Production promotion, enabling investigations, real IdP/IAM/model/delivery,
-load, restore and rollback acceptance remain the existing later-phase gates. There
-is no flag that bypasses them. The user deferred live verification; this feature
-has local mocked/offline evidence only, and has made no AWS calls or deployments.
+load, restore and rollback acceptance remain the customer release gates. There
+is no flag that bypasses them. Local mocked/offline validation does not qualify a live deployment.

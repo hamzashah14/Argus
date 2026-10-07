@@ -1,4 +1,4 @@
-"""Customer-owned Phase 4 observation entrypoint."""
+"""Customer-owned observation observation entrypoint."""
 
 from kira.observability import observer
 

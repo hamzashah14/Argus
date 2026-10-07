@@ -1,4 +1,4 @@
-"""Validate complete Phase 4 additions in both hosting and region layouts, without AWS."""
+"""Validate complete observation additions in both hosting and region layouts, without AWS."""
 
 import json
 import subprocess
@@ -43,7 +43,7 @@ def fixtures(spec, config):
 def main():
     spec = load(ROOT / "infra/observability.example.json")
     config = json.loads((ROOT / "infra/durable.example.json").read_text())
-    with tempfile.TemporaryDirectory(prefix="kira-phase4-") as temp:
+    with tempfile.TemporaryDirectory(prefix="kira-observations-") as temp:
         files = []
         for mode in ("same", "split"):
             current = {**spec, "bedrock_region": "us-east-1" if mode == "split" else spec["bedrock_region"]}
@@ -56,7 +56,7 @@ def main():
             [str(Path(sys.executable).parent / "cfn-lint"), "--non-zero-exit-code", "warning", "-t", *files],
             check=True,
         )
-    print(f"PASS: {len(files)} Phase 4 same/split-region standalone/AgentCore templates")
+    print(f"PASS: {len(files)} observation same/split-region standalone/AgentCore templates")
 
 
 if __name__ == "__main__":

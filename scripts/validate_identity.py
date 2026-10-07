@@ -23,7 +23,7 @@ def main():
             current = {**spec, "bedrock_region": spec["bedrock_region"] if mode == "same" else "us-east-1"}
             for target in ("standalone", "agentcore"):
                 cfg = {**config, "runtime_target": target}
-                # Build legacy fixtures before adding the mandatory identity binding.
+                # Build synthetic fixtures before adding the mandatory identity binding.
                 _, data, arts, versions = examples(
                     current,
                     {k: v for k, v in cfg.items() if k not in {"identity", "security"}},

@@ -1,4 +1,4 @@
-"""Phase 4 detection/freshness/delivery faults without customer credentials or network."""
+"""observation detection/freshness/delivery faults without customer credentials or network."""
 
 import copy
 import json
