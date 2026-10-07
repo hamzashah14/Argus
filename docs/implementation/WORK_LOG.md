@@ -667,3 +667,9 @@ Append entries; retain previous outcomes when later work supersedes them.
   NOT_STARTED. All earlier gates/20 findings and R01–08 remain pending/open/VERIFYING.
   No project cloud calls, provisioning, inference, notifications, emulator, push
   or hosted CI. No Phase 6 advancement or DONE-count increase.
+
+- Saved code/records at `d7a9996` on `codex/phase-5-identity-evidence`, parent
+  `fc96a7a`. All eight old/new identity/observation release bundles passed again
+  from clean committed source (source_dirty false, exact source SHA). The
+  synthetic identity CLI denied pinning before cloud operations and created no
+  success artifact. Documentation follow-up only; no runtime change or live gate.

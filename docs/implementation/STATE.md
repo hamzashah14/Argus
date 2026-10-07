@@ -30,7 +30,7 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
-- Current wiring slice follows `fc96a7a` on `codex/phase-5-identity-evidence`:
+- Current wiring code checkpoint `d7a9996` (parent `fc96a7a`) on `codex/phase-5-identity-evidence`:
   optional encrypted session table/generated secret, exact version IAM/retrieval,
   release binding, limited issuer/UI/runtime roles, reviewed conditional grant
   changes/tombstone revocation and release key labels. AgentCore receives
@@ -40,7 +40,8 @@ Floci remains proposed/deferred; no emulator image/container was created.
   but have only synthetic fixture evidence. **522 tests**, **82 templates**, 13
   deterministic package/import pairs and old/new identity release layouts pass.
   Zero unreviewed secrets; exactly three new dummy candidates reviewed (380 total).
-  Dependency locks are unchanged. [Setup](phase-5/SETUP.md),
+  Dependency locks are unchanged. All eight releases passed again from clean
+  checkpoint d7a9996 (source_dirty false); reference CLI rejected before cloud operations. [Setup](phase-5/SETUP.md),
   [validation](evidence/phase-5/wiring-validation.json), [checkpoint](phase-5/NOTES.md).
   P5.01 remains IN_PROGRESS; real IdP/origin/IAM acceptance pending. P5.02 next:
   distributed issuance/chat allowances and separate automatic/chat capacity.

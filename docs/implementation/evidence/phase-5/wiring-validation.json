@@ -90,5 +90,19 @@
     "Redaction/retention/deletion/audit collection/output validation/evaluations/security operations remain P5.03-P5.06.",
     "P5.01 IN_PROGRESS; P5.02-P5.06 NOT_STARTED; G5 and earlier live gates remain pending; no findings closed.",
     "Floci remains deferred; no image or emulator container created."
-  ]
+  ],
+  "implementation_checkpoint": "d7a9996",
+  "clean_checkpoint_release_renders": {
+    "checkpoint": "d7a9996",
+    "source_dirty": false,
+    "bundles": 8,
+    "actual_local_hashes": true,
+    "status": "PASS"
+  },
+  "synthetic_cli_reference_rejection": {
+    "operation": "pin-secret-version",
+    "exit_code": 2,
+    "success_artifact_created": false,
+    "status": "PASS"
+  }
 }

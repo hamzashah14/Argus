@@ -66,3 +66,9 @@ P5.01 remains IN_PROGRESS: customer IdP/MFA/origin/IAM acceptance is NOT_RUN;
 auditable browser/proxy/provider integration is still unqualified. Next engineering
 work is P5.02 distributed issuance/chat allowances and automatic/chat capacity
 isolation. P5.03–P5.06 remain NOT_STARTED; no Phase 6 advancement or findings closure.
+
+Wiring code checkpoint: `d7a9996`, parent `fc96a7a`, branch
+`codex/phase-5-identity-evidence`. All eight synthetic release bundles passed
+again from clean source (`source_dirty: false`) with current artifact hashes.
+The reference identity CLI rejected a pin request without a success artifact;
+no cloud calls or key reads. Documentation follow-up records the checkpoint.
