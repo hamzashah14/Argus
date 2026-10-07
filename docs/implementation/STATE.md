@@ -33,6 +33,13 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
+- Before Phase 6, the user requested a concise full project evolution/onboarding
+  document. Completed [project overview](../PROJECT_EVOLUTION_AND_ONBOARDING.md):
+  preserved original design, Phase 0–5 changes/corrective review, current automatic
+  and chat workflows, UI, deployment locations, AWS/app/server prerequisites,
+  manual versus generated setup and ordered onboarding. This is documentation,
+  not new runtime behavior or authorization to deploy/start Phase 6.
+
 - Current local-completion code checkpoint `4d03640` on
   `codex/phase-5-identity-evidence` (parent `b0efe8f`): dedicated chat Lambda/independent optional
   AgentCore chat host, qualified UI IAM, atomic per-user/shared hourly allowances,

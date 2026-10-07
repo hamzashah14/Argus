@@ -4,6 +4,12 @@ Start with [STATE.md](STATE.md), then [WORK_LOG.md](WORK_LOG.md). The root
 `IMPLEMENTATION_TRACKER.md` is the task/gate status authority. These files explain
 the evidence and preserve context between sessions.
 
+## Current project overview
+
+[Project evolution and onboarding](../PROJECT_EVOLUTION_AND_ONBOARDING.md) is the concise
+before/after guide to phases, current workflows, UI, prerequisites and customer AWS/server setup.
+[Phase 5 completion](phase-5/LOCAL_COMPLETION.md) records current local evidence and pending gates.
+
 ## Phases 1–4 review
 
 [Engineering review](review-phases-1-4/REVIEW.md) preserves eight historical gaps
@@ -12,7 +18,7 @@ records user-authorized batches A–C, regression evidence, bootstrap/replay
 procedures, scope correction and pending live gates. R01–R08 remain VERIFYING.
 [Floci assessment](review-phases-1-4/FLOCI.md) records exact compatibility gaps
 and a cost-conscious local integration proposal. No emulator is installed and
-Phase 5 remains NOT_STARTED.
+Phase 5 is now locally complete; all six tasks remain VERIFYING with live verification pending.
 
 ## Phase 0 records
 

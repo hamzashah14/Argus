@@ -2,7 +2,8 @@
 
 Repository implementation is locally verified; **G4 is not run**. No customer
 infrastructure, live endpoint checks, model calls or notifications were performed.
-The reference spec is synthetic and cloud commands reject it. Phase 5 is not started.
+The reference spec is synthetic and cloud commands reject it. Phase 5 is now
+locally complete; [its setup guide](../phase-5/SETUP.md) adds identity and separate chat stages.
 Follow [Phase 3 deployment](../phase-3/GUIDE.md) for both standalone and AgentCore;
 this phase adds three customer-owned Lambda functions and three deployment stages.
 It creates no maintainer service and requires no paid orchestration framework.

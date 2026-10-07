@@ -16,10 +16,12 @@ local UI versus cloud processing, and the affordable standalone pilot.
 
 Set `runtime_target` to `standalone` or `agentcore` in the durable configuration.
 Both use `kira/runtime.py`, Bedrock Converse, the same pinned tool contracts and
-incident ledger. Standalone runs inside the incident Lambda, and directly in the
-web UI process for chat. AgentCore hosts the same package behind AWS IAM
-authentication; the worker/UI calls an explicit release endpoint. Desktop support
-is a later phase. Standalone still needs customer AWS credentials and connectivity.
+incident ledger. Standalone runs in separate incident and chat Lambdas.
+AgentCore hosts the same
+package behind AWS IAM, with separate incident/chat hosts and release endpoints;
+the UI invokes only its qualified chat Lambda gateway. See the current
+[Phase 5 setup](../phase-5/SETUP.md) for the added identity/chat deployment stages.
+Desktop support is a later phase. Standalone still needs customer AWS credentials and connectivity.
 
 AgentCore has a distinct Runtime/API from Agents Classic. New-account releases
 create no Classic agent, alias or action group. Existing Classic adapters remain
@@ -188,11 +190,13 @@ is not delivery, latency or production acceptance.
 
 Copy the verified routing output `RuntimeConnection` into the UI environment,
 configure customer OIDC and identity settings, and configure incident storage from the durable
-foundation. Standalone UI calls Bedrock/tools with its scoped customer role;
-AgentCore UI only needs invocation on the exact Runtime and release endpoint.
+foundation. The identity-enabled UI invokes only the dedicated qualified chat Lambda;
+In AgentCore mode the chat Lambda, rather than the UI, invokes the exact chat
+Runtime and release endpoint.
 The UI's incident read role excludes raw EVENT records. Shared-password access
 is development only. Phase 5 identity implementation is locally verified;
-real IdP/origin qualification and distributed work allowances remain pending.
+distributed work allowances are implemented locally; real IdP/origin/IAM and
+allowance/load qualification remain pending.
 
 For deployments with Phase 4 observations, follow the corrected
 [bootstrap order](../review-phases-1-4/CORRECTIONS.md#bootstrap-and-deployment-changes):
@@ -217,7 +221,8 @@ operations can continue after disconnect; client close does not prove cancellati
 Query counts, request/response bytes and time windows are bounded. CloudWatch
 Insights has no pre-query maximum billed-byte setting, so this is **not a hard
 scan-byte or dollar cap**. Validate fleet-specific scan volume/cost in staging.
-Evidence redaction is heuristic; full governance remains P5.03. TTL/lifecycle
+Phase 5 now supplies bounded redaction and reviewed governance/deletion controls;
+customer profile approval and live retention/restore verification remain pending. TTL/lifecycle
 cleanup is asynchronous, while UI reads already reject expired records.
 
 For investigation replay, use `scripts/replay_incident.py` to inspect and then

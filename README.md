@@ -9,6 +9,9 @@ This is not a qualified production release. Customers operate their own
 infrastructure and credentials; the project provides no managed service. Desktop
 packaging is planned later.
 
+Read the [project evolution and customer onboarding overview](docs/PROJECT_EVOLUTION_AND_ONBOARDING.md)
+for the original design, changes in Phases 0–5, current workflows and required manual setup.
+
 Kira investigates EC2 incidents using customer-owned Bedrock models and CloudWatch
 logs/metrics. Customers select where the same Python orchestration runs:
 `standalone` (separate incident/chat Lambdas) or `agentcore` (separate customer

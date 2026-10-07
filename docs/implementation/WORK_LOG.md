@@ -785,3 +785,31 @@ Append entries; retain previous outcomes when later work supersedes them.
   all evaluation files in the unpublished amended local checkpoint. All eight
   release bundles rerendered and read-bundle verified from clean 4d03640,
   `source_sha` matching and `source_dirty:false`. No push or cloud operation.
+
+## 2026-10-07 — Before/after project and onboarding document
+
+- User requested a complete but brief explanation before moving to Phase 6: original
+  project, work in every phase, workflow effects, current automatic/chat behavior,
+  UI changes, prerequisites and manual AWS/application/server setup, plus onboarding.
+- Read STATE, matching plan/tracker, phase work logs, original audit/baseline inventory,
+  current guides/configuration/examples, server heartbeat/collector generation and
+  current UI/runtime routing. Used actual implemented behavior and distinguished
+  historical phase checkpoints from current Phase 5 overrides.
+- Created docs/PROJECT_EVOLUTION_AND_ONBOARDING.md with Phase 0–5/corrective table,
+  runtime/deployment mapping and Mermaid diagram, ordered automatic/chat flows,
+  accurate UI scope, responsibility/configuration/server checklists and ten-step
+  future authorized onboarding. It explains local UI versus reachable HTTPS incident
+  links, static EC2/Linux inventory, public HTTPS probe limitation, model CountTokens
+  support, manual collectors/timers, reviewed grants/versions and recipient confirmation.
+- Added discoverable README/implementation-index links. Corrected obsolete direct-UI
+  chat/Phase 5-pending summaries in active Phase 3/4 guides/cost notes; historical
+  checkpoints remain preserved. Tracker headline now states local complete/live
+  pending consistently; task/gate/finding counts remain unchanged.
+- Checked current primary AWS CountTokens and CWAgent installation/scenario documents
+  read-only; cited token-count/install requirements beside the relevant claims.
+  No prices/model recommendations, credentials or private inventory were invented.
+- Documentation-only validation: repository-relative Markdown targets, manual review
+  against source/configuration, secret scan and whitespace checks. Existing 631-test
+  evidence remains unchanged; no runtime changes justify rerunning the suite.
+- No Phase 6 implementation, AWS API/deploy, paid model, email, emulator or push.
+  Live verification remains pending; user will direct the next phase afterward.

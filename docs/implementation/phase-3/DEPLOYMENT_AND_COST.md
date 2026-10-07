@@ -11,7 +11,7 @@ Each operator owns credentials, infrastructure, data and its cloud bill.
 |---|---|---|
 | Web chat and incident viewer | Customer laptop or existing Python/Streamlit host | Only while using the UI; a stable hosted UI is needed for reachable notification links |
 | Automatic capture, queues, ledger, evidence and notifications | Customer AWS: Lambda, SQS, DynamoDB, S3/KMS, SNS, CloudWatch/EventBridge | No EC2 instance dedicated to Kira |
-| Standalone investigation (default) | Customer Lambda worker; chat uses the UI process | No separate agent host; both still call paid Bedrock inference |
+| Standalone investigation (default) | Separate customer incident/chat Lambdas | No separate agent host; both still call paid Bedrock inference |
 | AgentCore investigation (optional) | Customer AgentCore Runtime and pinned endpoint, with the same ledger/tools | AWS-hosted runtime with additional consumption charges |
 | Monitored workloads | Customer's existing application infrastructure | Application costs are separate; Kira does not create the application/EC2 fleet |
 | Desktop application | Later phase, on the user's Mac/Windows computer | Not implemented; still needs customer cloud access |
@@ -23,7 +23,8 @@ provide an appropriately authenticated, reachable UI for the complete linked
 notification workflow. An existing internal host with TLS can be used; a new paid
 public domain/hosting subscription is not an intrinsic requirement. Do not deploy
 the synthetic `.invalid` URL or expose the unfinished multi-user UI publicly.
-Authentication and per-user controls remain later Phase 5 work.
+Phase 5 authentication and per-user controls are implemented locally; actual
+customer identity/origin qualification remains pending. See [current setup](../phase-5/SETUP.md).
 
 ## Manual setup that remains
 
