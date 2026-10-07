@@ -1,6 +1,7 @@
 # Phase 5 local completion
 
-7 October 2026. P5.01–P5.06 are **VERIFYING: local implementation complete**.
+7 October 2026. Code checkpoint `4d03640`, branch
+`codex/phase-5-identity-evidence`. P5.01–P5.06 are **VERIFYING: local implementation complete**.
 G5 remains **NOT_RUN**. The user explicitly deferred live verification. Earlier
 AWS/hosted-CI gates, all 20 original findings and R01–R08 remain open/verifying.
 No Phase 6 work, AWS deployment, paid model run, notification or Floci validation

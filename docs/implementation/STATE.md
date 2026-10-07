@@ -33,8 +33,8 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
-- Current local-completion checkpoint on `codex/phase-5-identity-evidence` (code commit
-  recorded after final validation): dedicated chat Lambda/independent optional
+- Current local-completion code checkpoint `4d03640` on
+  `codex/phase-5-identity-evidence` (parent `b0efe8f`): dedicated chat Lambda/independent optional
   AgentCore chat host, qualified UI IAM, atomic per-user/shared hourly allowances,
   reserved tokens and concurrency leases; bounded redaction and retained audit;
   scoped CloudTrail; reviewed versioned-evidence erasure with fenced tombstones;
@@ -46,6 +46,8 @@ Floci remains proposed/deferred; no emulator image/container was created.
   fixture patterns/paths, no changed exclusions). Locks unchanged; prior same-day
   100-package advisory scan reports zero known vulnerabilities. Live acceptance,
   customer policy/owners and provider-wide throughput/budget remain pending.
+  All eight release bundles rerendered and verified from clean 4d03640 with
+  `source_dirty:false`; synthetic cloud verification rejected before clients.
   [Completion](phase-5/LOCAL_COMPLETION.md), [evidence](evidence/phase-5/local-completion-validation.json).
 
 The checkpoints below are historical partial slices; their old task statuses do

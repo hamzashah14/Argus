@@ -7,7 +7,7 @@
   "gate": "G5 NOT_RUN",
   "branch": "codex/phase-5-identity-evidence",
   "base_checkpoint": "b0efe8f",
-  "code_checkpoint": "PENDING_LOCAL_COMMIT",
+  "code_checkpoint": "4d03640",
   "tasks": {
     "P5.01": {
       "local": "COMPLETE",
@@ -79,7 +79,7 @@
         "agentcore": 16
       }
     },
-    "clean_source_rerender": "PENDING_LOCAL_COMMIT",
+    "clean_source_rerender": "PASS: eight bundles, source_sha matches code checkpoint and source_dirty=false",
     "synthetic_cloud_guard": "PASS: eight bundles rejected before AWS client creation",
     "offline_evaluation": {
       "cases": 16,

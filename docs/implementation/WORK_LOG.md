@@ -778,3 +778,10 @@ Append entries; retain previous outcomes when later work supersedes them.
 - Final synthetic CLI guard: all eight rendered bundles rejected verify-candidate
   before any mocked client construction. The check first assumed exit 2; actual
   durable CLI contract is exit 1 on refusal, corrected and all eight PASS.
+
+- Saved complete code/tests/fixtures/docs at `4d03640` on
+  `codex/phase-5-identity-evidence` (parent `b0efe8f`). Restored baseline
+  formatting/order so its only diff is eight exact reviewed entries; included
+  all evaluation files in the unpublished amended local checkpoint. All eight
+  release bundles rerendered and read-bundle verified from clean 4d03640,
+  `source_sha` matching and `source_dirty:false`. No push or cloud operation.
