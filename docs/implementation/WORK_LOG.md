@@ -839,3 +839,35 @@ Append entries; retain previous outcomes when later work supersedes them.
   is not live AWS or real IdP qualification. No model, AWS resource, database,
   notification, emulator, production credential or Phase 6 work. Preserve the
   three pre-existing untracked logo PNG assets; no app/runtime source changed.
+
+## 2026-10-07 — Complete manual administrator onboarding checklist
+
+- User requested a document of all manual steps from administrator CLI setup to
+  UI access, explicitly including telemetry, SSO, initial user grants and SNS
+  subscription confirmations. Read STATE, Phase 5 plan/tracker/work decisions,
+  current Phase 3/4/5 setup and corrective bootstrap, UI/configuration and CLI source.
+- Created docs/ADMINISTRATOR_SETUP_CHECKLIST.md: 15 ordered steps with action
+  checkboxes, location/ownership, configuration sources and completion criteria.
+  Explains local preview versus the limited-issuer staging login needed for the
+  paid canary versus promoted operational access; no first-user auto-admin or
+  inferred browser-to-IAM permissions. Lists distinct recipients, actual inbox
+  versus SQS/publish evidence, CWAgent/metric dimensions/log samples/heartbeat,
+  readiness limitations, exact-version binding and retained deployment ordering.
+- Added root README, implementation-index and project-overview links; updated
+  STATE/tracker. All phase/task/gate/finding statuses remain unchanged. The user
+  requested documentation, not cloud deployment or Phase 6 implementation.
+- Checked 191 local Markdown targets/anchors and nine shell code blocks with
+  bash -n; checked build/render/durable/identity CLI help contracts offline.
+  Git whitespace validation passed. No runtime change or reason to repeat the
+  already recorded 631-test suite.
+- The first secret scan flagged a literal dummy cookie-secret placeholder in the
+  new TOML example. Replaced both secret entries with explicitly documented empty
+  fields requiring private configuration; did not widen exclusions or alter the
+  388-entry reviewed baseline. Final scan/links/whitespace recorded below.
+- No AWS API/deployment, paid inference, notification, dependency installation,
+  provider registration, cloud qualification or push. Existing local UI process,
+  private .env and three user logo assets are preserved.
+- Final documentation checks PASS: 192 local targets/anchors, nine shell blocks,
+  all 15 ordered steps, installed UI entrypoint and CLI help contracts; zero new
+  secret candidates against unchanged baseline 388; git diff --check PASS.
+  [Sanitized evidence](evidence/phase-5/administrator-checklist-validation.json).

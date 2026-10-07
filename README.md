@@ -11,6 +11,9 @@ packaging is planned later.
 
 Read the [project evolution and customer onboarding overview](docs/PROJECT_EVOLUTION_AND_ONBOARDING.md)
 for the original design, changes in Phases 0–5, current workflows and required manual setup.
+Use the [administrator setup checklist](docs/ADMINISTRATOR_SETUP_CHECKLIST.md)
+for the ordered manual AWS, CLI, server telemetry, SSO, user-grant and notification
+steps from preparation to first staging login and operational UI access.
 
 Kira investigates EC2 incidents using customer-owned Bedrock models and CloudWatch
 logs/metrics. Customers select where the same Python orchestration runs:

@@ -198,6 +198,9 @@ multi-account monitoring are not qualified by the current examples.
 
 ## 6. Onboarding sequence for a customer's AWS resources
 
+Use the [administrator setup checklist](ADMINISTRATOR_SETUP_CHECKLIST.md) for the
+manual actions, locations, configuration sources and completion checks for this sequence.
+
 **This is the procedure for a future authorized staging pilot, not a deployment
 performed here.** Start with one existing service and standalone execution to keep
 the pilot small; AgentCore is selectable when its additional runtime is wanted.

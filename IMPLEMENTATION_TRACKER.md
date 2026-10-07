@@ -214,4 +214,6 @@ evidence remains in the [review](docs/implementation/review-phases-1-4/REVIEW.md
 
 | 2026-10-07 | Local UI preview | Development environment prepared privately; loopback app started; actual browser login and AppTest login/setup confirmed; cloud input remains disabled | [Preview evidence](docs/implementation/evidence/phase-5/local-ui-preview.json) | UI-only local check; no real SSO/AWS/Phase 6 gates closed |
 
+| 2026-10-07 | Administrator onboarding documentation | Ordered manual workstation/AWS/server/SSO/grant/notification checklist, CLI patterns and staging-login versus operational-access milestones; documentation validation only | [Administrator checklist](docs/ADMINISTRATOR_SETUP_CHECKLIST.md) | Live deployment/verification and Phase 6 remain pending; task/gate/finding counts unchanged |
+
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.

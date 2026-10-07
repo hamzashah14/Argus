@@ -33,6 +33,15 @@ Floci remains proposed/deferred; no emulator image/container was created.
 
 ## Current checkpoint and evidence
 
+- User requested all manual administrator steps before UI use. Completed
+  [administrator setup checklist](../ADMINISTRATOR_SETUP_CHECKLIST.md): customer
+  responsibilities, local preparation/private inputs, scoped AWS/model/quota setup,
+  SSO registration, inspected CLI foundations/candidates, server telemetry and
+  heartbeat, initial user grant, staging login/canary ordering, promoted UI role,
+  real subscription/inbox/link checks and readiness/operations. Linked from README,
+  implementation index and project overview. Documentation only; deployment and
+  Phase 6 remain unauthorized/pending, all task/gate/finding statuses unchanged.
+
 - User requested a local app run and SSO explanation. Development-password UI
   is started on `http://127.0.0.1:8501`; generated password exists only in ignored
   `.env` (0600). Restart via `.venv/bin/python .local/dev/start_ui.py`; inspect

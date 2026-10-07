@@ -8,6 +8,9 @@ the evidence and preserve context between sessions.
 
 [Project evolution and onboarding](../PROJECT_EVOLUTION_AND_ONBOARDING.md) is the concise
 before/after guide to phases, current workflows, UI, prerequisites and customer AWS/server setup.
+[Administrator setup checklist](../ADMINISTRATOR_SETUP_CHECKLIST.md) lists the manual
+work in deployment order, including CLI stages, collectors/heartbeat, SSO, initial
+user grants, UI connection settings and real notification checks.
 [Phase 5 completion](phase-5/LOCAL_COMPLETION.md) records current local evidence and pending gates.
 
 ## Phases 1–4 review
