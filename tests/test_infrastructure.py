@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from infra import reconcile, release, templates
-from infra.spec import ROOT, alarm_descriptors, load, log_groups, metric_catalog, topic_arn
+from infra import durable, durable_ops, reconcile, release, templates
+from infra.spec import ROOT, alarm_descriptors, load, log_groups, metric_catalog, name, topic_arn
 from infra.verify import (
     VerificationError,
     assert_account,
@@ -30,7 +30,7 @@ def test_same_and_split_region_ownership(spec):
         spec["bedrock_region"] = region
         rendered = examples(spec)
         for stage, template in rendered.items():
-            expected = spec[release.STAGES[stage]]
+            expected = durable_ops.stage_region(spec, stage)
             assert template["Metadata"]["Kira"]["ExpectedRegion"] == expected
             assert template["Metadata"]["Kira"]["Environment"] == "staging"
         assert templates.bucket_name(spec, "tools") != templates.bucket_name(spec, "monitor")
@@ -53,21 +53,12 @@ def test_staging_and_production_have_disjoint_physical_names(spec):
 def test_new_candidate_never_references_previous_release(spec):
     before = examples(spec)
     after = examples({**spec, "release_id": "next002"})
-    for stage in release.IMMUTABLE:
+    for stage in ("owned-tools",):
         assert spec["release_id"] not in json.dumps(after[stage])
-        assert release.stack_name(spec, stage) != release.stack_name({**spec, "release_id": "next002"}, stage)
-    assert before["tools"]["Resources"]["Agent"]["Properties"]["AutoPrepare"] is False
-    for logical in ("Logs", "Metrics"):
-        permission = before["tools"]["Resources"][logical + "Permission"]["Properties"]
-        assert permission["FunctionName"] == {"Ref": logical + "Version"}
-        assert permission["SourceArn"] == {"Fn::GetAtt": ["Agent", "AgentArn"]}
-
-
-def test_release_specific_fallback_remains_isolated(spec):
-    spec["executor_mode"] = "release-name"
-    t = examples(spec)["tools"]
-    assert t["Resources"]["LogsPermission"]["Properties"]["FunctionName"] == templates.att("Logs")
-    assert spec["release_id"] in t["Resources"]["Logs"]["Properties"]["FunctionName"]
+        assert name(spec, stage, True) != name({**spec, "release_id": "next002"}, stage, True)
+    tools = before["owned-tools"]["Resources"]
+    assert not any(r["Type"].startswith("AWS::Bedrock::") for r in tools.values())
+    assert not any(r["Type"] == "AWS::Lambda::Permission" for r in tools.values())
 
 
 def test_retention_and_exact_artifact_versions(spec):
@@ -116,10 +107,10 @@ def test_roles_cannot_deploy_and_only_log_tool_reads_secret(spec):
                     if "secretsmanager:GetSecretValue" in actions:
                         allowed_secret_roles.append((stage, logical))
                         assert ":secret:kira-staging/log-cursor-" in statement["Resource"]
-    assert allowed_secret_roles == [("tools", "LogsRole")]
-    log_policy = rendered["tools"]["Resources"]["LogsRole"]["Properties"]["Policies"][0]["PolicyDocument"][
-        "Statement"
-    ]
+    assert allowed_secret_roles == [("owned-tools", "LogsRole")]
+    log_policy = rendered["owned-tools"]["Resources"]["LogsRole"]["Properties"]["Policies"][0][
+        "PolicyDocument"
+    ]["Statement"]
     query = next(s for s in log_policy if "logs:StartQuery" in s["Action"])
     assert all(":log-group:/kira/staging/i-0123456789abcdef0/" in arn for arn in query["Resource"])
     assert query["Condition"]["StringEquals"]["aws:RequestedRegion"] == spec["monitor_region"]
@@ -132,6 +123,7 @@ def test_roles_cannot_deploy_and_only_log_tool_reads_secret(spec):
         lambda s: s.update(environment="prod"),
         lambda s: s.update(reserved_concurrency=0),
         lambda s: s.update(model_arns=["*"]),
+        lambda s: s.update(executor_mode="release-name"),
         lambda s: s.update(ui_principal_arn=s["deployment_role_arn"]),
         lambda s: s["instances"].append(copy.deepcopy(s["instances"][0])),
     ],
@@ -321,14 +313,19 @@ def test_receipt_requires_exact_recent_candidate():
 
 
 def test_local_bundle_tamper_detected(spec, tmp_path):
-    bundle = release.render(ROOT / "infra/deployment.example.json", tmp_path)
-    assert release.read_bundle(tmp_path, bundle["review_hash"])["spec"] == {**spec, "reference_only": True}
+    bundle = durable.render(
+        ROOT / "infra/deployment.example.json", ROOT / "infra/durable.example.json", tmp_path
+    )
+    assert durable_ops.read_bundle(tmp_path, bundle["review_hash"])["spec"] == {
+        **spec,
+        "reference_only": True,
+    }
     path = tmp_path / "foundation-tools.json"
     value = json.loads(path.read_text())
     value["Resources"]["Artifacts"]["Properties"]["BucketName"] = "unrelated"
     path.write_text(json.dumps(value))
-    with pytest.raises(VerificationError, match="Template"):
-        release.read_bundle(tmp_path, bundle["review_hash"])
+    with pytest.raises(VerificationError, match="template"):
+        durable_ops.read_bundle(tmp_path, bundle["review_hash"])
 
 
 def test_cursor_uses_pinned_secret_and_does_not_refresh_to_current(monkeypatch):
@@ -393,65 +390,6 @@ def test_already_disabled_retired_alarm_does_not_block_routing(spec):
     assert reconcile.plan(spec, [item], "worker")["disable_alarms"] == []
 
 
-def test_ingestion_dispatch_notification_roles_have_separate_scopes(spec):
-    rendered = examples(spec)
-    roles = [
-        rendered["foundation-monitor"]["Resources"][name] for name in ("IngestionRole", "NotificationRole")
-    ]
-    roles.append(rendered["worker"]["Resources"]["DispatchRole"])
-    actions = [
-        role["Properties"]["Policies"][0]["PolicyDocument"]["Statement"][0]["Action"] for role in roles
-    ]
-    assert actions == ["sqs:SendMessage", "sns:Publish", "lambda:InvokeFunction"]
-    assert rendered["worker"]["Resources"]["Worker"]["Properties"]["Role"] == templates.att("WorkerRole")
-
-
-def canary_events(status="no_data"):
-    events = []
-    for tool, body in (
-        ("fetch_logs", {"status": "log_groups_found", "log_groups": []}),
-        ("fetch_metrics", {"status": status, "descriptor": {}}),
-    ):
-        events.append(
-            {
-                "trace": {
-                    "trace": {
-                        "orchestrationTrace": {
-                            "invocationInput": {"actionGroupInvocationInput": {"actionGroupName": tool}}
-                        }
-                    }
-                }
-            }
-        )
-        events.append(
-            {
-                "trace": {
-                    "trace": {
-                        "orchestrationTrace": {
-                            "observation": {"actionGroupInvocationOutput": {"text": json.dumps(body)}}
-                        }
-                    }
-                }
-            }
-        )
-    return events + [{"chunk": {"bytes": b"Both tools returned"}}]
-
-
-def test_canary_requires_actual_successful_tool_observations(spec):
-    bundle = {"spec": spec, "bindings": {"agent_id": "ABCDEFGHIJ", "alias_id": "KLMNOPQRST"}}
-    client = MagicMock()
-    client.invoke_agent.return_value = {"completion": canary_events()}
-    assert release.candidate_canary(bundle, lambda *args: client) == ["fetch_logs", "fetch_metrics"]
-    for events in (
-        canary_events("error"),
-        [{"chunk": {"bytes": b"I used both tools"}}],
-        canary_events()[:-1],
-    ):
-        client.invoke_agent.return_value = {"completion": events}
-        with pytest.raises(VerificationError):
-            release.candidate_canary(bundle, lambda *args: client)
-
-
 def test_missing_receipt_fails_safely():
     with pytest.raises(VerificationError):
         release.require_receipt({"review_hash": "test"}, None)
@@ -462,7 +400,7 @@ def test_cloud_change_set_template_mismatch_cannot_execute(spec):
         "spec": spec,
         "stages": {
             "tools": {
-                "stack": release.stack_name(spec, "tools"),
+                "stack": "candidate-tools",
                 "region": spec["bedrock_region"],
                 "template_hash": "expected",
             }
@@ -477,18 +415,10 @@ def test_cloud_change_set_template_mismatch_cannot_execute(spec):
 
 
 def test_released_roles_are_retained_with_published_functions(spec):
-    for stage in ("tools", "worker"):
+    for stage in ("owned-tools",):
         for resource in examples(spec)[stage]["Resources"].values():
             if resource["Type"] == "AWS::IAM::Role":
                 assert resource["DeletionPolicy"] == "Retain"
-
-
-@pytest.mark.parametrize(
-    "bindings", [[1], {"secret": {"arn": [], "version_id": None}}, {"agent_id": []}, {"worker_arn": []}]
-)
-def test_malformed_release_bindings_fail_explicitly(spec, bindings):
-    with pytest.raises(VerificationError):
-        release.validate_bindings(spec, bindings, None)
 
 
 def test_reference_inventory_never_authenticates_to_aws(spec):
@@ -505,12 +435,18 @@ def test_maintenance_disables_automatic_ingress(spec):
     assert alarms and all(r["Properties"]["ActionsEnabled"] is False for r in alarms)
 
 
-def test_seal_requires_owned_successful_stack_and_reads_protection_back(spec):
-    from infra.__main__ import seal
+def test_seal_requires_owned_successful_stack_and_reads_protection_back(spec, monkeypatch):
+    from infra.durable_ops import seal_runtime
     from infra.spec import tags
 
     client = MagicMock()
     client.get_caller_identity.return_value = {"Account": spec["account_id"]}
+    monkeypatch.setattr(durable_ops, "clients", lambda *args: client)
+    monkeypatch.setattr(
+        durable_ops.subprocess,
+        "check_output",
+        lambda argv, **kwargs: "reviewed-sha" if argv[1] == "rev-parse" else "",
+    )
     stack = {
         "StackStatus": "CREATE_COMPLETE",
         "EnableTerminationProtection": True,
@@ -518,31 +454,32 @@ def test_seal_requires_owned_successful_stack_and_reads_protection_back(spec):
     }
     client.describe_stacks.return_value = {"Stacks": [stack]}
     client.get_stack_policy.return_value = {"StackPolicyBody": json.dumps(release.SEALED_POLICY)}
-    assert seal(spec, "tools", lambda *args: client)["status"] == "SEALED"
+    assert (
+        seal_runtime(
+            {"spec": spec, "source_dirty": False, "source_sha": "reviewed-sha"},
+            "owned-tools",
+            factory=lambda *args: client,
+        )["status"]
+        == "SEALED"
+    )
     client.set_stack_policy.assert_called_once()
     client.update_termination_protection.assert_called_once()
     stack["EnableTerminationProtection"] = False
     with pytest.raises(VerificationError, match="did not take effect"):
-        seal(spec, "tools", lambda *args: client)
+        seal_runtime(
+            {"spec": spec, "source_dirty": False, "source_sha": "reviewed-sha"},
+            "owned-tools",
+            factory=lambda *args: client,
+        )
     client.reset_mock()
     stack["Tags"] = []
     with pytest.raises(VerificationError, match="owned"):
-        seal(spec, "tools", lambda *args: client)
+        seal_runtime(
+            {"spec": spec, "source_dirty": False, "source_sha": "reviewed-sha"},
+            "owned-tools",
+            factory=lambda *args: client,
+        )
     client.set_stack_policy.assert_not_called()
-
-
-@pytest.mark.parametrize("protection", [False, True])
-def test_candidate_cannot_read_or_invoke_unsealed_release(spec, protection):
-    clients = {key: MagicMock() for key in ("sts", "cloudformation", "lambda", "bedrock-agent-runtime")}
-    clients["sts"].get_caller_identity.return_value = {"Account": spec["account_id"]}
-    clients["cloudformation"].describe_stacks.return_value = {
-        "Stacks": [{"StackStatus": "CREATE_COMPLETE", "EnableTerminationProtection": protection}]
-    }
-    clients["cloudformation"].get_stack_policy.return_value = {"StackPolicyBody": "{}"}
-    with pytest.raises(VerificationError):
-        release.verify_candidate({"spec": spec, "bindings": {}}, lambda key, region: clients[key])
-    clients["lambda"].get_function.assert_not_called()
-    clients["bedrock-agent-runtime"].invoke_agent.assert_not_called()
 
 
 def test_routing_verification_rejects_alarm_and_event_drift(spec):
@@ -550,7 +487,7 @@ def test_routing_verification_rejects_alarm_and_event_drift(spec):
 
     clients = {key: MagicMock() for key in ("events", "sns", "cloudwatch")}
     rendered = examples(spec)["routing"]["Resources"]
-    worker = rendered["WorkerSubscription"]["Properties"]["Endpoint"]
+    worker = "arn:aws:sqs:eu-central-1:123456789012:ingress"
     rule = rendered["Ec2Down"]["Properties"]
     clients["events"].describe_rule.return_value = {
         "State": rule["State"],
@@ -558,6 +495,7 @@ def test_routing_verification_rejects_alarm_and_event_drift(spec):
     }
     clients["events"].list_targets_by_rule.return_value = {"Targets": rule["Targets"]}
     subscriptions = [r["Properties"] for r in rendered.values() if r["Type"] == "AWS::SNS::Subscription"]
+    subscriptions.append({"Protocol": "sqs", "Endpoint": worker, "TopicArn": topic_arn(spec, "alarms")})
     clients["sns"].get_paginator.return_value.paginate.side_effect = lambda TopicArn: [
         {
             "Subscriptions": [
@@ -584,105 +522,6 @@ def test_routing_verification_rejects_alarm_and_event_drift(spec):
         routing_health(spec, factory, worker)
 
 
-@pytest.mark.parametrize("drift", [None, "code", "environment", "model", "schema", "executor", "alias"])
-def test_candidate_checks_deployed_contracts(spec, drift):
-    import base64
-    import hashlib
-
-    rendered = examples(spec)
-    resources = rendered["tools"]["Resources"]
-    agent_properties = resources["Agent"]["Properties"]
-    bindings = {"agent_id": "ABCDEFGHIJ", "alias_id": "KLMNOPQRST", "artifacts": {}}
-    clients = {key: MagicMock() for key in ("sts", "cloudformation", "lambda", "bedrock-agent")}
-    clients["sts"].get_caller_identity.return_value = {"Account": spec["account_id"]}
-    clients["cloudformation"].describe_stacks.return_value = {
-        "Stacks": [{"StackStatus": "CREATE_COMPLETE", "EnableTerminationProtection": True}]
-    }
-    clients["cloudformation"].get_stack_policy.return_value = {
-        "StackPolicyBody": json.dumps(release.SEALED_POLICY)
-    }
-    functions = {}
-    for stage, logical, function, key in (
-        ("tools", "Logs", "fetch_logs", "logs_arn"),
-        ("tools", "Metrics", "fetch_metrics", "metrics_arn"),
-        ("worker", "Worker", "trigger_investigation", "worker_arn"),
-    ):
-        props = rendered[stage]["Resources"][logical]["Properties"]
-        arn = f"arn:aws:lambda:{spec[release.STAGES[stage]]}:{spec['account_id']}:function:{props['FunctionName']}:1"
-        bindings[key] = arn
-        bindings["artifacts"][function] = {
-            "bucket": props["Code"]["S3Bucket"],
-            "key": props["Code"]["S3Key"],
-            "version_id": props["Code"]["S3ObjectVersion"],
-            "sha256": "a" * 64,
-        }
-        functions[arn] = {
-            "Configuration": {
-                "CodeSha256": base64.b64encode(bytes.fromhex("a" * 64)).decode(),
-                "Runtime": "python3.12",
-                "State": "Active",
-                "Environment": copy.deepcopy(props["Environment"]),
-            }
-        }
-    log_env = resources["Logs"]["Properties"]["Environment"]["Variables"]
-    bindings["secret"] = {
-        "arn": log_env["LOG_CURSOR_SECRET_ARN"],
-        "version_id": log_env["LOG_CURSOR_SECRET_VERSION"],
-    }
-    clients["lambda"].get_function.side_effect = lambda FunctionName: functions[FunctionName]
-    agent = clients["bedrock-agent"]
-    alias = {"agentAliasStatus": "PREPARED", "routingConfiguration": [{"agentVersion": "1"}]}
-    agent.get_agent_alias.return_value = {"agentAlias": alias}
-    version = {"foundationModel": spec["model_id"], "instruction": agent_properties["Instruction"]}
-    agent.get_agent_version.return_value = {"agentVersion": version}
-    groups = {}
-    hashes = {}
-    for group in agent_properties["ActionGroups"]:
-        tool = group["ActionGroupName"]
-        payload = group["ApiSchema"]["Payload"]
-        hashes[tool] = hashlib.sha256(payload.encode()).hexdigest()
-        groups[tool] = {
-            "agentActionGroup": {
-                "actionGroupName": tool,
-                "actionGroupState": "ENABLED",
-                "apiSchema": {"payload": payload},
-                "actionGroupExecutor": {
-                    "lambda": bindings["logs_arn" if tool == "fetch_logs" else "metrics_arn"]
-                },
-            }
-        }
-    agent.get_paginator.return_value.paginate.return_value = [
-        {"actionGroupSummaries": [{"actionGroupId": t} for t in groups]}
-    ]
-    agent.get_agent_action_group.side_effect = lambda **kwargs: groups[kwargs["actionGroupId"]]
-    bundle = {
-        "spec": spec,
-        "bindings": bindings,
-        "schema_sha256": hashes,
-        "prompt_sha256": hashlib.sha256(version["instruction"].encode()).hexdigest(),
-    }
-    if drift == "code":
-        functions[bindings["logs_arn"]]["Configuration"]["CodeSha256"] = "changed"
-    elif drift == "environment":
-        functions[bindings["logs_arn"]]["Configuration"]["Environment"]["Variables"][
-            "ALLOWED_INSTANCE_IDS"
-        ] = "other"
-    elif drift == "model":
-        version["foundationModel"] = "other"
-    elif drift == "schema":
-        groups["fetch_logs"]["agentActionGroup"]["apiSchema"]["payload"] = "{}"
-    elif drift == "executor":
-        groups["fetch_logs"]["agentActionGroup"]["actionGroupExecutor"]["lambda"] = "other"
-    elif drift == "alias":
-        alias["routingConfiguration"] = [{"agentVersion": "DRAFT"}]
-    if drift:
-        with pytest.raises(VerificationError):
-            release.verify_candidate(bundle, lambda key, region: clients[key])
-    else:
-        result = release.verify_candidate(bundle, lambda key, region: clients[key])
-        assert result["agent_version"] == "1" and len(result["functions"]) == 3
-
-
 def test_changed_dependency_lock_requires_rebuild(spec, tmp_path):
     (tmp_path / "manifest.json").write_text(
         json.dumps(
@@ -690,7 +529,7 @@ def test_changed_dependency_lock_requires_rebuild(spec, tmp_path):
                 "python": "3.12",
                 "architecture": "x86_64",
                 "lock_sha256": "old-lock",
-                "functions": {key: {} for key in ("fetch_logs", "fetch_metrics", "trigger_investigation")},
+                "functions": {key: {} for key in ("fetch_logs", "fetch_metrics")},
             }
         )
     )

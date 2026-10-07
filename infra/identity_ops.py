@@ -14,7 +14,7 @@ from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
 from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import durable_ops, identity, owned_runtime
-from infra.__main__ import clients
+from infra.aws import clients
 from infra.spec import digest
 from infra.verify import VerificationError, assert_account
 from kira.identity import actor_id

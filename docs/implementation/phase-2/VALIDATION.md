@@ -1,3 +1,7 @@
+> Historical checkpoint: commands/counts below record validation at that phase's
+> source revision. The 7 October 2026 cleanup removed root shell deployment scripts
+> and Classic support; use current STATE and README for present-day commands.
+
 # Phase 2 validation — 2026-10-05
 
 **Repository implementation passes local checks; G2 is pending live staging.**

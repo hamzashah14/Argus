@@ -871,3 +871,46 @@ Append entries; retain previous outcomes when later work supersedes them.
   all 15 ordered steps, installed UI entrypoint and CLI help contracts; zero new
   secret candidates against unchanged baseline 388; git diff --check PASS.
   [Sanitized evidence](evidence/phase-5/administrator-checklist-validation.json).
+
+## 2026-10-07 — User-authorized repository cleanup
+
+- User requested keeping needed files and removing legacy paths after discussing
+  the retired root scripts. Read STATE/AGENTS, relevant plan/tracker and prior
+  validation; traced root scripts through configuration, Classic CLI/templates,
+  direct-trigger Lambda, chat/pipeline adapters, builders, tests and CI.
+- Removed four root shell scripts, common shell/deploy_agent helpers, legacy
+  config.env/static collector examples, direct-trigger handler/exclusive tests,
+  unguarded cloud sample generator and baseline-only Phase 0 runner files.
+  Historical audit/manifests/evidence and exact Git checkpoints remain preserved;
+  current docs direct administrators to private JSON and the owned-runtime CLI.
+- Removed Classic UI/chat/incident adapters, agent/alias templates and old infra
+  CLI operations/Phase 2 bundle flags; reject unsupported runtime choices and the
+  release-name fallback. Retained shared build/receipt/review helpers, explicit
+  standalone and AgentCore, current policies/scopes/budgets/redaction/retention.
+  Refactored service routing to avoid creating discarded Classic IAM/resources;
+  current durable routing keeps its queue, scoped UI and verification contracts.
+- Moved SDK client construction into infra.aws with unchanged timeout/retry
+  settings. Added optional factory injection to seal_runtime to test its actual
+  owned-stack/protection behavior. Useful migrated log/metric regressions moved
+  from tests/legacy into the main suite; removed only exclusive Classic behavior
+  tests and ported applicable UI/chat/tamper/account/retention tests to current APIs.
+- README now describes only current workflows; Phase 2 guide redirects to current
+  procedures and preserves historical references. Phase 1/later validation docs
+  identify superseded commands. Removed CI shell checks/lint exceptions and only
+  the dependency-free ShellCheck dev requirement/stanza; all remaining pins and
+  hashes were programmatically checked unchanged, app/lambda locks untouched.
+- First full run: 568 PASS / four fixture failures (old exception constructor,
+  changed error-case text, seal client injection/source context, chat mock missing
+  history keyword). Corrected fixtures and exercised real seal ownership checks.
+  Subsequent full run: 582 PASS; one additional executor-fallback rejection case
+  also passes. Final full-suite/layout/UI-refresh results follow below.
+- Current template checks: 8 foundation/tool/service-routing + 20 durable + 32
+  observation + 30 identity = 90 PASS. All four independent build/import verifiers
+  PASS: two tools, six pipeline functions, one ARM64 host, three observers = 12
+  ZIP pairs. Both inventory tool builds and 16 offline diagnostic cases PASS.
+  No hosted CI, native/live AgentCore boot or paid model evaluation is implied.
+- Secret scan: zero new candidates; reviewed baseline 388 unchanged. Private
+  .env/.local/cloud evidence and the three user logo assets are preserved.
+  No AWS operation, resource deletion/deploy, paid inference, notification,
+  provider change or Phase 6 advancement. Live qualification and finding closure
+  remain pending. [Evidence](evidence/phase-5/repository-cleanup-validation.json).

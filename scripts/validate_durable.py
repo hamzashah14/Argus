@@ -61,7 +61,6 @@ def examples(spec, config, *, include_bindings=False):
                 "arn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{account}:secret:kira/staging/cursor-123456",
                 "version_id": "a" * 32,
             },
-            classic=False,
         ),
     }
     if config["runtime_target"] == "agentcore":
@@ -83,9 +82,6 @@ def examples(spec, config, *, include_bindings=False):
     )
     result["routing"] = durable_templates.active_routing(
         spec,
-        f"arn:aws:lambda:{region}:{account}:function:unused-placeholder:1",
-        "",
-        "",
         foundation,
         versions,
         config["investigation_paused"],

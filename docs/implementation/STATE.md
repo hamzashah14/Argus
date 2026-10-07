@@ -1,8 +1,15 @@
 # Resume here
 
 Updated: 2026-10-07. **Phase 5 P5.01–P5.06 local implementation COMPLETE; all six tasks VERIFYING and G5 NOT_RUN.**
+**User-authorized repository cleanup is implemented; final release-layout and
+local UI refresh checks are in progress.** Root shell deployment/Classic/direct-trigger
+paths are removed; current targets are standalone and AgentCore. Current template
+checks: 90 PASS; 12 deterministic package pairs/import checks PASS. Full regression
+582 PASS, followed by a passing additional removed-fallback rejection case.
+Read [cleanup record](REPOSITORY_CLEANUP.md); final evidence/checkpoint follows.
+
 The user requested local completion and explicitly deferred live verification.
-**631 tests (109 new controls), 94 templates, 13 deterministic package/import pairs,
+**Pre-cleanup Phase 5 checkpoint: 631 tests (109 new controls), 94 templates, 13 deterministic package/import pairs,
 eight synthetic release layouts and 16 reference evaluation cases PASS.** No actual
 AWS, IdP, paid model, inbox, emulator or hosted-CI qualification; no Phase 6 work.
 Read [local completion](phase-5/LOCAL_COMPLETION.md),
@@ -32,6 +39,12 @@ Floci remains proposed/deferred; no emulator image/container was created.
   The synthetic reference spec is not authorization or infrastructure.
 
 ## Current checkpoint and evidence
+
+- User authorized removing legacy repository paths. Current build/deployment is
+  the Python CLI; server collectors/SSO/initial grants/inbox confirmations remain
+  administrator tasks. Historical audit/evidence and useful tool regressions are
+  preserved; private configuration and user logos are untouched. See
+  [cleanup](REPOSITORY_CLEANUP.md). No Phase 6 or live resource changes.
 
 - User requested all manual administrator steps before UI use. Completed
   [administrator setup checklist](../ADMINISTRATOR_SETUP_CHECKLIST.md): customer

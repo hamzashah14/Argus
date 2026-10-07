@@ -1,3 +1,7 @@
+> Historical checkpoint: commands/counts below record validation at that phase's
+> source revision. The 7 October 2026 cleanup removed root shell deployment scripts
+> and Classic support; use current STATE and README for present-day commands.
+
 # Phase 3 local validation — 6 October 2026
 
 **Local checks PASS. G3 NOT_RUN; all eight Phase 3 tasks remain VERIFYING.**

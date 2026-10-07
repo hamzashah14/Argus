@@ -190,7 +190,6 @@ def test_invalid_log_input_does_not_attempt_credential_resolution():
 
 
 def test_firing_custom_alarm_roundtrips_to_exact_metric(tmp_path, monkeypatch):
-    trigger = load_lambda("trigger_investigation")
     entry = {
         "id": "nginx-process",
         "instance_id": IID,
@@ -214,13 +213,15 @@ def test_firing_custom_alarm_roundtrips_to_exact_metric(tmp_path, monkeypatch):
             "Dimensions": [{"name": key, "value": value} for key, value in entry["dimensions"].items()],
         },
     }
-    context = trigger.incident_context(alarm)
+    from kira.metrics import alarm_metric_id
+
+    context = {"alarm_metric": {"metric_id": alarm_metric_id(IID, alarm["Trigger"])}}
     assert context["alarm_metric"]["metric_id"] == entry["id"]
     descriptor = resolve({"instance_id": IID, "metric_id": context["alarm_metric"]["metric_id"]})
     assert {item["Name"]: item["Value"] for item in descriptor["dimensions"]} == entry["dimensions"]
     assert descriptor["statistic"] == "Minimum"
     alarm["Trigger"]["Dimensions"].pop()
-    assert "metric_id" not in trigger.incident_context(alarm)["alarm_metric"]
+    assert alarm_metric_id(IID, alarm["Trigger"]) is None
 
 
 @pytest.mark.parametrize(

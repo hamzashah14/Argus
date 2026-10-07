@@ -12,6 +12,8 @@ before/after guide to phases, current workflows, UI, prerequisites and customer 
 work in deployment order, including CLI stages, collectors/heartbeat, SSO, initial
 user grants, UI connection settings and real notification checks.
 [Phase 5 completion](phase-5/LOCAL_COMPLETION.md) records current local evidence and pending gates.
+[Repository cleanup](REPOSITORY_CLEANUP.md) records the later removal of legacy
+deployment/Classic paths and distinguishes current validation from prior counts.
 
 ## Phases 1–4 review
 
@@ -39,7 +41,8 @@ Phase 5 is now locally complete; all six tasks remain VERIFYING with live verifi
 ## Reproduce the historical Phase 0 baseline
 
 Run these historical commands from a separate checkout at `badc15e`, not from
-the updated Phase 1 working tree. Embedded checks were migrated to pytest in Phase 1.
+the current working tree. Baseline-only runner files were removed in the later
+cleanup; the matching Git revision retains them. Embedded checks were migrated to pytest in Phase 1.
 For current commands, use the [Phase 1 guide](phase-1/GUIDE.md).
 
 Use Python **3.12** (verified with 3.12.14). The system Python on the original

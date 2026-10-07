@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from kira.metrics import validate_catalog  # noqa: E402 — runnable from outside the repository
 
-FUNCTIONS = ("fetch_logs", "fetch_metrics", "trigger_investigation")
+FUNCTIONS = ("fetch_logs", "fetch_metrics")
 PIPELINE_FUNCTIONS = (
     "incident_ingress",
     "incident_dispatch",

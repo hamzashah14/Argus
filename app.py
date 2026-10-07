@@ -221,20 +221,15 @@ if problems:
         st.info("Your workspace is ready for configuration. Runtime connectivity has not been checked.")
         for problem in problems:
             st.markdown(f"- {problem}")
-        if settings.runtime_target == "classic":
-            connection_example = (
-                "RUNTIME_TARGET=classic\nBEDROCK_REGION=\nBEDROCK_AGENT_ID=\nBEDROCK_AGENT_ALIAS_ID="
-            )
-        else:
-            connection_example = (
-                f"RUNTIME_TARGET={settings.runtime_target}\nBEDROCK_REGION=\nBEDROCK_MODEL_ID=\n"
-                "EXPECTED_ACCOUNT_ID=\nALLOWED_INSTANCE_IDS=\nRUNTIME_LIMITS=\nRUNTIME_RELEASE=\n"
-            )
-            connection_example += (
-                "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
-                if settings.runtime_target == "agentcore"
-                else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN="
-            )
+        connection_example = (
+            f"RUNTIME_TARGET={settings.runtime_target}\nBEDROCK_REGION=\nBEDROCK_MODEL_ID=\n"
+            "EXPECTED_ACCOUNT_ID=\nALLOWED_INSTANCE_IDS=\nRUNTIME_LIMITS=\nRUNTIME_RELEASE=\n"
+        )
+        connection_example += (
+            "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
+            if settings.runtime_target == "agentcore"
+            else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN="
+        )
         st.code(connection_example, language="bash")
         st.caption(
             "Use your AWS profile, SSO session or workload role. The first investigation verifies that the configured agent can respond."
@@ -247,10 +242,12 @@ with st.expander("Connection details", expanded=False):
         {
             "Region": settings.region,
             "Runtime": settings.runtime_target,
-            "Model": settings.model_id or "Configured by the legacy agent",
+            "Model": settings.model_id,
             "Endpoint": settings.agentcore_endpoint
             if settings.runtime_target == "agentcore"
-            else settings.alias_id,
+            else "Dedicated chat Lambda"
+            if identity.required()
+            else "Local Python runtime",
             "Environment": settings.environment,
             "Status": st.session_state.connection_state,
         }
@@ -340,8 +337,6 @@ if prompt and prompt.strip():
                 history=st.session_state.messages,
                 access_ticket=st.session_state.access_ticket,
             )
-        elif settings.runtime_target == "classic":
-            result = chat.invoke(prompt, st.session_state.session_id, settings)
         else:
             result = chat.invoke(
                 prompt, st.session_state.session_id, settings, history=st.session_state.messages

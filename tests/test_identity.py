@@ -7,7 +7,6 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 from kira import chat, execution, identity, runtime, status
-from kira.config import AppConfig
 from tests.helpers import ROOT
 
 IID = "i-0123456789abcdef0"
@@ -251,11 +250,15 @@ def test_backend_request_cannot_assert_a_role_instead_of_ticket(setup):
         execution.execute(payload)
 
 
-def test_chat_denies_before_classic_client_creation(setup):
-    settings = AppConfig("eu-central-1", "ABCDEFGHIJ", "ABCDEFGHIJ", "fixture-" * 4)
-    factory = Mock()
-    assert chat.invoke("Investigate", "test-session", settings, factory=factory).code == "ACCESS_DENIED"
-    factory.assert_not_called()
+def test_chat_denies_before_owned_runtime_invocation(setup, monkeypatch):
+    settings = Mock()
+    settings.problems.return_value = []
+    denied = Mock(side_effect=identity.AccessDenied())
+    monkeypatch.setattr(identity.Sessions, "authorize", denied)
+    execute = Mock()
+    monkeypatch.setattr(execution, "execute", execute)
+    assert chat.invoke("Investigate", "test-session", settings).code == "ACCESS_DENIED"
+    execute.assert_not_called()
 
 
 def test_status_denies_unauthenticated_before_cloud_reads(setup):

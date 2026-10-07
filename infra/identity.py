@@ -191,9 +191,6 @@ def verify_ui_role(bundle, factory):
         raise VerificationError("UI workload role ownership drifted")
     planned = durable_templates.active_routing(
         spec,
-        bundle["bindings"]["versions"]["InvestigateVersionArn"],
-        "",
-        "",
         bundle["bindings"]["foundation"],
         bundle["bindings"]["versions"],
         bundle["config"]["investigation_paused"],

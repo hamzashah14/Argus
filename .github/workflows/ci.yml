@@ -21,11 +21,10 @@ jobs:
           cache-dependency-path: requirements/*.lock
       - name: Install hash-verified development dependencies
         run: python -m pip install --require-hashes -r requirements/dev.lock
-      - name: Python, shell and schema checks
+      - name: Python and schema checks
         run: |
           ruff check .
           ruff format --check .
-          shellcheck setup-iam.sh setup-lambdas.sh deploy.sh setup-alerts.sh scripts/common.sh
           python scripts/validate_schemas.py
           python scripts/validate_infrastructure.py
           python scripts/validate_durable.py

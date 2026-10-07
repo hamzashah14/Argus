@@ -1,7 +1,8 @@
+"""Migrated original self-checks; behavior changes are documented in Phase 1 notes."""
+
 import json
 from unittest.mock import MagicMock, patch
 
-"""Migrated original self-checks; behavior changes are documented in Phase 1 notes."""
 from tests.helpers import load_lambda
 
 target = load_lambda("fetch_logs")

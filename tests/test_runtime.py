@@ -592,8 +592,6 @@ def test_chat_adapter_dispatches_selected_target_with_same_versioned_contract(mo
 
     settings = AppConfig(
         REGION,
-        "",
-        "",
         "synthetic-password-for-tests",
         runtime_target=target,
         model_id="model-v1",

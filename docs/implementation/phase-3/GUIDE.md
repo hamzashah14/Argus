@@ -23,11 +23,9 @@ the UI invokes only its qualified chat Lambda gateway. See the current
 [Phase 5 setup](../phase-5/SETUP.md) for the added identity/chat deployment stages.
 Desktop support is a later phase. Standalone still needs customer AWS credentials and connectivity.
 
-AgentCore has a distinct Runtime/API from Agents Classic. New-account releases
-create no Classic agent, alias or action group. Existing Classic adapters remain
-explicit compatibility code and do not supply the owned-runtime budget contract.
-The Phase 2 guide is historical for its Classic candidate path; use the staged
-owned workflow below for new deployments.
+The supported targets are standalone and AgentCore. Agents Classic adapters and
+the original root shell deployment scripts have been removed. Historical Phase 2
+records preserve the earlier candidate design; use the staged workflow below.
 
 ## Local preparation
 

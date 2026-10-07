@@ -10,7 +10,7 @@ from pathlib import Path
 from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import durable, durable_templates, owned_ops, reconcile, release, templates
-from infra.__main__ import clients
+from infra.aws import clients
 from infra.spec import ROOT, alarm_descriptors, digest, name, tags
 from infra.verify import (
     VerificationError,
@@ -175,8 +175,6 @@ def upload(bundle, build_dir, artifact_kind="pipeline"):
         raise VerificationError("Monitor artifact bucket is in another region")
     result = {}
     for function, entry in build["functions"].items():
-        if artifact_kind == "tools" and function == "trigger_investigation":
-            continue
         key = f"releases/{spec['release_id']}/{entry['sha256']}.zip"
         response = s3.put_object(
             Bucket=bucket,
@@ -290,13 +288,13 @@ def verify_runtime(bundle, factory=clients):
     return {"status": "PASS", "functions": len(output)}
 
 
-def seal_runtime(bundle, stage="durable-runtime"):
+def seal_runtime(bundle, stage="durable-runtime", *, factory=clients):
     require_reviewed_source(bundle)
     spec = bundle["spec"]
-    assert_account(clients("sts", spec["monitor_region"]), spec)
+    assert_account(factory("sts", spec["monitor_region"]), spec)
     if stage not in IMMUTABLE:
         raise VerificationError("Only immutable release stages can be sealed")
-    cfn, stack = owned_stack(spec, stage)
+    cfn, stack = owned_stack(spec, stage, factory=factory)
     if stack["StackStatus"] != "CREATE_COMPLETE":
         raise VerificationError("Only a newly created runtime can be sealed")
     target = name(spec, stage, True)
@@ -310,8 +308,7 @@ def seal_runtime(bundle, stage="durable-runtime"):
     return {"status": "SEALED", "stack": target}
 
 
-def phase2_gate(bundle, phase2_bundle, receipt):
-    # Retained function name for older CLI invocations; new releases never require Classic.
+def promotion_gate(bundle, receipt):
     owned_ops.promotion_gate(bundle, receipt, clients)
 
 
@@ -348,8 +345,8 @@ def verify_capture(bundle):
     return outputs
 
 
-def retirement_plan(bundle, phase2_bundle, receipt):
-    phase2_gate(bundle, phase2_bundle, receipt)
+def retirement_plan(bundle, receipt):
+    promotion_gate(bundle, receipt)
     outputs = verify_capture(bundle)
     verify_runtime(bundle)
     return reconcile.plan(
@@ -360,9 +357,9 @@ def retirement_plan(bundle, phase2_bundle, receipt):
     )
 
 
-def retire(bundle, phase2_bundle, receipt, reviewed):
+def retire(bundle, receipt, reviewed):
     require_reviewed_source(bundle)
-    current = retirement_plan(bundle, phase2_bundle, receipt)
+    current = retirement_plan(bundle, receipt)
     if current != reviewed:
         raise VerificationError("Retirement plan changed before durable cutover")
     return reconcile.apply(
@@ -385,9 +382,6 @@ def verify_routing(bundle):
     versions = bundle["bindings"]["versions"]
     desired = durable_templates.active_routing(
         spec,
-        bundle["bindings"]["versions"]["InvestigateVersionArn"],
-        "",
-        "",
         outputs,
         versions,
         bundle["config"]["investigation_paused"],
@@ -397,11 +391,8 @@ def verify_routing(bundle):
     routing_health(
         spec,
         clients,
-        versions["InvestigateVersionArn"],
         outputs["IngressQueueArn"],
-        "sqs",
-        False,
-        desired["Ec2Down"]["Properties"]["Targets"],
+        ec2_targets=desired["Ec2Down"]["Properties"]["Targets"],
     )
     sources = {
         "Ingress": outputs["IngressQueueArn"],
@@ -451,9 +442,7 @@ def verify_routing(bundle):
     return {"status": "PASS", "scope": "registration only; live delivery and latency still need tests"}
 
 
-def execute(
-    bundle, directory, stage, change_set_id, change_hash, phase2_bundle=None, receipt=None, retirement=None
-):
+def execute(bundle, directory, stage, change_set_id, change_hash, receipt=None, retirement=None):
     require_reviewed_source(bundle)
     spec = bundle["spec"]
     assert_account(clients("sts", spec["monitor_region"]), spec)
@@ -467,7 +456,7 @@ def execute(
         if retirement is None:
             raise VerificationError("Promotion requires prior release, canary receipt and retirement diff")
         runtime = {**bundle, "directory": str(directory)}
-        actual = retirement_plan(runtime, phase2_bundle, receipt)
+        actual = retirement_plan(runtime, receipt)
         if actual != retirement or actual["disable_alarms"] or actual["unsubscribe"]:
             raise VerificationError("Retire obsolete direct routing and review the resulting empty diff")
     response, actual_hash = release.inspect_change_set(bundle, stage, change_set_id, clients)
@@ -522,8 +511,6 @@ def main():
     parser.add_argument("--notification-id")
     parser.add_argument("--change-set")
     parser.add_argument("--change-set-hash")
-    parser.add_argument("--phase2-bundle", type=Path)
-    parser.add_argument("--phase2-review-hash")
     parser.add_argument("--receipt", type=Path)
     parser.add_argument("--retirement-plan", type=Path)
     args = parser.parse_args()
@@ -615,31 +602,20 @@ def main():
         elif args.command == "verify-routing":
             value = verify_routing(bundle)
         elif args.command in {"retirement-plan", "retire"}:
-            phase2 = (
-                release.read_bundle(args.phase2_bundle, args.phase2_review_hash)
-                if args.phase2_bundle
-                else None
-            )
             receipt = json.loads(args.receipt.read_text()) if args.receipt else None
             current = {**bundle, "directory": str(args.bundle)}
             value = (
-                retirement_plan(current, phase2, receipt)
+                retirement_plan(current, receipt)
                 if args.command == "retirement-plan"
-                else retire(current, phase2, receipt, json.loads(args.retirement_plan.read_text()))
+                else retire(current, receipt, json.loads(args.retirement_plan.read_text()))
             )
         else:
-            phase2 = (
-                release.read_bundle(args.phase2_bundle, args.phase2_review_hash)
-                if args.phase2_bundle
-                else None
-            )
             value = execute(
                 bundle,
                 args.bundle,
                 args.stage,
                 args.change_set,
                 args.change_set_hash,
-                phase2,
                 json.loads(args.receipt.read_text()) if args.receipt else None,
                 json.loads(args.retirement_plan.read_text()) if args.retirement_plan else None,
             )

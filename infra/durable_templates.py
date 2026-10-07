@@ -3,7 +3,17 @@
 import json
 
 from infra.spec import name, prefix, topic_arn
-from infra.templates import add_function, att, ref, resource, routing, statement, tagged, template
+from infra.templates import (
+    add_function,
+    att,
+    ref,
+    resource,
+    role,
+    service_routing,
+    statement,
+    tagged,
+    template,
+)
 
 FUNCTIONS = (
     "incident_ingress",
@@ -394,15 +404,12 @@ def foundation(spec, config):
     return t
 
 
-def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="", *, owned_bindings=None):
+def runtime(spec, config, artifacts, foundation_outputs, *, owned_bindings):
     t = template(spec, spec["monitor_region"], "Create-only incident runtime candidate")
     table_arn = foundation_outputs["TableArn"]
     bucket = foundation_outputs["EvidenceBucket"]
     key_arn = foundation_outputs["EvidenceKeyArn"]
     queue_arns = {key: foundation_outputs[key + "QueueArn"] for key in QUEUES}
-    alias_arn = (
-        f"arn:aws:bedrock:{spec['bedrock_region']}:{spec['account_id']}:agent-alias/{agent_id}/{alias_id}"
-    )
     table_read = statement(["dynamodb:GetItem", "dynamodb:Query"], [table_arn, table_arn + "/index/*"])
     table_write = statement(["dynamodb:UpdateItem", "dynamodb:PutItem"], table_arn)
 
@@ -471,14 +478,11 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
                 "REPORT_BUCKET": bucket,
                 "REPORT_KMS_KEY_ARN": key_arn,
                 "BEDROCK_REGION": spec["bedrock_region"],
-                "BEDROCK_AGENT_ID": agent_id,
-                "BEDROCK_AGENT_ALIAS_ID": alias_id,
             },
             [
                 table_read,
                 table_write,
                 sqs_receive("Work"),
-                statement("bedrock:InvokeAgent", alias_arn),
                 statement("s3:PutObject", f"arn:aws:s3:::{bucket}/incidents/*"),
                 statement(["kms:Encrypt", "kms:GenerateDataKey"], key_arn),
             ],
@@ -539,7 +543,6 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
         model_env = {key: value for key, value in previous_env.items() if not key.startswith("BEDROCK_")}
         model_env.update(caller_environment(spec, config, owned_bindings))
         model_env["ALLOW_RUNTIME_CANARY"] = "true" if spec["environment"] == "staging" else "false"
-        permissions = [p for p in permissions if p["Action"] != "bedrock:InvokeAgent"]
         definitions["incident_investigate"] = (
             logical,
             model_env,
@@ -573,9 +576,6 @@ def runtime(spec, config, artifacts, foundation_outputs, agent_id="", alias_id="
 
 def active_routing(
     spec,
-    worker_arn,
-    agent_id,
-    alias_id,
     foundation_outputs,
     versions,
     investigation_paused=False,
@@ -583,10 +583,10 @@ def active_routing(
     config=None,
     owned_bindings=None,
 ):
-    t = routing(spec, worker_arn, agent_id, alias_id)
+    t = service_routing(spec)
     r = t["Resources"]
-    del r["WorkerSubscription"]
-    del r["WorkerFailure"]
+    r["UiRole"] = role(spec, spec["ui_principal_arn"], [], service=False)
+    t["Outputs"]["UiRoleArn"] = {"Value": att("UiRole")}
     if owned_bindings is not None:
         from infra.owned_runtime import caller_environment, caller_permissions, identity_permissions
 
@@ -600,7 +600,6 @@ def active_routing(
                 statement("lambda:InvokeFunction", chat.version(spec, owned_bindings)),
                 *identity_permissions(spec, config, owned_bindings, issuer=True),
             ]
-        del t["Outputs"]["AgentConnection"]
         t["Outputs"]["RuntimeConnection"] = {
             "Value": json.dumps(
                 chat.ui_environment(spec, config, owned_bindings)

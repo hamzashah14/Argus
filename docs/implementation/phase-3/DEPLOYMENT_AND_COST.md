@@ -99,7 +99,8 @@ monthly total without those inputs. Use the
 from the customer's application bill. Billing alerts are notifications, not an
 instant hard spending cutoff. Existing limits bound automatic incident attempts,
 tokens and queries; Insights has no enforced pre-query billed-byte cap here, and
-chat quotas per user are still pending Phase 5.
+Phase 5 enforces distributed user/shared chat allowances locally; actual customer
+load/model/cost qualification remains pending.
 
 Maintainer cost can stay at local development plus any explicitly approved pilot;
 customers pay for their own deployments. If even a small live trial is unaffordable,

@@ -70,8 +70,7 @@
     },
     "executor_mode": {
       "enum": [
-        "qualified",
-        "release-name"
+        "qualified"
       ]
     },
     "notification_email": {

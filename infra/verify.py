@@ -149,15 +149,13 @@ def verify_function(client, arn, artifact):
 def routing_health(
     spec,
     clients,
-    worker_arn,
-    alarm_endpoint=None,
-    alarm_protocol="lambda",
-    include_worker_failure=True,
+    ingress_arn,
+    *,
     ec2_targets=None,
 ):
-    from infra.templates import routing
+    from infra.templates import service_routing
 
-    expected = routing(spec, worker_arn, "ABCDEFGHIJ", "KLMNOPQRST")["Resources"]
+    expected = service_routing(spec)["Resources"]
     events = clients("events", spec["monitor_region"])
     rule = events.describe_rule(Name=name(spec, "ec2-down"))
     if rule["State"] != ("DISABLED" if spec["maintenance_mode"] else "ENABLED"):
@@ -170,7 +168,7 @@ def routing_health(
         raise VerificationError("EC2 rule target differs from desired routing")
     sns = clients("sns", spec["monitor_region"])
     for topic, protocol, endpoint in (
-        ("alarms", alarm_protocol, alarm_endpoint or worker_arn),
+        ("alarms", "sqs", ingress_arn),
         ("reports", "email", spec["notification_email"]),
     ):
         subs = []
@@ -196,7 +194,6 @@ def routing_health(
         r["Properties"]["AlarmName"]: r["Properties"]
         for r in expected.values()
         if r["Type"] == "AWS::CloudWatch::Alarm"
-        and (include_worker_failure or r["Properties"]["AlarmName"] != name(spec, "worker-errors"))
     }
     alarms = clients("cloudwatch", spec["monitor_region"]).describe_alarms(AlarmNames=sorted(desired))
     actual = {a["AlarmName"]: a for a in alarms.get("MetricAlarms", [])}

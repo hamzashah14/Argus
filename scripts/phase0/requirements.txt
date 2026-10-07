@@ -1,8 +1,0 @@
-# Audit reproduction environment only; production dependency locking is P1.01.
-boto3==1.43.106
-botocore==1.43.106
-jmespath==1.1.0
-python-dateutil==2.9.0.post0
-s3transfer==0.19.2
-six==1.17.0
-urllib3==2.8.0

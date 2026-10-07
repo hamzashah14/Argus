@@ -376,9 +376,6 @@ def test_post_promotion_ui_role_trust_and_grants_are_verified(monkeypatch):
     data = bindings()
     planned = durable_templates.active_routing(
         SPEC,
-        data["versions"]["InvestigateVersionArn"],
-        "",
-        "",
         data["foundation"],
         data["versions"],
         config=CONFIG,

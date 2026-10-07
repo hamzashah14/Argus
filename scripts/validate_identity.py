@@ -47,9 +47,6 @@ def main():
                     ),
                     "routing": durable_templates.active_routing(
                         current,
-                        versions["InvestigateVersionArn"],
-                        "",
-                        "",
                         data["foundation"],
                         versions,
                         config=cfg,

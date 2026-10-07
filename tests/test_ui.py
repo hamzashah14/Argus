@@ -1,10 +1,11 @@
+import json
 import time
 from unittest.mock import Mock
 
 import pytest
 from streamlit.testing.v1 import AppTest
 
-from kira import chat, status
+from kira import chat, runtime, status
 from tests.helpers import ROOT
 
 
@@ -13,8 +14,13 @@ def settings(monkeypatch):
     for key, value in {
         "APP_PASSWORD": "synthetic-workspace-password",
         "BEDROCK_REGION": "eu-central-1",
-        "BEDROCK_AGENT_ID": "ABCDEFGHIJ",
-        "BEDROCK_AGENT_ALIAS_ID": "ABCDEFGHIJ",
+        "RUNTIME_TARGET": "standalone",
+        "EXPECTED_ACCOUNT_ID": "123456789012",
+        "BEDROCK_MODEL_ID": "fixture-model",
+        "RUNTIME_RELEASE": "a" * 64,
+        "RUNTIME_LIMITS": json.dumps(runtime.Limits().__dict__),
+        "LOGS_TOOL_ARN": "arn:aws:lambda:eu-central-1:123456789012:function:logs:1",
+        "METRICS_TOOL_ARN": "arn:aws:lambda:eu-central-1:123456789012:function:metrics:1",
         "ENVIRONMENT": "development",
     }.items():
         monkeypatch.setenv(key, value)
@@ -39,8 +45,8 @@ def test_missing_password_safe_setup(monkeypatch):
     assert not test.chat_input
 
 
-def test_missing_agent_configuration_disables_input(settings, monkeypatch):
-    monkeypatch.delenv("BEDROCK_AGENT_ID")
+def test_missing_runtime_configuration_disables_input(settings, monkeypatch):
+    monkeypatch.delenv("BEDROCK_MODEL_ID")
     test = app().run()
     assert not test.exception and test.chat_input[0].disabled
     assert any("not been checked" in item.value for item in test.info)
@@ -87,7 +93,7 @@ def test_ui_partial_answer_visible(settings, monkeypatch):
     monkeypatch.setattr(
         chat,
         "invoke",
-        lambda *args: chat.ChatResult(
+        lambda *args, **kwargs: chat.ChatResult(
             "Evidence received before interruption",
             "partial",
             "REQUEST_FAILED",

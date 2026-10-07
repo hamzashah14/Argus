@@ -51,7 +51,8 @@ have local evidence; their live qualification remains open.
 
 The runtime is **code-owned Python orchestration using Bedrock Converse**, with
 standalone/AgentCore options and no orchestration-framework service dependency.
-Agents Classic is legacy compatibility, outside the new-customer onboarding path.
+Agents Classic compatibility and the original deployment scripts have been removed.
+The original design below is preserved as history; supported targets are standalone and AgentCore.
 
 ## 3. Where it runs now
 
@@ -250,8 +251,8 @@ This overview explains the ordering; the exact command/binding procedures are in
 [current identity/chat setup](implementation/phase-5/SETUP.md) and
 [security operations](implementation/phase-5/SECURITY_OPERATIONS.md).
 **Phase 5 setup supersedes older guides' direct-UI model invocation instructions.**
-Legacy mutable shell scripts and Agents Classic walkthroughs are not the current
-production onboarding path.
+Legacy mutable scripts and Agents Classic adapters have been removed. Historical
+Phase 1/2 records describe their past checkpoints, not the current onboarding path.
 
 ## 7. What remains before production reliance
 

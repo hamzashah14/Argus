@@ -51,7 +51,7 @@ def main():
             imports.append({"function": name, "sdk_version": run.stdout.strip(), "result": "PASS"})
     evidence = {"deterministic_builds": "PASS", "isolated_imports": imports, "manifest": a}
     (ROOT / ".build/build-validation.json").write_text(json.dumps(evidence, indent=2) + "\n")
-    print("PASS: identical independent ZIPs and isolated imports for all three functions")
+    print("PASS: identical independent ZIPs and isolated imports for both read-only tools")
 
 
 if __name__ == "__main__":

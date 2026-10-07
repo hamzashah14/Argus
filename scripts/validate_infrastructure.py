@@ -14,10 +14,9 @@ from infra.spec import load, name  # noqa: E402
 
 def examples(spec):
     artifacts = {}
-    for function in ("fetch_logs", "fetch_metrics", "trigger_investigation"):
-        purpose = "monitor" if function == "trigger_investigation" else "tools"
+    for function in ("fetch_logs", "fetch_metrics"):
         artifacts[function] = {
-            "bucket": templates.bucket_name(spec, purpose),
+            "bucket": templates.bucket_name(spec, "tools"),
             "key": f"releases/{spec['release_id']}/" + "a" * 64 + ".zip",
             "version_id": "synthetic-object-version",
             "sha256": "a" * 64,
@@ -26,16 +25,11 @@ def examples(spec):
         "arn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:{name(spec, '')[:-1]}/log-cursor-AbCdEf",
         "version_id": "a" * 32,
     }
-    worker = f"arn:aws:lambda:{spec['monitor_region']}:{spec['account_id']}:function:{name(spec, 'trigger-investigation', True)}:1"
     return {
         "foundation-tools": templates.foundation(spec, "tools"),
         "foundation-monitor": templates.foundation(spec, "monitor"),
-        "tools": templates.tools_release(spec, artifacts, secret),
-        "alias": templates.candidate_alias(spec, "ABCDEFGHIJ"),
-        "worker": templates.worker_release(
-            spec, artifacts["trigger_investigation"], "ABCDEFGHIJ", "KLMNOPQRST"
-        ),
-        "routing": templates.routing(spec, worker, "ABCDEFGHIJ", "KLMNOPQRST"),
+        "owned-tools": templates.tools_release(spec, artifacts, secret),
+        "routing": templates.service_routing(spec),
     }
 
 
@@ -54,7 +48,7 @@ def main():
             [str(Path(sys.executable).parent / "cfn-lint"), "--non-zero-exit-code", "warning", "-t", *files],
             check=True,
         )
-    print("PASS: 12 generated CloudFormation templates (same and split region)")
+    print(f"PASS: {len(files)} current foundation/tool/service-routing templates (same and split region)")
 
 
 if __name__ == "__main__":

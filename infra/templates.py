@@ -7,7 +7,7 @@ import base64
 import hashlib
 import json
 
-from infra.spec import ROOT, alarm_descriptors, digest, log_groups, log_prefix, name, prefix, tags, topic_arn
+from infra.spec import alarm_descriptors, digest, log_groups, log_prefix, name, prefix, tags, topic_arn
 
 
 def ref(key):
@@ -298,10 +298,9 @@ def add_function(t, spec, logical, function, artifact, env, region, policies, ti
     return ref(logical + "Version")
 
 
-def tools_release(spec, artifacts, secret, *, classic=True):
+def tools_release(spec, artifacts, secret):
     region = spec["bedrock_region"]
-    t = template(spec, region, "Kira create-only tool and agent candidate; never update this release stack")
-    r = t["Resources"]
+    t = template(spec, region, "Kira create-only tools for code-owned orchestration")
     common = {
         "MONITOR_REGION": spec["monitor_region"],
         "ENVIRONMENT": spec["environment"],
@@ -320,7 +319,7 @@ def tools_release(spec, artifacts, secret, *, classic=True):
         for group in log_groups(spec)
     ]
     region_condition = {"StringEquals": {"aws:RequestedRegion": spec["monitor_region"]}}
-    logs_version = add_function(
+    add_function(
         t,
         spec,
         "Logs",
@@ -339,7 +338,7 @@ def tools_release(spec, artifacts, secret, *, classic=True):
         ],
         120,
     )
-    metrics_version = add_function(
+    add_function(
         t,
         spec,
         "Metrics",
@@ -352,159 +351,16 @@ def tools_release(spec, artifacts, secret, *, classic=True):
         ],
         30,
     )
-    if not classic:
-        t["Description"] = "Kira create-only tools for code-owned orchestration"
-        return t
-    executors = (
-        {"Logs": logs_version, "Metrics": metrics_version}
-        if spec["executor_mode"] == "qualified"
-        else {"Logs": att("Logs"), "Metrics": att("Metrics")}
-    )
-    r["AgentRole"] = role(
-        spec,
-        "bedrock.amazonaws.com",
-        [
-            statement("lambda:InvokeFunction", list(executors.values())),
-            statement(
-                [
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "bedrock:GetInferenceProfile",
-                    "bedrock:GetFoundationModel",
-                ],
-                spec["model_arns"],
-            ),
-        ],
-        conditions={
-            "StringEquals": {"aws:SourceAccount": spec["account_id"]},
-            "ArnLike": {"aws:SourceArn": f"arn:aws:bedrock:{region}:{spec['account_id']}:agent/*"},
-        },
-        release=True,
-    )
-    action_groups = []
-    for logical, tool in (("Logs", "fetch_logs"), ("Metrics", "fetch_metrics")):
-        action_groups.append(
-            {
-                "ActionGroupName": tool,
-                "ActionGroupState": "ENABLED",
-                "ActionGroupExecutor": {"Lambda": executors[logical]},
-                "ApiSchema": {"Payload": (ROOT / f"schemas/{tool}.json").read_text()},
-            }
-        )
-    r["Agent"] = resource(
-        "Bedrock::Agent",
-        {
-            "AgentName": name(spec, "agent", release=True),
-            "AgentResourceRoleArn": att("AgentRole"),
-            "AutoPrepare": False,
-            "FoundationModel": spec["model_id"],
-            "IdleSessionTTLInSeconds": 1800,
-            "Instruction": (ROOT / "agent-instruction.txt").read_text(),
-            "ActionGroups": action_groups,
-            "Tags": tags(spec, True),
-        },
-        retain=True,
-    )
-    for logical in ("Logs", "Metrics"):
-        r[logical + "Permission"] = resource(
-            "Lambda::Permission",
-            {
-                "FunctionName": executors[logical],
-                "Action": "lambda:InvokeFunction",
-                "Principal": "bedrock.amazonaws.com",
-                "SourceAccount": spec["account_id"],
-                "SourceArn": att("Agent", "AgentArn"),
-            },
-            retain=True,
-        )
-    t["Outputs"]["AgentId"] = {"Value": ref("Agent")}
     return t
 
 
-def candidate_alias(spec, agent_id):
-    t = template(
-        spec, spec["bedrock_region"], "Kira create-only alias for an explicitly prepared candidate agent"
-    )
-    t["Resources"]["Candidate"] = resource(
-        "Bedrock::AgentAlias",
-        {
-            "AgentId": agent_id,
-            "AgentAliasName": name(spec, "candidate", release=True),
-            "Tags": tags(spec, True),
-        },
-        retain=True,
-    )
-    t["Outputs"]["AgentAliasArn"] = {"Value": att("Candidate", "AgentAliasArn")}
-    t["Outputs"]["AgentAliasId"] = {"Value": att("Candidate", "AgentAliasId")}
-    return t
-
-
-def worker_release(spec, artifact, agent_id, alias_id):
-    t = template(
-        spec, spec["monitor_region"], "Kira create-only worker candidate; not subscribed until promotion"
-    )
-    alias = f"arn:aws:bedrock:{spec['bedrock_region']}:{spec['account_id']}:agent-alias/{agent_id}/{alias_id}"
-    env = {
-        "BEDROCK_REGION": spec["bedrock_region"],
-        "BEDROCK_AGENT_ID": agent_id,
-        "BEDROCK_AGENT_ALIAS_ID": alias_id,
-        "REPORTS_TOPIC_ARN": topic_arn(spec, "reports"),
-        "ALARM_NAME_PREFIX": prefix(spec),
-        "ALLOWED_INSTANCE_IDS": ",".join(i["id"] for i in spec["instances"]),
-    }
-    add_function(
-        t,
-        spec,
-        "Worker",
-        "trigger_investigation",
-        artifact,
-        env,
-        spec["monitor_region"],
-        [
-            statement("bedrock:InvokeAgent", alias),
-            statement("sns:Publish", topic_arn(spec, "reports")),
-        ],
-        600,
-    )
-    if spec["reserved_concurrency"] is not None:
-        t["Resources"]["Worker"]["Properties"]["ReservedConcurrentExecutions"] = spec["reserved_concurrency"]
-    t["Resources"]["DispatchRole"] = role(
-        spec, "lambda.amazonaws.com", [statement("lambda:InvokeFunction", ref("WorkerVersion"))], release=True
-    )
-    t["Resources"]["WorkerAsync"] = resource(
-        "Lambda::EventInvokeConfig",
-        {
-            "FunctionName": ref("Worker"),
-            "Qualifier": att("WorkerVersion", "Version"),
-            "MaximumRetryAttempts": 0,
-            "MaximumEventAgeInSeconds": 3600,
-        },
-    )
-    t["Resources"]["WorkerPermission"] = resource(
-        "Lambda::Permission",
-        {
-            "FunctionName": ref("WorkerVersion"),
-            "Action": "lambda:InvokeFunction",
-            "Principal": "sns.amazonaws.com",
-            "SourceAccount": spec["account_id"],
-            "SourceArn": topic_arn(spec, "alarms"),
-        },
-        retain=True,
-    )
-    return t
-
-
-def routing(spec, worker_arn, agent_id, alias_id):
+def service_routing(spec):
     t = template(
         spec,
         spec["monitor_region"],
         "Kira active routing; apply only after candidate and coverage verification",
     )
     r = t["Resources"]
-    r["WorkerSubscription"] = resource(
-        "SNS::Subscription",
-        {"Protocol": "lambda", "Endpoint": worker_arn, "TopicArn": topic_arn(spec, "alarms")},
-    )
     # Endpoint-specific logical IDs make retirement explicit. Reconciliation removes the old recipient first.
     r["Email" + digest(spec["notification_email"])[:16]] = resource(
         "SNS::Subscription",
@@ -567,39 +423,6 @@ def routing(spec, worker_arn, agent_id, alias_id):
                 "Tags": tagged(spec),
             },
         )
-    r["WorkerFailure"] = resource(
-        "CloudWatch::Alarm",
-        {
-            "AlarmName": name(spec, "worker-errors"),
-            "Namespace": "AWS/Lambda",
-            "MetricName": "Errors",
-            "Dimensions": [{"Name": "FunctionName", "Value": worker_arn.split(":")[6]}],
-            "Statistic": "Sum",
-            "Period": 300,
-            "EvaluationPeriods": 1,
-            "Threshold": 0,
-            "ComparisonOperator": "GreaterThanThreshold",
-            "TreatMissingData": "notBreaching",
-            "AlarmActions": [topic_arn(spec, "reports")],
-            "Tags": tagged(spec),
-        },
-    )
-    alias_arn = (
-        f"arn:aws:bedrock:{spec['bedrock_region']}:{spec['account_id']}:agent-alias/{agent_id}/{alias_id}"
-    )
-    r["UiRole"] = role(
-        spec, spec["ui_principal_arn"], [statement("bedrock:InvokeAgent", alias_arn)], service=False
-    )
-    t["Outputs"]["UiRoleArn"] = {"Value": att("UiRole")}
-    t["Outputs"]["AgentConnection"] = {
-        "Value": json.dumps(
-            {
-                "BEDROCK_REGION": spec["bedrock_region"],
-                "BEDROCK_AGENT_ID": agent_id,
-                "BEDROCK_AGENT_ALIAS_ID": alias_id,
-            }
-        )
-    }
     return t
 
 

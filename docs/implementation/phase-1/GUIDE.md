@@ -1,3 +1,7 @@
+> Repository cleanup (7 October 2026) removed the old shell/config.env deployment
+> interface. This phase's decisions/results are historical; current administrator
+> configuration uses private JSON and the [current checklist](../../ADMINISTRATOR_SETUP_CHECKLIST.md).
+
 # Phase 1 — correctness, builds and web UI
 
 Scope: P1.01–P1.08, customer-operated deployment. Local validation uses synthetic
@@ -15,7 +19,6 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip check
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-.venv/bin/shellcheck setup-iam.sh setup-lambdas.sh deploy.sh setup-alerts.sh scripts/common.sh
 .venv/bin/python scripts/validate_schemas.py
 .venv/bin/python -m pytest --junitxml=.build/tests.xml
 .venv/bin/python scripts/check_secrets.py
@@ -48,28 +51,11 @@ A vulnerability scan is a point-in-time advisory check, not a security guarantee
 
 ## Configuration migration
 
-- `config.env` is parsed as literal KEY=VALUE data, never sourced as shell. No
-  interpolation, command substitution, `export` statements or unknown keys.
-- Set EXPECTED_ACCOUNT_ID, MONITOR_REGION and BEDROCK_REGION. Choose ENVIRONMENT
-  from development/staging/production. STS must match before a setup script writes.
-- Tool deployment now requires INSTANCE_IDS and LOG_CURSOR_SECRET. Generate a
-  private per-environment secret with `secrets.token_urlsafe(32)`; keep it stable
-  across invocations. Rotation invalidates outstanding discovery cursors.
-- Defaults are exported to child processes. `KIRA_PYTHON` can select another Python
-  3.12 executable; setup scripts otherwise use `.venv/bin/python`.
-- Validate without AWS: `.venv/bin/python -m kira.config config.env --purpose tools`.
-  Purposes also include iam, agent and alerts, with their own required fields.
-- Production rejects TSTALIASID. Zero reserved concurrency requires explicit
-  MAINTENANCE_MODE=true. Neither validation nor that flag verifies cloud capacity.
-  The inspected account's quota is 10: the example reservation must be revisited
-  before deployment. Capacity/release gates remain P2.05/P3.07/P6.03.
-- Commercial AWS partitions only in the current scripts. Environment labels do
-  not isolate the current fixed resource names; Phase 2 adds that boundary.
-
-Private `.env`, `config.env`, credentials and real metric catalogs must not enter
-Git. Put customer catalogs in the ignored `.local/` directory and set
-METRIC_CATALOG_FILE accordingly. Catalogs are bundled into Lambda ZIPs, so treat
-customer build artifacts as private too. Never put credentials in descriptors.
+Current deployment inputs are schema-validated JSON in ignored `.local/`.
+The retired shell loader, shell exports and `python -m kira.config` command no
+longer exist. Account/inventory/metric validation is exercised by the current
+infrastructure CLI and offline tests. Runtime outputs bind the UI to qualified
+versions; see the [current setup](../phase-5/SETUP.md).
 
 ## Metric descriptors and contracts
 

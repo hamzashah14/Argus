@@ -1,3 +1,7 @@
+> Historical checkpoint: commands/counts below record validation at that phase's
+> source revision. The 7 October 2026 cleanup removed root shell deployment scripts
+> and Classic support; use current STATE and README for present-day commands.
+
 # Phase 4 local validation — 6 October 2026
 
 **Repository checks PASS. G4 NOT_RUN; P4.01–P4.06 VERIFYING.** No production

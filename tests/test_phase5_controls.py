@@ -276,9 +276,6 @@ def test_chat_ui_and_automatic_capacity_and_iam_are_independent(target):
     assert t["Resources"]["Chat"]["Properties"]["Environment"]["Variables"]["EXECUTION_PURPOSE"] == "chat"
     routing = durable_templates.active_routing(
         SPEC,
-        data["versions"]["InvestigateVersionArn"],
-        "",
-        "",
         data["foundation"],
         data["versions"],
         config=cfg,

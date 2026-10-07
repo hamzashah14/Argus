@@ -1,0 +1,67 @@
+{
+  "date": "2026-10-07",
+  "base_revision": "92e4131",
+  "scope": "User-authorized removal of legacy deployment and runtime paths; no Phase 6",
+  "removed_tracked_paths": [
+    "config.env.example",
+    "cwagent-config.example.json",
+    "deploy.sh",
+    "lambda/trigger_investigation/lambda_function.py",
+    "scripts/common.sh",
+    "scripts/deploy_agent.py",
+    "scripts/generate_sample_data.py",
+    "scripts/phase0/reproduce.py",
+    "scripts/phase0/requirements.txt",
+    "scripts/phase0/verify.py",
+    "setup-alerts.sh",
+    "setup-iam.sh",
+    "setup-lambdas.sh",
+    "tests/legacy/__init__.py",
+    "tests/legacy/test_fetch_logs.py",
+    "tests/legacy/test_fetch_metrics.py",
+    "tests/legacy/test_trigger_investigation.py"
+  ],
+  "retained_tool_regressions": [
+    "tests/test_fetch_logs_regressions.py",
+    "tests/test_fetch_metrics_regressions.py"
+  ],
+  "checks": {
+    "full_regression": {
+      "passed": 582,
+      "result": "PASS",
+      "additional_fallback_rejection": "PASS; final full suite pending"
+    },
+    "templates": {
+      "foundations_tools_service_routing": 8,
+      "durable": 20,
+      "observations": 32,
+      "identity": 30,
+      "total": 90,
+      "result": "PASS"
+    },
+    "deterministic_packages": {
+      "tools": 2,
+      "pipeline": 6,
+      "arm64_host": 1,
+      "observations": 3,
+      "total_pairs": 12,
+      "isolated_imports": "PASS"
+    },
+    "reference_evaluations": {
+      "cases": 16,
+      "result": "PASS"
+    },
+    "release_layouts": "PENDING",
+    "secret_scan": {
+      "new_candidates": 0,
+      "reviewed_baseline_candidates": 388
+    },
+    "dependencies": "Only dependency-free shellcheck-py removed from dev input/lock; remaining pins and hashes unchanged"
+  },
+  "limits": [
+    "No AWS API/resource changes or paid inference",
+    "No real OIDC, AWS, mailbox or production qualification",
+    "Task/gate/finding statuses unchanged",
+    "Private environment and user assets preserved"
+  ]
+}

@@ -357,67 +357,30 @@ def checkpoint_writer(store, claim, s3=None):
 
 
 def invoke_agent(incident, budget, checkpoint=None, *, store=None, claim=None):
-    if os.getenv("RUNTIME_TARGET", "standalone") != "classic":
-        from kira import agentcore, execution
+    from kira import agentcore, execution
 
-        payload = execution.incident_request(claim, budget)
-        target = env("RUNTIME_TARGET")
-        if target == "standalone":
-            result = execution.execute(payload, store=store, checkpoint=checkpoint)
-        elif target == "agentcore":
-            result = agentcore.invoke(
-                payload,
-                arn=env("AGENTCORE_RUNTIME_ARN"),
-                qualifier=env("AGENTCORE_ENDPOINT"),
-                region=env("BEDROCK_REGION"),
-                account=env("EXPECTED_ACCOUNT_ID"),
-                session_id=f"incident_{payload['incident_id']}_{payload['fence']}_{payload['owner']}",
-                deadline=payload["deadline"],
-            )
-        else:
-            raise ValueError("Unsupported runtime target")
-        answer = result["text"]
-        if not result["complete"]:
-            answer += "\nInvestigation incomplete; operator review required."
-        return answer, result["complete"]
-    # Explicit Classic compatibility adapter; never used by new owned-runtime IaC.
-    client = boto3.client(
-        "bedrock-agent-runtime",
-        region_name=env("BEDROCK_REGION"),
-        config=Config(
-            connect_timeout=3, read_timeout=min(20, max(5, budget - 10)), retries={"total_max_attempts": 1}
-        ),
-    )
-    deadline = time.monotonic() + budget
-    response = client.invoke_agent(
-        agentId=env("BEDROCK_AGENT_ID"),
-        agentAliasId=env("BEDROCK_AGENT_ALIAS_ID"),
-        sessionId=str(uuid.uuid4()),
-        inputText=(
-            f"Investigate instance {incident['instance_id']} near {incident['occurred_at']}. "
-            f"Trigger: {incident['kind']} {incident['state']}. Use logs and metrics. "
-            "Return concise evidence, uncertainty, remediation and follow-up."
-        ),
-    )
-    parts = []
-    saved_bytes = 0
-    stream = response["completion"]
-    try:
-        for index, chunk in enumerate(stream):
-            if time.monotonic() >= deadline or index >= 1024:
-                return "".join(parts), False
-            if "chunk" in chunk and "bytes" in chunk["chunk"]:
-                parts.append(chunk["chunk"]["bytes"].decode("utf-8", errors="replace"))
-                size = len("".join(parts).encode())
-                if checkpoint and size - saved_bytes >= 4096 and time.monotonic() < deadline - 25:
-                    checkpoint("".join(parts))
-                    saved_bytes = size
-                if size >= REPORT_LIMIT:
-                    return "".join(parts), False
-        return "".join(parts), True
-    finally:
-        if hasattr(stream, "close"):
-            stream.close()
+    target = env("RUNTIME_TARGET")
+    if target not in {"standalone", "agentcore"}:
+        raise ValueError("Unsupported runtime target")
+    payload = execution.incident_request(claim, budget)
+    if target == "standalone":
+        result = execution.execute(payload, store=store, checkpoint=checkpoint)
+    elif target == "agentcore":
+        result = agentcore.invoke(
+            payload,
+            arn=env("AGENTCORE_RUNTIME_ARN"),
+            qualifier=env("AGENTCORE_ENDPOINT"),
+            region=env("BEDROCK_REGION"),
+            account=env("EXPECTED_ACCOUNT_ID"),
+            session_id=f"incident_{payload['incident_id']}_{payload['fence']}_{payload['owner']}",
+            deadline=payload["deadline"],
+        )
+    else:
+        raise ValueError("Unsupported runtime target")
+    answer = result["text"]
+    if not result["complete"]:
+        answer += "\nInvestigation incomplete; operator review required."
+    return answer, result["complete"]
 
 
 def notify(event, context, kind):

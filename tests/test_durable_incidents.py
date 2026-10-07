@@ -418,9 +418,6 @@ def test_durable_templates_keep_capture_ahead_of_cutover_and_scope_roles():
     }
     active = durable_templates.active_routing(
         spec,
-        "arn:aws:lambda:eu-central-1:123456789012:function:worker:1",
-        "ABCDEFGHIJ",
-        "KLMNOPQRST",
         outputs,
         versions,
     )["Resources"]
@@ -430,9 +427,6 @@ def test_durable_templates_keep_capture_ahead_of_cutover_and_scope_roles():
     assert active["WorkMapping"]["Properties"]["ScalingConfig"] == {"MaximumConcurrency": 2}
     paused = durable_templates.active_routing(
         spec,
-        "arn:aws:lambda:eu-central-1:123456789012:function:worker:1",
-        "ABCDEFGHIJ",
-        "KLMNOPQRST",
         outputs,
         versions,
         True,
@@ -597,44 +591,6 @@ def test_checkpoint_reference_is_fenced_and_atomic():
     assert "lease_until>=:now" in records[0]["Update"]["ConditionExpression"]
     client.transact_write_items.side_effect = failure("TransactionCanceledException")
     assert store.checkpoint(claim, evidence, "v2", 101) == "STALE"
-
-
-def test_model_stream_checkpoints_and_always_closes(monkeypatch):
-    monkeypatch.setenv("RUNTIME_TARGET", "classic")
-    for key in ("BEDROCK_REGION", "BEDROCK_AGENT_ID", "BEDROCK_AGENT_ALIAS_ID"):
-        monkeypatch.setenv(key, "synthetic")
-    stream = MagicMock()
-    stream.__iter__.return_value = iter([{"chunk": {"bytes": b"x" * 4096}}] * 17)
-    client = MagicMock()
-    client.invoke_agent.return_value = {"completion": stream}
-    checkpoint = MagicMock()
-    with patch("boto3.client", return_value=client):
-        answer, complete = pipeline.invoke_agent(
-            {"instance_id": IID, "occurred_at": "2026-10-05T10:00:00Z", "kind": "alarm", "state": "ALARM"},
-            100,
-            checkpoint,
-        )
-    assert complete is False and len(answer) == pipeline.REPORT_LIMIT
-    assert checkpoint.call_count == 16
-    stream.close.assert_called_once()
-
-
-def test_stream_deadline_closes_without_waiting_for_final_notification(monkeypatch):
-    monkeypatch.setenv("RUNTIME_TARGET", "classic")
-    for key in ("BEDROCK_REGION", "BEDROCK_AGENT_ID", "BEDROCK_AGENT_ALIAS_ID"):
-        monkeypatch.setenv(key, "synthetic")
-    stream = MagicMock()
-    stream.__iter__.return_value = iter([{"chunk": {"bytes": b"late"}}])
-    client = MagicMock()
-    client.invoke_agent.return_value = {"completion": stream}
-    with (
-        patch("boto3.client", return_value=client),
-        patch.object(pipeline.time, "monotonic", side_effect=[0, 101]),
-    ):
-        assert pipeline.invoke_agent(
-            {"instance_id": IID, "occurred_at": "now", "kind": "alarm", "state": "ALARM"}, 100
-        ) == ("", False)
-    stream.close.assert_called_once()
 
 
 def test_status_reads_only_pinned_version_checks_hash_and_marks_partial(monkeypatch):

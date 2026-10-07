@@ -164,9 +164,7 @@ def render(
             or not re.fullmatch(r"[A-Za-z0-9-]{32,64}", secret.get("version_id", ""))
         ):
             raise VerificationError("A pinned customer cursor-secret version is required")
-        stages["owned-tools"] = templates.tools_release(
-            spec, bindings["tool_artifacts"], secret, classic=False
-        )
+        stages["owned-tools"] = templates.tools_release(spec, bindings["tool_artifacts"], secret)
     foundation = bindings.get("foundation")
     if "observability" in spec and foundation:
         stages["observation-foundation"] = observation_templates.foundation(spec, foundation, config)
@@ -305,9 +303,6 @@ def render(
                     raise VerificationError("Pipeline version must be a qualified Lambda ARN in this account")
             stages["routing"] = durable_templates.active_routing(
                 spec,
-                f"arn:aws:lambda:{spec['monitor_region']}:{spec['account_id']}:function:unused-placeholder:1",
-                "",
-                "",
                 foundation,
                 versions,
                 config["investigation_paused"],
