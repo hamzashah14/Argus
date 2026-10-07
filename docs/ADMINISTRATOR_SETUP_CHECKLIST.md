@@ -1,5 +1,11 @@
 # Administrator setup checklist: AWS backend to first UI use
 
+
+**Automation option:** use [deployment automation](DEPLOYMENT_AUTOMATION.md) for
+private configuration templates, offline dry-run, read-only checks, staged backend
+provisioning, initial grants and UI connection output. The checklist still defines
+customer IAM/bootstrap, server telemetry, provider/native-login and mailbox duties.
+
 Updated: 7 October 2026. Applies to the current Phase 5 implementation.
 
 This is the ordered manual setup guide for a customer operating Kira in their

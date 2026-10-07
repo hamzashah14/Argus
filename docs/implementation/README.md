@@ -15,6 +15,10 @@ user grants, UI connection settings and real notification checks.
 [Repository cleanup](REPOSITORY_CLEANUP.md) records the later removal of legacy
 deployment/Classic paths and distinguishes current validation from prior counts.
 
+[Deployment automation](../DEPLOYMENT_AUTOMATION.md) documents settings, dry-run,
+checks, resumable apply and scoped UI startup; [implementation track](DEPLOYMENT_AUTOMATION_PLAN.md)
+records its local verification and live limits.
+
 ## Phases 1–4 review
 
 [Engineering review](review-phases-1-4/REVIEW.md) preserves eight historical gaps

@@ -53,7 +53,10 @@ flowchart LR
 The administrator runs the Python CLI from a trusted machine. CloudFormation
 creates the configured backend in the customer's AWS account. The administrator
 also configures server telemetry, OIDC/MFA, user grants and recipient confirmations.
-There is no one-command installer or UI deployment wizard yet.
+The [deployment automation CLI](docs/DEPLOYMENT_AUTOMATION.md) supplies private
+settings templates, offline dry-run, read-only account/permission checks and
+resumable apply. Server collectors, provider registration/native login and real
+inbox confirmation remain customer tasks.
 
 Start with the [administrator checklist](docs/ADMINISTRATOR_SETUP_CHECKLIST.md).
 It distinguishes first staging login from verified operational access. Detailed
@@ -64,6 +67,8 @@ procedures are in the [backend guide](docs/implementation/phase-3/GUIDE.md),
 
 | Command / script | Current purpose |
 | --- | --- |
+| `python -m infra.automation init / dry-run / check / apply / status` | Configure, preview, preflight and resume the customer deployment |
+| `scripts/run_customer_ui.py` | Start the loopback UI from generated references with a scoped role profile |
 | `python -m infra build` | Build both inventory-bound log/metric tools |
 | `scripts/build_pipeline.py` | Build the six durable pipeline functions |
 | `scripts/build_observations.py` | Build health, notification canary and receipt functions |

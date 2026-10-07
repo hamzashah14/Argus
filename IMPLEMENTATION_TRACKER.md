@@ -219,3 +219,11 @@ evidence remains in the [review](docs/implementation/review-phases-1-4/REVIEW.md
 | 2026-10-07 | User-authorized repository cleanup | Removed root shell/Classic/direct-trigger deployment paths and obsolete dependencies/tests; retained current targets, useful tool regressions and historical evidence; 583 tests, 90 templates, 12 package pairs and eight clean-source layouts PASS; local UI refreshed | [Cleanup](docs/implementation/REPOSITORY_CLEANUP.md); [validation](docs/implementation/evidence/phase-5/repository-cleanup-validation.json) | Maintenance only; all live gates/finding statuses unchanged; no Phase 6 |
 
 **Update checklist.** After each work session: update task status and owner; attach PR/commit and relevant verification; record blockers and next action; update phase totals and overall total; evaluate any affected gate; update finding closure only with complete evidence; append the session log. Record accepted risks separately with owner and expiry. Production rollout work requires the qualified release decision described in P7.01; this tracker does not create a standing deployment authorization.
+
+
+**Deployment automation (user-authorized after local Phase 5).** DA.01–DA.05 are
+VERIFYING with local implementation complete: 640 tests/90 templates PASS; real CLI-wrapper
+offline builds and zero-new-secret checks PASS. Live acceptance remains pending.
+This does not change the 52-task phase totals, finding closure or live gate state.
+[Automation track](docs/implementation/DEPLOYMENT_AUTOMATION_PLAN.md);
+[settings/operator guide](docs/DEPLOYMENT_AUTOMATION.md).

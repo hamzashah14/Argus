@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-07",
+  "base_revision": "bace95d",
+  "scope": "User-authorized deployment automation, settings templates and offline dry-run; no Phase 6 or live deployment",
+  "checks": {
+    "regression": {
+      "passed": 640,
+      "new_cases": 57,
+      "seconds": 41.12,
+      "result": "PASS"
+    },
+    "infrastructure_templates": {
+      "foundation_tools_routing": 8,
+      "durable": 20,
+      "observations": 32,
+      "identity": 30,
+      "total": 90,
+      "result": "PASS"
+    },
+    "orchestration": {
+      "real_renderer_synthetic_sdk_build_adapters": true,
+      "standalone_agentcore_with_without_observations": 4,
+      "interruption_boundaries": 8,
+      "result": "PASS"
+    },
+    "actual_cli_wrapper_build_integration": {
+      "inventory_tools": 2,
+      "pipeline": 6,
+      "hash_verified_packages": 8,
+      "initial_identity_bootstrap_templates": 5,
+      "aws_clients": 0,
+      "result": "PASS"
+    },
+    "lint_format": {
+      "python_files": 155,
+      "result": "PASS"
+    },
+    "secret_scan": {
+      "new_candidates": 0,
+      "reviewed_baseline": 388
+    },
+    "live_aws": "NOT_RUN",
+    "clean_source_reference_render": "PENDING",
+    "documentation": {
+      "local_links": 247,
+      "shell_blocks": 34,
+      "result": "PASS"
+    }
+  },
+  "features": [
+    "private init/dry-run/check/apply/status",
+    "source/configuration review hash and private atomic journal/lock",
+    "explicit SDK session shared by subprocess adapters",
+    "fail-closed account/role/region/inventory/capacity/model catalog and permission screen",
+    "verified package upload/version/output binding and immutable candidate sealing",
+    "additive inspected CFN diffs with stable request tokens",
+    "separate AgentCore incident/chat and optional observation bootstrap",
+    "conditional initial grants and guarded native-session paid canary/retry",
+    "generated scoped UI connection and profile-verified loopback launcher"
+  ],
+  "limits": [
+    "IAM simulation is a conservative screen, not complete effective authorization or a policy generator",
+    "Customer IAM bootstrap, EC2/application/collectors, IdP/native MFA and mailbox confirmation remain external prerequisites",
+    "Automatic investigation remains paused; production cutover/live gates remain pending",
+    "No AWS API/deployment, paid inference, notification, dependency changes, hosted CI or production qualification",
+    "Existing private configuration, local preview and user logos preserved"
+  ]
+}

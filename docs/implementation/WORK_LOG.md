@@ -936,3 +936,56 @@ Append entries; retain previous outcomes when later work supersedes them.
   production qualification. P5 tasks VERIFYING/G5 NOT_RUN and all findings stay open.
 - Final current-document check: 222 local Markdown links/anchors and 26 shell
   blocks PASS; secret scan zero new candidates, reviewed baseline 388 unchanged.
+
+
+## 2026-10-07 — User-authorized deployment automation
+
+- User requested configuration-driven deployment automation with account and
+  permission checks, excluding monitored EC2/CloudWatch Agent configuration; then
+  requested dry-run and asked how deployment settings are supplied. Read STATE,
+  relevant P2/Phase 3/4/5 plan/tracker/bootstrap/identity and existing CLI gates.
+- Implemented private `init`, offline `dry-run`, read-only `check`, resumable
+  `apply`/`status`, source/config plan hash, explicit profile handling, atomic
+  owner-only journal and process lock. Existing build/render/metadata/key/CLI,
+  immutable sealing, candidate/coverage/canary/retirement and routing gates are
+  reused. Actual stack/template state is reconciled on resume, with bounded
+  automatic AWS progress waiting. Destructive/replacement diffs are blocked.
+- Added read-only identity/role/trust/region/EC2/capacity/model catalog checks and
+  conservative scoped operator/CFN-role permission screens, including PassRole
+  service/initial-grant key contexts. Missing context/results or simulation
+  denials block; modeled checks cannot prove effective session/SCP/resource IAM.
+  Read official AWS simulator/CreateChangeSet/ExecuteChangeSet documentation.
+- Added stable CFN create/execute request tokens, dependency-ordered artifact
+  binding, independent AgentCore incident/chat stages and observation bootstrap;
+  conditional initial grants, no epoch churn on matching grants, explicit paid
+  native-session canary, ambiguity/expiry retry authorization and retained history.
+  Generated UI references and a scoped-profile loopback launcher without credentials.
+- Tests use the real staged renderer with synthetic SDK/build adapters. Early
+  failures exposed missing identity fixture metadata and an invalid test Git-root
+  override; corrected fixtures. Full restricted-sandbox run also encountered six
+  existing loopback-server EPERM failures; rerun with authorized loopback access.
+  An initial 637-test run then passed; an added configuration-change rejection
+  case passes. Final full-suite/template results follow below.
+- Secret scan initially flagged two explanatory provider-setup string fields;
+  renamed misleading keys without adding exclusions or changing the 388-entry
+  baseline. Private customer work, existing local UI environment and three user
+  logos remain untouched. No dependency change/install, project AWS call, paid
+  model request, notification, cloud deployment, push or Phase 6 qualification.
+- Documented settings, commands, dry-run boundaries, resumes/failures and mandatory
+  customer IAM/EC2/provider/inbox prerequisites. DA.01–DA.05 remain VERIFYING;
+  customer acceptance and all earlier live gates/findings remain open.
+- Final regression **640 PASS in 41.12s** (57 new cases), including all four
+  runtime/observation orchestration variants, eight interruption boundaries,
+  account/permission/quota/rollback/destructive-diff denials, paid ambiguity/retry,
+  unchanged grants, source/config mutation and UI credential isolation. A final
+  review corrected reservation reconciliation to wait for complete stacks; its
+  new regression passes. Added one explicit SDK session wrapper so named profiles
+  remain consistent in every child adapter, not only the parent preflight.
+- Actual `Driver.build` through `infra.operator` built two inventory tools/six
+  pipeline ZIPs from the existing hash-verified offline wheelhouse. Real manifest/
+  source/package verification and five bootstrap renders PASS with all SDK client
+  creation blocked. No package install, download network or AWS operation.
+- 90 templates PASS (8 + 20 + 32 + 30), Ruff lint/155-file format PASS, secret scan
+  zero new candidates/baseline 388 unchanged, whitespace PASS. Initial 637/638/639
+  passing runs were intermediate; current final suite is 640. Final documentation
+  link/shell checks and clean-source reference checkpoint evidence follow below.

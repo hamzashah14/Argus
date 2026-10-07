@@ -1,6 +1,15 @@
 # Resume here
 
 Updated: 2026-10-07. **Phase 5 P5.01–P5.06 local implementation COMPLETE; all six tasks VERIFYING and G5 NOT_RUN.**
+**User-authorized deployment automation COMPLETE locally.**
+640 tests (57 added), 90 templates, lint/format and zero-new-secret checks PASS.
+Actual automation wrapper built eight verified packages and five bootstrap
+stages offline with zero AWS clients. Final clean-checkpoint evidence follows. CLI supplies private init,
+offline dry-run, read-only preflight, resumable apply/status, initial grants and
+scoped UI launcher. Real AWS/IdP/inbox acceptance remains pending; no Phase 6.
+Read [automation track](DEPLOYMENT_AUTOMATION_PLAN.md) and
+[operator/settings guide](../DEPLOYMENT_AUTOMATION.md).
+
 **User-authorized repository cleanup COMPLETE locally at code checkpoint `847b9ae`.**
 Root shell deployment/Classic/direct-trigger paths are removed; current targets
 are standalone and AgentCore. **583 regression tests, 90 templates, 12 deterministic
@@ -166,6 +175,10 @@ not supersede the current local-completion record.
   [cost/setup](phase-4/COST.md), [sanitized evidence](evidence/phase-4/local-validation.json).
 
 ## Next authorized work
+
+User authorized implementing deployment automation, including dry-run and
+configuration templates. Local implementation/validation is complete; this does not
+authorize a live AWS deployment or silent Phase 6 advancement.
 
 Local Phase 5 work is complete. Retain P5.01–P5.06 as VERIFYING; do not mark
 production acceptance or the original findings closed. Live verification remains

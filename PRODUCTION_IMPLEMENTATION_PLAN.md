@@ -437,3 +437,14 @@ Acceptance: The tracker contains final evidence and owner acceptance; operators 
 **Change and rollout safeguards.** Implement changes in reviewable increments. Every candidate manifest records code, tools, schema, prompt, model, configuration, regional stack outputs, and test versions. Use additive data migrations and maintain compatibility with the immediately previous release; do not assume reverting code reverts stored data. If a legacy resource cannot be imported safely, create a parallel owned replacement and switch routing through the pilot. Keep current operational alerting active until the new route is verified; define one owner of human-facing notifications during overlap. Pause expansion and invoke the recorded rollback if accepted incidents cannot be accounted for, initial-alert latency repeatedly breaches target, access/redaction fails, DLQs grow without recovery, or model/query costs exceed the agreed limit. Preserve queues and evidence during rollback. Record exact numerical abort thresholds in P7.01 from the measured baseline.
 
 **Definition of production completion.** All P1 audit findings must be verified closed. P2 findings must be closed or carry an explicit time-limited acceptance with owner, compensating control, and follow-up date. Every required service must appear in the deployed coverage manifest. The release must have measured staging/production delivery, capacity and cost evidence, a tested rollback, recoverable accepted incidents, and named operational ownership. A merged PR, passing unit tests, empty error dashboard, or successful SNS publish alone does not satisfy completion.
+
+
+**User-authorized deployment tooling (7 October 2026).** After local Phase 5 and
+repository cleanup, the user requested configuration-driven account/permission
+checks and automatic staged deployment, plus dry-run. This applies the existing
+P2/Phase 3/4/5 deployment gates; it is not Phase 6 qualification or production
+cutover. DA.01–DA.05 track local implementation separately without altering the
+52 reliability tasks or existing gate/finding statuses. EC2/application/collectors,
+customer IAM bootstrap, provider registration/native MFA login and mailbox
+confirmation remain customer responsibilities. See [implementation track](docs/implementation/DEPLOYMENT_AUTOMATION_PLAN.md)
+and [settings/operator guide](docs/DEPLOYMENT_AUTOMATION.md).
