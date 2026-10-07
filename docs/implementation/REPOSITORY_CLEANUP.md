@@ -58,7 +58,10 @@ This cleanup does not migrate a previously deployed Classic installation.
 
 ## Validation and limits
 
-Current offline suite and package/template/release-layout evidence is recorded in
+Code checkpoint `847b9ae`: 583 regression tests, 90 templates, 12 package/import
+pairs, eight clean-source release layouts and 16 reference evaluation cases PASS.
+The local development UI was refreshed and login/setup checks passed without AWS
+or model calls. Current offline validation evidence is recorded in
 [cleanup validation](evidence/phase-5/repository-cleanup-validation.json) and
 [WORK_LOG](WORK_LOG.md). The prior 631-test / 94-template / 13-package-pair record
 belongs to the pre-cleanup checkpoint. Counts change because obsolete functionality

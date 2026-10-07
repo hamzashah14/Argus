@@ -914,3 +914,25 @@ Append entries; retain previous outcomes when later work supersedes them.
   No AWS operation, resource deletion/deploy, paid inference, notification,
   provider change or Phase 6 advancement. Live qualification and finding closure
   remain pending. [Evidence](evidence/phase-5/repository-cleanup-validation.json).
+
+- Final full suite: `.venv/bin/python -m pytest` **583 PASS in 10.27s**; Ruff
+  lint/format (148 files), schemas, pip consistency and whitespace PASS. Checked
+  current local documentation links/anchors and shell snippets; no dependency
+  installation or upgrade. Original baseline manifest remains unchanged.
+- Code checkpoint `847b9ae` created locally. An isolated offline clean checkout
+  rendered and hash-verified all eight layouts with `source_dirty:false`:
+  `scripts/verify_durable_render.py` with default, `--identity`, `--observations`
+  and combined flags, each for standalone/AgentCore. Current inventory/tool,
+  pipeline/host/observer builds were copied without private configuration. All
+  eight synthetic bundles were rejected by `infra.durable_ops seed-health` before
+  AWS client construction. Initial evidence collection used the wrong manifest
+  filename (`release.json`); corrected to actual `bundle.json` and checks passed.
+- Restarted the verified project-owned loopback UI with the existing ignored
+  launcher/environment. AppTest used the private password internally without
+  printing it: login, connection guidance, disabled chat and zero AWS/model calls
+  PASS. Local UI remains available at http://127.0.0.1:8501/ for user testing.
+- Final cleanup validation recorded; private inputs and three user logo files
+  preserved. No push, cloud operation, paid inference, notification, Phase 6 or
+  production qualification. P5 tasks VERIFYING/G5 NOT_RUN and all findings stay open.
+- Final current-document check: 222 local Markdown links/anchors and 26 shell
+  blocks PASS; secret scan zero new candidates, reviewed baseline 388 unchanged.

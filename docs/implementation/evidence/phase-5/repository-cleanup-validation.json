@@ -27,9 +27,9 @@
   ],
   "checks": {
     "full_regression": {
-      "passed": 582,
-      "result": "PASS",
-      "additional_fallback_rejection": "PASS; final full suite pending"
+      "passed": 583,
+      "seconds": 10.27,
+      "result": "PASS"
     },
     "templates": {
       "foundations_tools_service_routing": 8,
@@ -51,17 +51,88 @@
       "cases": 16,
       "result": "PASS"
     },
-    "release_layouts": "PENDING",
+    "release_layouts": {
+      "count": 8,
+      "result": "PASS",
+      "source_dirty": false,
+      "source_revision": "847b9ae",
+      "layouts": {
+        "durable": {
+          "standalone": {
+            "stages": 6,
+            "status": "PASS",
+            "synthetic_only": true
+          },
+          "agentcore": {
+            "stages": 8,
+            "status": "PASS",
+            "synthetic_only": true
+          }
+        },
+        "durable-identity": {
+          "standalone": {
+            "stages": 9,
+            "status": "PASS",
+            "synthetic_only": true
+          },
+          "agentcore": {
+            "stages": 13,
+            "status": "PASS",
+            "synthetic_only": true
+          }
+        },
+        "observation": {
+          "standalone": {
+            "stages": 9,
+            "status": "PASS",
+            "synthetic_only": true
+          },
+          "agentcore": {
+            "stages": 11,
+            "status": "PASS",
+            "synthetic_only": true
+          }
+        },
+        "observation-identity": {
+          "standalone": {
+            "stages": 12,
+            "status": "PASS",
+            "synthetic_only": true
+          },
+          "agentcore": {
+            "stages": 16,
+            "status": "PASS",
+            "synthetic_only": true
+          }
+        }
+      },
+      "synthetic_cloud_cli_rejection": "PASS: all eight before client construction"
+    },
     "secret_scan": {
       "new_candidates": 0,
       "reviewed_baseline_candidates": 388
     },
-    "dependencies": "Only dependency-free shellcheck-py removed from dev input/lock; remaining pins and hashes unchanged"
+    "dependencies": "Only dependency-free shellcheck-py removed from dev input/lock; remaining pins and hashes unchanged",
+    "local_ui": {
+      "result": "PASS",
+      "bind": "127.0.0.1:8501",
+      "development_login": "PASS; existing private environment preserved",
+      "unconfigured_chat": "disabled",
+      "aws_calls": 0,
+      "model_calls": 0
+    },
+    "lint_format_schemas_pip_whitespace": "PASS",
+    "documentation": {
+      "local_links": 222,
+      "shell_blocks": 26,
+      "result": "PASS"
+    }
   },
   "limits": [
     "No AWS API/resource changes or paid inference",
     "No real OIDC, AWS, mailbox or production qualification",
     "Task/gate/finding statuses unchanged",
     "Private environment and user assets preserved"
-  ]
+  ],
+  "code_revision": "847b9ae"
 }

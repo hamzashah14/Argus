@@ -1,12 +1,15 @@
 # Resume here
 
 Updated: 2026-10-07. **Phase 5 P5.01–P5.06 local implementation COMPLETE; all six tasks VERIFYING and G5 NOT_RUN.**
-**User-authorized repository cleanup is implemented; final release-layout and
-local UI refresh checks are in progress.** Root shell deployment/Classic/direct-trigger
-paths are removed; current targets are standalone and AgentCore. Current template
-checks: 90 PASS; 12 deterministic package pairs/import checks PASS. Full regression
-582 PASS, followed by a passing additional removed-fallback rejection case.
-Read [cleanup record](REPOSITORY_CLEANUP.md); final evidence/checkpoint follows.
+**User-authorized repository cleanup COMPLETE locally at code checkpoint `847b9ae`.**
+Root shell deployment/Classic/direct-trigger paths are removed; current targets
+are standalone and AgentCore. **583 regression tests, 90 templates, 12 deterministic
+package/import pairs, eight clean-source synthetic release layouts and 16 reference
+evaluation cases PASS.** Synthetic cloud operations rejected before clients. Local
+UI restarted with existing private settings; development login/setup checks PASS,
+unconfigured chat disabled. Zero new secret candidates; baseline 388 unchanged.
+Read [cleanup record](REPOSITORY_CLEANUP.md) and
+[validation](evidence/phase-5/repository-cleanup-validation.json).
 
 The user requested local completion and explicitly deferred live verification.
 **Pre-cleanup Phase 5 checkpoint: 631 tests (109 new controls), 94 templates, 13 deterministic package/import pairs,
