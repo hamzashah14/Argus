@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/kira-logo-white.png">
+  <img alt="Kira" src="assets/kira-logo-black.png" width="240">
+</picture>
+
 # Kira: an AIOps assistant for your EC2 servers
 
 When a CloudWatch alarm fires, Kira reads the logs and metrics of the affected

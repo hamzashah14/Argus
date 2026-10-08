@@ -4,6 +4,7 @@ import hmac
 import os
 import time
 import uuid
+from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -14,7 +15,12 @@ from kira.config import AppConfig
 
 load_dotenv()
 settings = AppConfig.from_env()
-st.set_page_config(page_title="Kira · Infrastructure investigations", page_icon="◈", layout="wide")
+ASSETS = Path(__file__).resolve().parent / "assets"
+st.set_page_config(
+    page_title="Kira · Infrastructure investigations", page_icon=str(ASSETS / "kira-mark.png"), layout="wide"
+)
+# White wordmark for the dark theme; the square mark shows when the sidebar is collapsed.
+st.logo(str(ASSETS / "kira-logo-white.png"), size="large", icon_image=str(ASSETS / "kira-mark.png"))
 st.markdown(
     """<style>
 .block-container { max-width: 1120px; padding-top: 4.5rem; padding-bottom: 5rem; }
@@ -23,7 +29,6 @@ st.markdown(
 .kira-label { color: #5eead4; font-size: .73rem; font-weight: 700; letter-spacing: .18em; margin-bottom: .6rem; }
 .kira-title { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.12; font-weight: 650; letter-spacing: -.04em; margin-bottom: .8rem; }
 .kira-subtitle { color: #9fafc2; line-height: 1.6; max-width: 670px; margin-bottom: 1.7rem; }
-.kira-brand { font-size: 1.7rem; font-weight: 750; letter-spacing: .1em; margin-bottom: .2rem; }
 </style>""",
     unsafe_allow_html=True,
 )
@@ -82,7 +87,6 @@ if (
     st.session_state.session_expired = True
 
 with st.sidebar:
-    st.markdown('<div class="kira-brand">◈ KIRA</div>', unsafe_allow_html=True)
     st.caption("Your cloud. Your investigation.")
     st.divider()
     st.markdown("**Workspace**")

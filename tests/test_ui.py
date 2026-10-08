@@ -177,3 +177,11 @@ def test_incident_link_requires_sign_in_and_shows_authorized_report(settings, mo
     assert not signed_in.exception
     read.assert_called_once_with(incident_id)
     assert any("Redacted evidence" in item.value for item in signed_in.text_area)
+
+
+def test_brand_assets_exist_and_are_transparent_pngs():
+    from PIL import Image
+
+    for name in ("kira-mark.png", "kira-logo-white.png", "kira-logo-black.png"):
+        with Image.open(ROOT / "assets" / name) as image:
+            assert image.format == "PNG" and image.mode == "RGBA"

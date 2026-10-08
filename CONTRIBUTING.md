@@ -9,6 +9,7 @@ privately ([SECURITY.md](SECURITY.md)), never in public issues.
 | Path | What it holds |
 | --- | --- |
 | `app.py`, `.streamlit/`, `.env.example` | Streamlit web UI and its settings |
+| `assets/` | Kira logos: square mark (favicon, collapsed sidebar), white wordmark for the dark UI, black wordmark for light pages |
 | `kira/` | Shared Python runtime: orchestration, tools transport, redaction, identity module, model providers |
 | `lambda/` | Lambda handlers: read-only tools, incident handlers, observers |
 | `kira_agentcore.py` | AgentCore entry point (Bedrock only) |
