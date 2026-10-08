@@ -25,7 +25,7 @@ revocation. The case tests are in `tests/test_security_controls.py`.
 It makes no network or AWS calls and costs nothing. CI runs it.
 
 ```bash
-.venv/bin/python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
+.venv/bin/python scripts/dev/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
 ```
 
 For each case it validates the reference answer against that case's evidence. It also checks that the redaction step
@@ -41,7 +41,7 @@ charges, and write to an owner-only directory that git ignores.
 
 ```bash
 umask 077; mkdir -p .local/evaluations; chmod 700 .local/evaluations
-.venv/bin/python scripts/evaluate_diagnostics.py --live-model MODEL_ID --region REGION --allow-paid-model --repeats 3 --token-budget 100000 --output .local/evaluations/model-review.json
+.venv/bin/python scripts/dev/evaluate_diagnostics.py --live-model MODEL_ID --region REGION --allow-paid-model --repeats 3 --token-budget 100000 --output .local/evaluations/model-review.json
 ```
 
 | Flag | Meaning |

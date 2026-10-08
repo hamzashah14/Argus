@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 PRIVATE_ROOTS = {
     "AGENTS.md",
     "PRODUCTION_READINESS_AUDIT.md",

@@ -427,10 +427,10 @@ def test_release_cannot_change_during_incident_retry():
 @pytest.mark.parametrize("target", ["standalone", "agentcore"])
 def test_both_targets_use_owned_permissions_and_no_classic_dependency(target):
     from infra.spec import ROOT, load
-    from scripts.validate_durable import examples
+    from scripts.dev.validate_durable import examples
 
-    spec = load(ROOT / "infra/deployment.example.json")
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    spec = load(ROOT / "examples/deployment.example.json")
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     stages = examples(spec, {**config, "runtime_target": target})
     text = json.dumps(stages)
     assert "bedrock:InvokeAgent" not in text and "AWS::Bedrock::Agent" not in text
@@ -652,7 +652,7 @@ def test_runtime_verification_uses_injected_clients_for_stack_checks(monkeypatch
     from infra.spec import ROOT, load, tags
     from infra.verify import VerificationError
 
-    spec = load(ROOT / "infra/deployment.example.json")
+    spec = load(ROOT / "examples/deployment.example.json")
     spec["reference_only"] = False  # Only injected mocks are permitted below.
     sts, cfn, factory = MagicMock(), MagicMock(), MagicMock()
     sts.get_caller_identity.return_value = {"Account": spec["account_id"]}

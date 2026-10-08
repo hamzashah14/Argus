@@ -19,7 +19,7 @@ from kira.ledger import Ledger
 from kira.nginx import access_evidence
 from kira.observation_config import validate
 
-SPEC = load(ROOT / "infra/observability.example.json")
+SPEC = load(ROOT / "examples/observability.example.json")
 CONFIG = SPEC["observability"]
 IID = SPEC["instances"][0]["id"]
 ACCOUNT = SPEC["account_id"]
@@ -387,9 +387,9 @@ def test_email_attestation_requires_explicit_observed_id_before_aws():
 
 
 def test_templates_preserve_cost_pause_and_independent_route():
-    from scripts.validate_observations import fixtures
+    from scripts.dev.validate_observations import fixtures
 
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     stages = fixtures(SPEC, config)
     active = stages["observations"]["Resources"]
     assert active["ObserverSchedule"]["Properties"]["State"] == "DISABLED"
@@ -441,8 +441,8 @@ def test_correlation_resets_between_requests_and_survives_nested_context(capsys)
 
 
 def test_canary_schedule_matches_utc_slots_and_invalid_intervals_fail():
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
-    from scripts.validate_observations import fixtures
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
+    from scripts.dev.validate_observations import fixtures
 
     resources = fixtures(SPEC, config)["observations"]["Resources"]
     assert resources["CanarySchedule"]["Properties"]["ScheduleExpression"] == "cron(0 0 * * ? *)"
@@ -454,9 +454,9 @@ def test_canary_schedule_matches_utc_slots_and_invalid_intervals_fail():
 
 @pytest.mark.parametrize("drift", [None, "schedule", "receipt", "alarm", "filter", "dashboard", "fallback"])
 def test_registration_requires_each_independent_component(drift):
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     from infra.spec import topic_arn
-    from scripts.validate_durable import examples
+    from scripts.dev.validate_durable import examples
 
     _, bindings, _, versions = examples(SPEC, config, include_bindings=True)
     observations_versions = {
@@ -570,9 +570,9 @@ def test_future_and_naive_collector_timestamps_are_not_fresh():
 
 
 def test_complete_coverage_includes_every_rendered_alarm_and_owner():
-    from scripts.validate_observations import fixtures
+    from scripts.dev.validate_observations import fixtures
 
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     rendered = fixtures(SPEC, config)
     manifest = observation_templates.coverage_manifest(SPEC, rendered.values())
     expected = {

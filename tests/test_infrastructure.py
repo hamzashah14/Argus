@@ -16,12 +16,12 @@ from infra.verify import (
     coverage,
     exact_metric_exists,
 )
-from scripts.validate_infrastructure import examples
+from scripts.dev.validate_infrastructure import examples
 
 
 @pytest.fixture
 def spec():
-    return {**load(ROOT / "infra/deployment.example.json"), "reference_only": False}
+    return {**load(ROOT / "examples/deployment.example.json"), "reference_only": False}
 
 
 def test_same_and_split_region_ownership(spec):
@@ -395,7 +395,7 @@ def test_receipt_requires_exact_recent_candidate():
 
 def test_local_bundle_tamper_detected(spec, tmp_path):
     bundle = durable.render(
-        ROOT / "infra/deployment.example.json", ROOT / "infra/durable.example.json", tmp_path
+        ROOT / "examples/deployment.example.json", ROOT / "examples/durable.example.json", tmp_path
     )
     assert durable_ops.read_bundle(tmp_path, bundle["review_hash"])["spec"] == {
         **spec,

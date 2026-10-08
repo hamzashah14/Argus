@@ -9,7 +9,7 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from infra.observations import build_release  # noqa: E402
@@ -56,7 +56,7 @@ TARGETS = {
     },
     "observation": {
         "dir": "observation",
-        "build": lambda out: build_release(load(ROOT / "infra/observability.example.json"), out, WHEELS),
+        "build": lambda out: build_release(load(ROOT / "examples/observability.example.json"), out, WHEELS),
         "import": LAMBDA_IMPORT,
         "mismatch": "Observation packages differ between independent builds",
     },

@@ -8,9 +8,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from scripts.check_public_repository import check, forbidden_path  # noqa: E402
+from scripts.dev.check_public_repository import check, forbidden_path  # noqa: E402
 
 
 def git(root, *args):
@@ -70,7 +70,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / ".local/publication")
     args = parser.parse_args()
-    subprocess.run([sys.executable, str(ROOT / "scripts/check_secrets.py")], cwd=ROOT, check=True)
+    subprocess.run([sys.executable, str(ROOT / "scripts/dev/check_secrets.py")], cwd=ROOT, check=True)
     destination = prepare(ROOT, args.output)
     print(f"Prepared independent publication repository: {destination}")
     print("Branch: main; one initial commit; no remote configured; nothing pushed")

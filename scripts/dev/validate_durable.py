@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from infra import durable_templates, owned_runtime, templates  # noqa: E402
@@ -99,8 +99,8 @@ def examples(spec, config, *, include_bindings=False):
 
 
 def main():
-    spec = load(ROOT / "infra/deployment.example.json")
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    spec = load(ROOT / "examples/deployment.example.json")
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     with tempfile.TemporaryDirectory(prefix="kira-durable-") as temp:
         files = []
         for mode in ("same", "split"):

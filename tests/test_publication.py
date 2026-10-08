@@ -2,8 +2,8 @@ import subprocess
 
 import pytest
 
-from scripts.check_public_repository import check, forbidden_path
-from scripts.prepare_public_repo import prepare
+from scripts.dev.check_public_repository import check, forbidden_path
+from scripts.dev.prepare_public_repo import prepare
 
 
 def repository(tmp_path):
@@ -49,7 +49,7 @@ def test_private_and_unsafe_paths_are_rejected(path):
 
 
 def test_public_example_and_license_paths_are_allowed():
-    for path in (".env.example", "infra/deployment.example.json", "docs/DEPLOY.md", "LICENSE"):
+    for path in (".env.example", "examples/deployment.example.json", "docs/DEPLOY.md", "LICENSE"):
         assert not forbidden_path(path)
 
 

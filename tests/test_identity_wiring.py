@@ -9,10 +9,10 @@ from infra import identity as infrastructure
 from infra.spec import ROOT, load, name
 from infra.verify import VerificationError
 from kira import identity
-from scripts.validate_durable import examples
+from scripts.dev.validate_durable import examples
 
-SPEC = load(ROOT / "infra/deployment.example.json")
-BASE = json.loads((ROOT / "infra/durable.example.json").read_text())
+SPEC = load(ROOT / "examples/deployment.example.json")
+BASE = json.loads((ROOT / "examples/durable.example.json").read_text())
 CONFIG = {**BASE, "identity": {"issuer": "https://identity.example.invalid", "audience": "customer-ui"}}
 SECRET = {
     "SigningSecretArn": f"arn:aws:secretsmanager:{SPEC['bedrock_region']}:{SPEC['account_id']}:secret:{infrastructure.secret_name(SPEC)}-123abc",
@@ -146,7 +146,7 @@ def test_identity_metadata_and_key_version_change_release_fingerprint():
 def test_identity_config_can_render_foundations_before_secret_bindings(tmp_path):
     path = tmp_path / "config.json"
     path.write_text(json.dumps(CONFIG))
-    bundle = durable.render(ROOT / "infra/deployment.example.json", path, tmp_path / "plan")
+    bundle = durable.render(ROOT / "examples/deployment.example.json", path, tmp_path / "plan")
     for stage in ["identity-foundation", "identity-secret"]:
         assert stage in bundle["stages"] and stage in durable_ops.STAGES
         assert bundle["stages"][stage]["region"] == durable_ops.stage_region(SPEC, stage)

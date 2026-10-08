@@ -868,9 +868,11 @@ def main():
                 import shutil
 
                 targets = {
-                    "deployment.json": ROOT / "infra/deployment.example.json",
+                    "deployment.json": ROOT / "examples/deployment.example.json",
                     "runtime.json": ROOT
-                    / ("infra/identity.example.json" if args.identity else "infra/durable.example.json"),
+                    / (
+                        "examples/identity.example.json" if args.identity else "examples/durable.example.json"
+                    ),
                 }
                 if any((directory / p).exists() for p in [*targets, "automation.json"]):
                     raise VerificationError("Init never overwrites existing customer files")

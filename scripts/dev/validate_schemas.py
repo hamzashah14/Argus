@@ -7,7 +7,7 @@ from openapi_spec_validator import validate
 
 
 def main():
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     for path in sorted((root / "schemas").glob("*.json")):
         validate(json.loads(path.read_text()))
         print(f"Valid OpenAPI: {path.name}")

@@ -4,6 +4,23 @@ Kira is MIT licensed. In each pull request, describe the behavior change, the
 validation you ran and any remaining live limits. Report suspected vulnerabilities
 privately ([SECURITY.md](SECURITY.md)), never in public issues.
 
+## Project layout
+
+| Path | What it holds |
+| --- | --- |
+| `app.py`, `.streamlit/`, `.env.example` | Streamlit web UI and its settings |
+| `kira/` | Shared Python runtime: orchestration, tools transport, redaction, identity module, model providers |
+| `lambda/` | Lambda handlers: read-only tools, incident handlers, observers |
+| `kira_agentcore.py` | AgentCore entry point (Bedrock only) |
+| `schemas/`, `config/`, `agent-instruction.txt` | Tool contracts, default metric catalog and the model prompt. They ship inside the Lambda packages at these paths |
+| `infra/` | Template generators, deployment automation and operator commands (`python -m infra.automation`) |
+| `examples/` | Synthetic starting configs that `init` copies; cloud commands reject them until you replace them |
+| `scripts/` | Operator tools: run the UI, build packages, replay, collector heartbeat |
+| `scripts/dev/` | Maintainer checks used by CI: validators, build and render verification, secret and publication checks, diagnostics evaluation |
+| `tests/`, `evaluations/` | Offline tests and synthetic diagnostic cases |
+| `requirements/` | Hash-locked dependencies for the UI, development and Lambda packages |
+| `docs/` | Guides: deploy, servers, operate, acceptance, architecture |
+
 ## Set up and run the checks
 
 Use Python 3.12. Dependencies are pinned with hashes in `requirements/*.lock`; each
@@ -16,24 +33,24 @@ python3.12 -m venv .venv
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-.venv/bin/python scripts/validate_schemas.py
-.venv/bin/python scripts/validate_infrastructure.py
-.venv/bin/python scripts/validate_durable.py          # also lints the model API renders
-.venv/bin/python scripts/validate_observations.py
-.venv/bin/python scripts/validate_identity.py
-.venv/bin/python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
-.venv/bin/python scripts/check_public_repository.py
-.venv/bin/python scripts/check_secrets.py
+.venv/bin/python scripts/dev/validate_schemas.py
+.venv/bin/python scripts/dev/validate_infrastructure.py
+.venv/bin/python scripts/dev/validate_durable.py          # also lints the model API renders
+.venv/bin/python scripts/dev/validate_observations.py
+.venv/bin/python scripts/dev/validate_identity.py
+.venv/bin/python scripts/dev/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
+.venv/bin/python scripts/dev/check_public_repository.py
+.venv/bin/python scripts/dev/check_secrets.py
 ```
 
-The build check needs hash-verified Lambda wheels. `scripts/verify_build.py` builds
+The build check needs hash-verified Lambda wheels. `scripts/dev/verify_build.py` builds
 each package set twice, requires identical manifests, then imports each package with
 only its bundled dependencies. Optional targets: `tools`, `pipeline`, `agentcore`,
 `observation` (default: all four).
 
 ```bash
 .venv/bin/python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
-.venv/bin/python scripts/verify_build.py [tools] [pipeline] [agentcore] [observation]
+.venv/bin/python scripts/dev/verify_build.py [tools] [pipeline] [agentcore] [observation]
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same checks plus a `pip-audit` dependency
@@ -77,7 +94,7 @@ Review the README, guides, MIT license, dependency licenses and CI first. If you
 working repository has private history, export a fresh snapshot instead of pushing it:
 
 ```bash
-.venv/bin/python scripts/prepare_public_repo.py --output .local/publication
+.venv/bin/python scripts/dev/prepare_public_repo.py --output .local/publication
 ```
 
 The script needs committed source with no uncommitted tracked changes. It runs the

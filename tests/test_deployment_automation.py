@@ -10,7 +10,7 @@ from botocore.exceptions import ClientError
 from infra import automation, deployment_preflight, durable, identity, identity_ops, owned_runtime
 from infra.spec import name, prefix
 from infra.verify import VerificationError
-from scripts.validate_durable import examples
+from scripts.dev.validate_durable import examples
 from tests.helpers import ROOT
 
 
@@ -25,7 +25,8 @@ def configuration(
 ):
     spec = json.loads(
         (
-            ROOT / ("infra/observability.example.json" if observations else "infra/deployment.example.json")
+            ROOT
+            / ("examples/observability.example.json" if observations else "examples/deployment.example.json")
         ).read_text()
     )
     spec["environment"] = environment
@@ -34,7 +35,9 @@ def configuration(
         spec["model_provider"] = "model_api"
         spec["model_api"] = {"protocol": "openai", "base_url": "https://models.example.invalid/v1"}
     config = json.loads(
-        (ROOT / ("infra/identity.example.json" if identity else "infra/durable.example.json")).read_text()
+        (
+            ROOT / ("examples/identity.example.json" if identity else "examples/durable.example.json")
+        ).read_text()
     )
     config["runtime_target"] = target
     (tmp_path / "deployment.json").write_text(json.dumps(spec))
@@ -163,7 +166,7 @@ class FakeDriver(automation.Driver):
         # The example outputs (foundation, tools, versions) do not depend on the model provider.
         bedrock_spec = {k: v for k, v in spec.items() if k not in {"model_provider", "model_api"}}
         bedrock_spec.setdefault(
-            "model_arns", json.loads((ROOT / "infra/deployment.example.json").read_text())["model_arns"]
+            "model_arns", json.loads((ROOT / "examples/deployment.example.json").read_text())["model_arns"]
         )
         _, self.outputs, artifacts, versions = examples(
             bedrock_spec,
@@ -1162,7 +1165,7 @@ def test_init_copies_default_or_identity_runtime_and_plans(tmp_path, monkeypatch
     monkeypatch.setattr(automation, "private_dir", lambda path: path)
     assert run_main(monkeypatch, "init", "--work-dir", tmp_path, *([flag] if flag else [])) == 0
     source = "identity" if flag else "durable"
-    assert (tmp_path / "runtime.json").read_bytes() == (ROOT / f"infra/{source}.example.json").read_bytes()
+    assert (tmp_path / "runtime.json").read_bytes() == (ROOT / f"examples/{source}.example.json").read_bytes()
     assert (tmp_path / "runtime.json").stat().st_mode & 0o777 == 0o600
     assert json.loads((tmp_path / "automation.json").read_text())["initial_access"] == []
     assert "docs/DEPLOY.md" in capsys.readouterr().out

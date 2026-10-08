@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from infra import templates  # noqa: E402
 from infra.spec import load, name  # noqa: E402
@@ -34,7 +34,7 @@ def examples(spec):
 
 
 def main():
-    spec = load(ROOT / "infra/deployment.example.json")
+    spec = load(ROOT / "examples/deployment.example.json")
     with tempfile.TemporaryDirectory(prefix="kira-cfn-") as temp:
         files = []
         for region_mode in ("same", "split"):

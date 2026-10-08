@@ -8,11 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from infra import durable, durable_ops, templates  # noqa: E402
 from infra.spec import load, name, prefix  # noqa: E402
-from scripts.validate_durable import examples  # noqa: E402
+from scripts.dev.validate_durable import examples  # noqa: E402
 
 
 def main():
@@ -22,10 +22,10 @@ def main():
     parser.add_argument("--identity", action="store_true")
     args = parser.parse_args()
     spec_path = ROOT / (
-        "infra/observability.example.json" if args.observations else "infra/deployment.example.json"
+        "examples/observability.example.json" if args.observations else "examples/deployment.example.json"
     )
     spec = load(spec_path)
-    base = json.loads((ROOT / "infra/durable.example.json").read_text())
+    base = json.loads((ROOT / "examples/durable.example.json").read_text())
     pipeline, host = ROOT / ".build/pipeline-a", ROOT / ".build/agentcore-a"
 
     def pin(build, purpose, function):

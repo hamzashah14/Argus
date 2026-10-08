@@ -394,8 +394,8 @@ def test_durable_templates_keep_capture_ahead_of_cutover_and_scope_roles():
     from infra import durable_templates
     from infra.spec import ROOT, load
 
-    spec = load(ROOT / "infra/deployment.example.json")
-    config = json.loads((ROOT / "infra/durable.example.json").read_text())
+    spec = load(ROOT / "examples/deployment.example.json")
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     foundation = durable_templates.foundation(spec, config)["Resources"]
     assert foundation["IngressSubscription"]["DependsOn"] == ["IngressPolicy", "DeliveryDeadPolicy"]
     assert foundation["Incidents"]["Properties"]["StreamSpecification"]["StreamViewType"] == "KEYS_ONLY"
@@ -441,7 +441,9 @@ def test_synthetic_durable_cloud_bundle_rejected_before_credentials(tmp_path, mo
     from infra.durable import render
     from infra.spec import ROOT
 
-    bundle = render(ROOT / "infra/deployment.example.json", ROOT / "infra/durable.example.json", tmp_path)
+    bundle = render(
+        ROOT / "examples/deployment.example.json", ROOT / "examples/durable.example.json", tmp_path
+    )
     with patch.object(durable_ops, "clients") as cloud:
         monkeypatch.setattr(
             "sys.argv",

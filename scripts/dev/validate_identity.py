@@ -6,17 +6,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from infra import durable_templates, identity, owned_runtime  # noqa: E402
 from infra.spec import load, prefix  # noqa: E402
-from scripts.validate_durable import examples  # noqa: E402
+from scripts.dev.validate_durable import examples  # noqa: E402
 
 
 def main():
-    spec = load(ROOT / "infra/deployment.example.json")
-    config = json.loads((ROOT / "infra/identity.example.json").read_text())
+    spec = load(ROOT / "examples/deployment.example.json")
+    config = json.loads((ROOT / "examples/identity.example.json").read_text())
     with tempfile.TemporaryDirectory(prefix="kira-identity-") as tmp:
         files = []
         for mode in ("same", "split"):

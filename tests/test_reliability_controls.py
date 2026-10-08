@@ -18,11 +18,11 @@ from infra import durable_ops, observations, owned_ops, release, verify
 from infra.spec import ROOT, alarm_descriptors, load
 from kira import agentcore, observability, pipeline
 from kira.ledger import Ledger
-from scripts.validate_durable import examples
-from scripts.validate_observations import fixtures
+from scripts.dev.validate_durable import examples
+from scripts.dev.validate_observations import fixtures
 
-SPEC = load(ROOT / "infra/observability.example.json")
-CONFIG = json.loads((ROOT / "infra/durable.example.json").read_text())
+SPEC = load(ROOT / "examples/observability.example.json")
+CONFIG = json.loads((ROOT / "examples/durable.example.json").read_text())
 IID = "a" * 32
 REGION = SPEC["monitor_region"]
 ACCOUNT = SPEC["account_id"]
@@ -273,7 +273,7 @@ def test_notification_replay_reference_denied_before_aws(tmp_path, monkeypatch, 
     argv = [
         "replay_notification",
         "--spec",
-        str(ROOT / "infra/observability.example.json"),
+        str(ROOT / "examples/observability.example.json"),
         "--incident-id",
         IID,
         "--kind",

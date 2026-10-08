@@ -64,8 +64,8 @@ Check that file permissions let the agent read each file.
   status 200 and 502 bytes.
 - With `observability` configured, the access filter must match status 500, 502, 503 and 504.
   The coverage check rejects anything narrower: "Access filter does not cover declared
-  failed-request statuses". The example in `infra/observability.example.json` does this. The
-  default example in `infra/deployment.example.json` matches only 502 and 504.
+  failed-request statuses". The example in `examples/observability.example.json` does this. The
+  default example in `examples/deployment.example.json` matches only 502 and 504.
 - Metrics are published to `PROJECT/ENVIRONMENT/Nginx`. Without observers, both filters feed one
   metric, `nginx-upstream-errors-INSTANCE_ID`. With observers, access failures are
   `nginx-failed-requests-INSTANCE_ID` and error-log events are `nginx-diagnostic-events-INSTANCE_ID`.

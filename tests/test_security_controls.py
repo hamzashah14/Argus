@@ -19,7 +19,7 @@ from infra import durable_templates, owned_runtime, security_ops
 from infra.verify import VerificationError
 from kira import chat_gateway, diagnosis, execution, identity, runtime, safety, work_policy
 from kira.quotas import Quotas
-from scripts import evaluate_diagnostics
+from scripts.dev import evaluate_diagnostics
 from tests.test_identity import ACTOR, IID, RELEASE
 from tests.test_identity import setup as identity_fixture
 from tests.test_identity_wiring import BASE, CONFIG, SPEC, bindings

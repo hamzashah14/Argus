@@ -153,7 +153,7 @@ Commit the reviewed source before `dry-run`. The plan records the commit, so a n
 
 This makes the folder (mode 700) and three owner-only files (mode 600). It makes no AWS call and
 never overwrites existing files. The work directory must be under `.local/` in this checkout.
-Plain `init` copies `infra/durable.example.json` as `runtime.json`, which is local single-user mode.
+Plain `init` copies `examples/durable.example.json` as `runtime.json`, which is local single-user mode.
 For team sign-in add `--identity` (section 7).
 
 | File | What it holds |
@@ -210,7 +210,7 @@ The telemetry must match the inventory exactly: instance IDs, log groups, metric
 (`InstanceId`, disk `path`, process `exe`). The generated agent examples help, but installing
 and configuring agents stays your job.
 
-**`runtime.json`.** Created from `infra/durable.example.json`.
+**`runtime.json`.** Created from `examples/durable.example.json`.
 
 | Group | Settings and rules |
 | --- | --- |
@@ -224,7 +224,7 @@ These are limits and reservations, not measured production sizing. Do not add an
 `security` block unless you want team sign-in (section 7).
 
 **Optional: observers.** Observers add health probes and notification canaries. To use them, copy
-the `observability` object from `infra/observability.example.json` into `deployment.json` and fill
+the `observability` object from `examples/observability.example.json` into `deployment.json` and fill
 it in. That example file also widens `nginx_filters.access` to match 500, 502, 503 and 504. Copy
 that too: with observers, the coverage check requires all four. Keep `enabled` at `false` for the
 first deployment (it keeps schedules and alarm actions off). Changing it later changes the
@@ -523,7 +523,7 @@ deployment rights are separate IAM roles. Revoking, rotating and restoring are i
 | Where | Change with team sign-in |
 | --- | --- |
 | Prerequisites | An OIDC identity provider with MFA (7.2). Lambda headroom for 3 more reserved executions (2 for investigation, 1 for chat) |
-| 3.2 `init` | Add `--identity`, so `runtime.json` starts from `infra/identity.example.json` |
+| 3.2 `init` | Add `--identity`, so `runtime.json` starts from `examples/identity.example.json` |
 | 3.3 `automation.json` | `initial_access` may list first user grants (7.6) |
 | 3.3 `runtime.json` | Add the `identity` block, and review the `security` block (7.3) |
 | 3.4 `dry-run` | The plan adds `identity-foundation`, `identity-secret`, `identity-foundation-bound`, `chat-runtime` and `initial-access` |
@@ -542,7 +542,7 @@ Use a new work directory and a new `release_id`.
 
 ### 7.3 Settings in `runtime.json`
 
-Start from `infra/identity.example.json` (`init --identity` copies it). It adds two blocks to the
+Start from `examples/identity.example.json` (`init --identity` copies it). It adds two blocks to the
 default settings:
 
 | Group | Settings and rules |
@@ -872,7 +872,7 @@ not been run against real AWS. Pick one path per release. If you start by hand, 
 | Automation | Manual | Notes |
 | --- | --- | --- |
 | `deployment.json` | `deployment.json` | Same schema |
-| `runtime.json` | `runtime.json` (older docs call it `durable.json`) | Same schema. Start from `infra/durable.example.json` (default), or from `infra/identity.example.json` for team sign-in. The `identity` block is what turns team sign-in on |
+| `runtime.json` | `runtime.json` (older docs call it `durable.json`) | Same schema. Start from `examples/durable.example.json` (default), or from `examples/identity.example.json` for team sign-in. The `identity` block is what turns team sign-in on |
 | `automation.json` | none | Profile, wheel path and first grants are automation only |
 | `bindings.json`, written from `state.json` | `bindings.json`, written by you | JSON object of collected outputs. Never invent a value |
 | `bundle/`, `build/...` | Any folders you pass | The commands below use the same layout |
