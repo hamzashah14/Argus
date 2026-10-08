@@ -10,13 +10,11 @@
     "bedrock_region",
     "release_id",
     "model_id",
-    "model_arns",
     "executor_mode",
     "notification_email",
     "reserved_concurrency",
     "maintenance_mode",
     "log_retention_days",
-    "rollback_days",
     "ui_principal_arn",
     "ci_principal_arn",
     "deployment_role_arn",
@@ -57,6 +55,56 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 2048
+    },
+    "model_provider": {
+      "description": "bedrock invokes models through Amazon Bedrock; model_api calls a generic HTTPS model API with a Secrets Manager key (standalone runtime target only).",
+      "enum": [
+        "bedrock",
+        "model_api"
+      ],
+      "default": "bedrock"
+    },
+    "model_api": {
+      "description": "Required when model_provider is model_api; forbidden otherwise. The API key is never configured here; bind its pinned Secrets Manager version instead.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "base_url"
+      ],
+      "properties": {
+        "protocol": {
+          "enum": [
+            "openai",
+            "anthropic"
+          ]
+        },
+        "base_url": {
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https://(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}(?:/[A-Za-z0-9._~/-]*)?(?!\\n)$"
+        },
+        "bytes_per_token": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 8
+        }
+      },
+      "if": {
+        "properties": {
+          "protocol": {
+            "const": "anthropic"
+          }
+        },
+        "required": [
+          "protocol"
+        ]
+      },
+      "then": {
+        "properties": {
+          "bytes_per_token": false
+        }
+      }
     },
     "model_arns": {
       "type": "array",
@@ -104,6 +152,8 @@
       ]
     },
     "rollback_days": {
+      "deprecated": true,
+      "description": "Ignored; accepted only so existing configs still validate.",
       "type": "integer",
       "minimum": 7,
       "maximum": 90
@@ -247,5 +297,38 @@
     "observability": {
       "type": "object"
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "model_provider": {
+            "const": "model_api"
+          }
+        },
+        "required": [
+          "model_provider"
+        ]
+      },
+      "then": {
+        "required": [
+          "model_api"
+        ],
+        "properties": {
+          "model_arns": false,
+          "model_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}(?!\\n)$"
+          }
+        }
+      },
+      "else": {
+        "required": [
+          "model_arns"
+        ],
+        "properties": {
+          "model_api": false
+        }
+      }
+    }
+  ]
 }

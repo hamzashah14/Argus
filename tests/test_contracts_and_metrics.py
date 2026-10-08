@@ -189,7 +189,7 @@ def test_invalid_log_input_does_not_attempt_credential_resolution():
     assert response["response"]["httpStatusCode"] == 400
 
 
-def test_firing_custom_alarm_roundtrips_to_exact_metric(tmp_path, monkeypatch):
+def test_catalog_entry_resolves_to_exact_descriptor(tmp_path, monkeypatch):
     entry = {
         "id": "nginx-process",
         "instance_id": IID,
@@ -202,26 +202,9 @@ def test_firing_custom_alarm_roundtrips_to_exact_metric(tmp_path, monkeypatch):
     catalog_path = tmp_path / "catalog.json"
     catalog_path.write_text(json.dumps([entry]))
     monkeypatch.setenv("METRIC_CATALOG_FILE", str(catalog_path))
-    alarm = {
-        "AlarmName": f"aiops-{IID}-process",
-        "StateChangeTime": "2026-09-24T10:00:00Z",
-        "Trigger": {
-            "Namespace": entry["namespace"],
-            "MetricName": entry["metric_name"],
-            "Statistic": entry["statistic"],
-            "Unit": entry["unit"],
-            "Dimensions": [{"name": key, "value": value} for key, value in entry["dimensions"].items()],
-        },
-    }
-    from kira.metrics import alarm_metric_id
-
-    context = {"alarm_metric": {"metric_id": alarm_metric_id(IID, alarm["Trigger"])}}
-    assert context["alarm_metric"]["metric_id"] == entry["id"]
-    descriptor = resolve({"instance_id": IID, "metric_id": context["alarm_metric"]["metric_id"]})
+    descriptor = resolve({"instance_id": IID, "metric_id": entry["id"]})
     assert {item["Name"]: item["Value"] for item in descriptor["dimensions"]} == entry["dimensions"]
     assert descriptor["statistic"] == "Minimum"
-    alarm["Trigger"]["Dimensions"].pop()
-    assert alarm_metric_id(IID, alarm["Trigger"]) is None
 
 
 @pytest.mark.parametrize(

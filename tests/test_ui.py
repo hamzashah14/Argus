@@ -52,6 +52,23 @@ def test_missing_runtime_configuration_disables_input(settings, monkeypatch):
     assert any("not been checked" in item.value for item in test.info)
 
 
+def test_production_without_oidc_uses_password_login_and_in_process_chat(settings, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
+    invoke = Mock(return_value=chat.ChatResult("Answer", "ok"))
+    monkeypatch.setattr(chat, "invoke", invoke)
+    test = app(False).run()
+    assert not test.exception and not test.error and test.text_input and not test.chat_input
+    assert not any(item.label == "Sign in with SSO" for item in test.button)
+    test.text_input[0].input("synthetic-workspace-password")
+    button(test, "Open workspace").click().run()
+    assert test.session_state["authenticated"] and not test.exception and not test.chat_input[0].disabled
+    test.chat_input[0].set_value("Investigate the incident").run()
+    assert not test.exception and any("Answer" in item.value for item in test.markdown)
+    invoke.assert_called_once()
+    assert "access_ticket" not in invoke.call_args.kwargs
+
+
 def test_login_and_logout(settings):
     test = app(False).run()
     test.text_input[0].input("synthetic-workspace-password")

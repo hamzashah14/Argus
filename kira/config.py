@@ -5,6 +5,8 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from kira import identity, model_api
+
 REGION = re.compile(r"^[a-z]{2}(?:-gov)?-[a-z]+-\d+$")
 INSTANCE = re.compile(r"^i-(?:[0-9a-f]{8}|[0-9a-f]{17})$")
 
@@ -25,6 +27,7 @@ class AppConfig:
     agentcore_arn: str = ""
     agentcore_endpoint: str = ""
     chat_arn: str = ""
+    model_api: str = ""
 
     @classmethod
     def from_env(cls):
@@ -43,6 +46,7 @@ class AppConfig:
             os.getenv("AGENTCORE_RUNTIME_ARN", ""),
             os.getenv("AGENTCORE_ENDPOINT", ""),
             os.getenv("CHAT_FUNCTION_ARN", ""),
+            os.getenv("MODEL_API", ""),
         )
 
     def problems(self):
@@ -67,7 +71,7 @@ class AppConfig:
                 ids = self.allowed_ids.split(",")
                 if not ids or len(ids) > 100 or any(not INSTANCE.fullmatch(i) for i in ids):
                     raise ValueError("Invalid inventory")
-                if self.environment in {"staging", "production"}:
+                if identity.required():
                     if not re.fullmatch(
                         rf"arn:aws:lambda:{re.escape(os.getenv('MONITOR_REGION', self.region))}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",
                         self.chat_arn,
@@ -86,6 +90,16 @@ class AppConfig:
                     validate_target(self.agentcore_arn, self.agentcore_endpoint, self.region, self.account_id)
             except (ValueError, TypeError):
                 problems.append("Set validated runtime limits, inventory and qualified execution bindings.")
+        # A forgotten KIRA_AUTH_MODE must not silently turn an identity deployment into password-only chat.
+        if not identity.required() and (self.chat_arn or os.getenv("KIRA_SESSION_TABLE")):
+            problems.append("Set KIRA_AUTH_MODE=oidc, or remove CHAT_FUNCTION_ARN and KIRA_SESSION_TABLE.")
+        if self.model_api.strip():
+            try:
+                model_api.parse(self.model_api.strip())
+            except ValueError as error:
+                problems.append(f"Set a valid MODEL_API setting ({error}).")
+            if self.runtime_target == "agentcore":
+                problems.append("AgentCore uses a Bedrock model only; remove MODEL_API.")
         if bool(os.getenv("AWS_ACCESS_KEY_ID")) != bool(os.getenv("AWS_SECRET_ACCESS_KEY")):
             problems.append("Set both AWS credential variables, or remove both to use the credential chain.")
         return problems

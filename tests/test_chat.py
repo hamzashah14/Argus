@@ -1,10 +1,11 @@
 import json
+from dataclasses import replace
 from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
-from kira import chat, execution, runtime
+from kira import chat, execution, identity, runtime
 from kira.config import AppConfig
 
 SETTINGS = AppConfig(
@@ -24,6 +25,17 @@ def test_client_construction_failure_handled(monkeypatch):
     monkeypatch.setattr(execution, "execute", Mock(side_effect=NoCredentialsError()))
     result = chat.invoke("investigate", "session", SETTINGS)
     assert result.code == "CREDENTIALS_UNAVAILABLE" and result.reference
+
+
+def test_default_mode_chat_runs_in_process_without_access_ticket(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
+    monkeypatch.setattr(identity, "Sessions", Mock(side_effect=AssertionError("identity is opt-in")))
+    execute = Mock(return_value={"text": "Evidence", "complete": True})
+    monkeypatch.setattr(execution, "execute", execute)
+    result = chat.invoke("investigate", "session", replace(SETTINGS, environment="production"))
+    assert result.status == "ok" and result.text == "Evidence"
+    assert "access_ticket" not in execute.call_args.args[0]
 
 
 @pytest.mark.parametrize(

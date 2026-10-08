@@ -32,7 +32,8 @@ class AccessDenied(RuntimeError):
 
 
 def required():
-    return os.getenv("ENVIRONMENT", "development") != "development" or os.getenv("KIRA_AUTH_MODE") == "oidc"
+    # Opt-in module. Without it the UI is local single-user (APP_PASSWORD) and chat runs in-process.
+    return os.getenv("KIRA_AUTH_MODE") == "oidc"
 
 
 def actor_id(issuer, subject):

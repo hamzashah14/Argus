@@ -14,7 +14,6 @@
   "reserved_concurrency": null,
   "maintenance_mode": false,
   "log_retention_days": 30,
-  "rollback_days": 14,
   "ui_principal_arn": "arn:aws:iam::123456789012:role/customer-ui",
   "ci_principal_arn": "arn:aws:iam::123456789012:role/customer-ci",
   "deployment_role_arn": "arn:aws:iam::123456789012:role/customer-cfn-deployment",

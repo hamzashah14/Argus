@@ -15,7 +15,6 @@ from infra.verify import (
     assert_stack_absent,
     coverage,
     exact_metric_exists,
-    put_targets_checked,
 )
 from scripts.validate_infrastructure import examples
 
@@ -136,6 +135,103 @@ def test_invalid_spec_fails_locally(spec, tmp_path, mutation):
         load(path)
 
 
+USERINFO = "fixture-user" + ":" + "fixture-pw"  # Built at runtime: not a committed credential.
+
+
+def api_variant(spec, **api):
+    value = {k: v for k, v in spec.items() if k != "model_arns"}
+    value.update(
+        model_provider="model_api",
+        model_id="example-model-v1",
+        model_api={"protocol": "openai", "base_url": "https://llm.example.invalid/v1", **api},
+    )
+    return value
+
+
+def loads(tmp_path, value):
+    path = tmp_path / "spec.json"
+    path.write_text(json.dumps(value))
+    return load(path)
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda s: s,
+        lambda s: {**s, "model_provider": "bedrock"},
+        lambda s: api_variant(s),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid"),
+        lambda s: api_variant(s, base_url="https://api.example-llm.com/openai/v1/"),
+        lambda s: api_variant(s, bytes_per_token=1),
+        lambda s: api_variant(s, bytes_per_token=8),
+        lambda s: api_variant(s, protocol="anthropic", base_url="https://api.example.invalid"),
+        lambda s: {**api_variant(s), "model_id": "vendor/model-name:v1.2"},
+    ],
+)
+def test_valid_model_provider_variants_load(spec, tmp_path, build):
+    assert loads(tmp_path, build(spec))
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        # Provider and its mandatory/forbidden blocks.
+        lambda s: {k: v for k, v in s.items() if k != "model_arns"},
+        lambda s: {
+            **s,
+            "model_provider": "bedrock",
+            "model_api": {"protocol": "openai", "base_url": "https://a.example.invalid"},
+        },
+        lambda s: {**s, "model_api": {"protocol": "openai", "base_url": "https://a.example.invalid"}},
+        lambda s: {**s, "model_provider": "openai"},
+        lambda s: {**s, "model_provider": "model_api"},
+        lambda s: {k: v for k, v in api_variant(s).items() if k != "model_api"},
+        lambda s: {**api_variant(s), "model_arns": s["model_arns"]},
+        lambda s: {**api_variant(s), "model_arns": []},
+        # model_api object.
+        lambda s: api_variant(s, protocol="gemini"),
+        lambda s: api_variant(s, protocol=None),
+        lambda s: api_variant(s, base_url="http://llm.example.invalid/v1"),
+        lambda s: api_variant(s, base_url=f"https://{USERINFO}@llm.example.invalid/v1"),
+        lambda s: api_variant(s, base_url="https://user@llm.example.invalid/v1"),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid/v1?key=secret"),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid/v1#frag"),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid:8443/v1"),
+        lambda s: api_variant(s, base_url="https://203.0.113.7/v1"),
+        lambda s: api_variant(s, base_url="https://localhost/v1"),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid/v1 /x"),
+        lambda s: api_variant(s, base_url="llm.example.invalid/v1"),
+        lambda s: api_variant(s, base_url=""),
+        lambda s: api_variant(s, base_url="https://llm.example.invalid/v1\n"),
+        lambda s: api_variant(s, bytes_per_token=0.5),
+        lambda s: api_variant(s, bytes_per_token=9),
+        lambda s: api_variant(s, bytes_per_token="3"),
+        lambda s: api_variant(s, protocol="anthropic", bytes_per_token=3),
+        lambda s: api_variant(s, extra="x"),
+        lambda s: {k: v for k, v in api_variant(s).items() if k != "model_id"},
+        # model_id for non-Bedrock providers is a conservative name, not a free string.
+        lambda s: {**api_variant(s), "model_id": "has space"},
+        lambda s: {**api_variant(s), "model_id": ".leading-dot"},
+        lambda s: {**api_variant(s), "model_id": "x" * 129},
+        lambda s: {**api_variant(s), "model_id": "model\nid"},
+        lambda s: {**api_variant(s), "model_id": ""},
+        lambda s: {**api_variant(s), "model_id": "model-id\n"},
+        # Bedrock behaviour is unchanged.
+        lambda s: {**s, "model_arns": []},
+        lambda s: {**s, "model_id": "arn:aws:bedrock:eu-central-1::foundation-model/other.model"},
+    ],
+)
+def test_invalid_model_provider_variants_fail_locally(spec, tmp_path, build):
+    with pytest.raises(ValueError):
+        loads(tmp_path, build(spec))
+
+
+def test_model_api_diagnostics_do_not_echo_submitted_values(spec, tmp_path):
+    with pytest.raises(ValueError) as error:
+        loads(tmp_path, api_variant(spec, base_url=f"https://{USERINFO}@llm.example.invalid/v1"))
+    assert USERINFO not in str(error.value) and "fixture-pw" not in str(error.value)
+
+
 def test_catalog_and_cwagent_share_inventory(spec):
     from infra.spec import cwagent
 
@@ -182,21 +278,6 @@ def test_reserved_capacity_fails_closed(limit, requested, passes):
     else:
         with pytest.raises(VerificationError):
             assert_concurrency(client, requested)
-
-
-@pytest.mark.parametrize(
-    "response",
-    [
-        {"FailedEntryCount": 1, "FailedEntries": [{"TargetId": "alarms"}]},
-        {},
-        {"FailedEntryCount": 0, "FailedEntries": [{"TargetId": "alarms"}]},
-    ],
-)
-def test_partial_eventbridge_registration_never_succeeds(response):
-    events = MagicMock()
-    events.put_targets.return_value = response
-    with pytest.raises(VerificationError):
-        put_targets_checked(events, Rule="test", Targets=[])
 
 
 def test_metric_discovery_paginated_exact_and_denied(spec):

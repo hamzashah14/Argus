@@ -289,7 +289,7 @@ def active(spec, outputs, versions, pipeline_versions, *, runtime_target="standa
             "CloudWatch::Alarm",
             {
                 "AlarmName": name(spec, "obs-" + logical.lower()),
-                "AlarmDescription": "Owner: deployment-oncall; docs/OPERATIONS.md",
+                "AlarmDescription": "Owner: deployment-oncall; docs/OPERATE.md",
                 "Namespace": namespace,
                 "MetricName": metric,
                 "Dimensions": [{"Name": k, "Value": v} for k, v in dimensions.items()],

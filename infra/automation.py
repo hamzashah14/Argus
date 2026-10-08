@@ -19,7 +19,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import deployment_preflight, durable, templates
-from infra.spec import ROOT, cwagent, digest, load, name
+from infra.spec import ROOT, cwagent, digest, load, name, prefix
 from infra.verify import VerificationError
 
 
@@ -76,10 +76,16 @@ def locked(directory):
         os.close(fd)
 
 
+def model_api(spec):
+    return spec.get("model_provider", "bedrock") == "model_api"
+
+
 def stage_order(spec, config):
     stages = ["foundation-tools", "foundation-monitor", "durable-foundation"]
     if "identity" in config:
         stages += ["identity-foundation", "identity-secret", "identity-foundation-bound"]
+    if model_api(spec):
+        stages += ["model-secret"]  # Pins the out-of-band key secret version before any runtime renders.
     stages += ["owned-tools"]
     if config["runtime_target"] == "agentcore":
         stages += ["agentcore-runtime", "agentcore-endpoint"]
@@ -92,7 +98,9 @@ def stage_order(spec, config):
         stages += ["observation-foundation", "observation-runtime", "health-bootstrap"]
     return (
         stages
-        + ["candidate-verification", "initial-access", "staging-canary", "routing"]
+        + ["candidate-verification"]
+        + (["initial-access"] if "identity" in config else [])
+        + ["staging-canary", "routing"]
         + (["observations"] if "observability" in spec else [])
         + ["registration-verification", "manual-acceptance"]
     )
@@ -117,8 +125,9 @@ def plan(path):
         paths[field] = (path.parent / value[field]).resolve()
     spec = load(paths["spec"])
     config = durable.load_config(paths["runtime_config"], spec)
-    if "identity" not in config:
-        raise VerificationError("Automation requires individual identity configuration")
+    identity_mode = "identity" in config
+    if model_api(spec) and config["runtime_target"] != "standalone":
+        raise VerificationError("model_api is supported only by the standalone runtime")
     if not config["investigation_paused"]:
         raise VerificationError(
             "Initial deployment must keep investigation_paused true; activation is a separate qualified release"
@@ -126,6 +135,8 @@ def plan(path):
     access = value["initial_access"]
     if not isinstance(access, list) or len(access) > 100:
         raise VerificationError("Invalid initial access list")
+    if access and not identity_mode:
+        raise VerificationError("initial_access needs an identity block in the runtime configuration")
     subjects = set()
     for request in access:
         if not isinstance(request, dict) or set(request) != {"subject", "enabled", "role", "instance_ids"}:
@@ -157,7 +168,18 @@ def plan(path):
         "automatic_activation": False,
         "manual": [
             "EC2/application/CloudWatch Agent configuration and telemetry",
-            "OIDC provider registration, client/cookie secrets, native MFA staging login",
+            *(
+                ["OIDC provider registration, client/cookie secrets, native MFA staging login"]
+                if identity_mode
+                else ["Local UI: export APP_PASSWORD (12+ characters) in your shell before launching it"]
+            ),
+            *(
+                [
+                    f"Create secret {prefix(spec)}/model-api-key in {spec['bedrock_region']} out of band; automation never reads or writes its value"
+                ]
+                if model_api(spec)
+                else []
+            ),
             "Primary/fallback email confirmation and real inbox qualification",
             "Production promotion/activation after customer acceptance",
         ],
@@ -168,8 +190,14 @@ def plan(path):
         "foundation-tools": templates.foundation(spec, "tools"),
         "foundation-monitor": templates.foundation(spec, "monitor"),
         "durable-foundation": durable_templates.foundation(spec, config),
-        "identity-foundation": identity.foundation(spec),
-        "identity-secret": identity.signing_secret(spec),
+        **(
+            {
+                "identity-foundation": identity.foundation(spec),
+                "identity-secret": identity.signing_secret(spec),
+            }
+            if identity_mode
+            else {}
+        ),
     }
     result["bootstrap_templates"] = previews
     result["resources"] = {
@@ -511,6 +539,8 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
     )
     if state.get("version") != 1 or state.get("plan_hash") != planned["plan_hash"]:
         raise VerificationError("Configuration/source changed; create a new deployment work directory")
+    # Without an identity block this is local single-user mode: no identity stages, grants or tickets.
+    identity_mode = "identity" in planned["runtime_config"]
 
     def save():
         private_json(journal, state)
@@ -531,9 +561,11 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         save()
 
     if retry_canary:
-        if not allow_model or ticket is None:
+        if not allow_model or (identity_mode and ticket is None):
             raise VerificationError(
                 "Retry requires a private ticket and explicit paid invocation authorization"
+                if identity_mode
+                else "Retry requires explicit paid invocation authorization"
             )
         state.setdefault("canary_history", []).append(
             {
@@ -547,13 +579,15 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
     try:
         # Recheck identity and permissions on every resume. Capacity accounts for
         # already verified own reservations, never trusts journal-only values.
-        remaining = planned["runtime_config"]["initial_reserved_concurrency"] + 3
+        # Investigate (2) and Chat (1) are reserved only by identity-enabled templates.
+        remaining = planned["runtime_config"]["initial_reserved_concurrency"] + (3 if identity_mode else 0)
         for stage_name, logicals in [
             (
                 "durable-runtime",
-                [("Initial", planned["runtime_config"]["initial_reserved_concurrency"]), ("Investigate", 2)],
+                [("Initial", planned["runtime_config"]["initial_reserved_concurrency"])]
+                + ([("Investigate", 2)] if identity_mode else []),
             ),
-            ("chat-runtime", [("Chat", 1)]),
+            *([("chat-runtime", [("Chat", 1)])] if identity_mode else []),
         ]:
             record = state["stages"].get(stage_name)
             if record:
@@ -590,8 +624,7 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             "foundation-tools",
             "foundation-monitor",
             "durable-foundation",
-            "identity-foundation",
-            "identity-secret",
+            *(("identity-foundation", "identity-secret") if identity_mode else ()),
         ):
             if name == "identity-foundation":
                 if "identity-foundation-bound" not in state["stages"]:
@@ -600,20 +633,31 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
                 stage(name)
         collect("durable-foundation", "foundation")
         bundle = driver.render(state["bindings"])
-        if "identity" not in state["bindings"]:
+        if identity_mode and "identity" not in state["bindings"]:
             state["bindings"]["identity"] = driver.op(bundle, "identity-version")
             save()
         if "secret" not in state["bindings"]:
             state["bindings"]["secret"] = driver.op(bundle, "cursor-version")
             save()
-        # The second identity foundation adds the exact-version issuer grants.
-        stage("identity-foundation", "identity-foundation-bound")
-        bundle = driver.render(state["bindings"])
-        driver.command(
-            "infra.identity_ops",
-            ["pin-secret-version", "--bundle", directory / "bundle", "--review-hash", bundle["review_hash"]],
-            directory / "pin.json",
-        )
+        if model_api(planned["spec"]) and "model_secret" not in state["bindings"]:
+            # Read-only: pins the out-of-band key secret's current version; the value is never read here.
+            state["bindings"]["model_secret"] = driver.op(bundle, "model-secret-version")
+            save()
+        if identity_mode:
+            # The second identity foundation adds the exact-version issuer grants.
+            stage("identity-foundation", "identity-foundation-bound")
+            bundle = driver.render(state["bindings"])
+            driver.command(
+                "infra.identity_ops",
+                [
+                    "pin-secret-version",
+                    "--bundle",
+                    directory / "bundle",
+                    "--review-hash",
+                    bundle["review_hash"],
+                ],
+                directory / "pin.json",
+            )
         if "tool_artifacts" not in state["bindings"]:
             bundle = driver.render(state["bindings"])
             state["bindings"]["tool_artifacts"] = driver.op(
@@ -643,7 +687,11 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         if planned["runtime_config"]["runtime_target"] == "agentcore":
             for suffix, candidate, binding in [
                 ("agentcore", "agentcore_candidate", "agentcore"),
-                ("agentcore-chat", "agentcore_chat_candidate", "agentcore_chat"),
+                *(
+                    [("agentcore-chat", "agentcore_chat_candidate", "agentcore_chat")]
+                    if identity_mode
+                    else []
+                ),
             ]:
                 stage(suffix + "-runtime")
                 collect(suffix + "-runtime", candidate)
@@ -654,8 +702,9 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
                 collect(suffix + "-endpoint", binding)
         stage("durable-runtime")
         collect("durable-runtime", "versions")
-        stage("chat-runtime")
-        collect("chat-runtime", "chat_version")
+        if identity_mode:
+            stage("chat-runtime")
+            collect("chat-runtime", "chat_version")
         if "observability" in planned["spec"]:
             stage("observation-foundation")
             stage("observation-runtime")
@@ -674,16 +723,17 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             "INCIDENT_TABLE": state["bindings"]["foundation"]["TableName"],
             "REPORT_BUCKET": state["bindings"]["foundation"]["EvidenceBucket"],
         }
-        issuer = driver.op(bundle, "collect", stage="identity-foundation")["SessionIssuerRoleArn"]
-        private_json(
-            directory / "ui-connection.json",
-            {
-                "environment": env,
-                "staging_issuer_role_arn": issuer,
-                "operational_role": "Available only after routing verification",
-                "provider_setup": "Configure privately; see deployment automation guide",
-            },
-        )
+        if identity_mode:
+            issuer = driver.op(bundle, "collect", stage="identity-foundation")["SessionIssuerRoleArn"]
+            private_json(
+                directory / "ui-connection.json",
+                {
+                    "environment": env,
+                    "staging_issuer_role_arn": issuer,
+                    "operational_role": "Available only after routing verification",
+                    "provider_setup": "Configure privately; see deployment automation guide",
+                },
+            )
         for index, request in enumerate(planned["initial_access"]):
             request_file = directory / f"access-{index}.json"
             private_json(request_file, request)
@@ -709,9 +759,11 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             raise Waiting(
                 "Production candidates provisioned; existing gates require separately qualified staging and production cutover"
             )
-        if not allow_model or ticket is None:
+        if not allow_model or (identity_mode and ticket is None):
             raise Waiting(
                 "Candidate ready: configure OIDC, log in with MFA and export the private staging ticket; resume with --allow-model-invocation --access-ticket-file"
+                if identity_mode
+                else "Candidate ready: resume with --allow-model-invocation"
             )
         # Paid work is not blindly repeated on an ambiguous failure.
         receipt = state.get("canary")
@@ -751,9 +803,12 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             directory / "ui-connection.json",
             {
                 "environment": env,
-                "staging_issuer_role_arn": issuer,
                 "ui_role_arn": role,
-                "provider_setup": "Configure privately",
+                **(
+                    {"staging_issuer_role_arn": issuer, "provider_setup": "Configure privately"}
+                    if identity_mode
+                    else {}
+                ),
             },
         )
         state["status"] = "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
@@ -798,7 +853,14 @@ def main():
         help="Explicitly authorize replacing an expired or ambiguous paid canary after inspection",
     )
     parser.add_argument("--access-ticket-file", type=Path)
+    parser.add_argument(
+        "--identity",
+        action="store_true",
+        help="init only: start from the opt-in individual-identity (OIDC) runtime example",
+    )
     args = parser.parse_args()
+    if args.identity and args.command != "init":
+        parser.error("--identity applies to init only; identity mode follows runtime.json")
     try:
         directory = private_dir(args.work_dir)
         with locked(directory):
@@ -807,7 +869,8 @@ def main():
 
                 targets = {
                     "deployment.json": ROOT / "infra/deployment.example.json",
-                    "runtime.json": ROOT / "infra/identity.example.json",
+                    "runtime.json": ROOT
+                    / ("infra/identity.example.json" if args.identity else "infra/durable.example.json"),
                 }
                 if any((directory / p).exists() for p in [*targets, "automation.json"]):
                     raise VerificationError("Init never overwrites existing customer files")
@@ -826,7 +889,12 @@ def main():
                     },
                 )
                 print(
-                    "Created private templates. Fill deployment.json/runtime.json/automation.json; see docs/DEPLOYMENT_AUTOMATION.md. Reference inputs cannot deploy AWS."
+                    "Created private templates. Fill deployment.json/runtime.json/automation.json; see docs/DEPLOY.md. Reference inputs cannot deploy AWS."
+                    + (
+                        ""
+                        if args.identity
+                        else " Local single-user mode; add --identity at init for individual OIDC sign-in."
+                    )
                 )
                 return 0
             if args.command == "status":
@@ -880,8 +948,19 @@ def main():
                 raise VerificationError("Run dry-run and supply its exact --plan-hash before apply")
             if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip():
                 raise VerificationError("Apply requires a clean reviewed source checkout")
-            if args.retry_canary and (not args.allow_model_invocation or not args.access_ticket_file):
-                raise VerificationError("--retry-canary needs --allow-model-invocation and a private ticket")
+            identity_mode = "identity" in planned["runtime_config"]
+            if args.access_ticket_file and not identity_mode:
+                raise VerificationError(
+                    "--access-ticket-file applies only with an identity block in runtime.json"
+                )
+            if args.retry_canary and (
+                not args.allow_model_invocation or (identity_mode and not args.access_ticket_file)
+            ):
+                raise VerificationError(
+                    "--retry-canary needs --allow-model-invocation and a private ticket"
+                    if identity_mode
+                    else "--retry-canary needs --allow-model-invocation"
+                )
             if args.access_ticket_file and not args.allow_model_invocation:
                 raise VerificationError("A canary ticket requires explicit paid model authorization")
             if args.access_ticket_file:

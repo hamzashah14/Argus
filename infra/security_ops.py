@@ -19,7 +19,7 @@ from kira.ledger import DATABASE_CONFIG
 
 
 def access_review(bundle, factory=clients):
-    identity_ops.guard(bundle)
+    identity_ops.guard(bundle)  # Grants exist only in the optional identity module.
     spec = bundle["spec"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     client, decoder = factory("dynamodb", spec["monitor_region"]), TypeDeserializer()
@@ -66,7 +66,7 @@ def access_review(bundle, factory=clients):
 
 def recipient_plan(bundle, factory=clients):
     """Inspect only subscriptions owned by this customer's declared CF stacks."""
-    identity_ops.guard(bundle)
+    identity_ops.guard(bundle, need_identity=False)
     spec = bundle["spec"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     desired = {
@@ -108,7 +108,7 @@ def recipient_plan(bundle, factory=clients):
 
 
 def retire_recipients(bundle, reviewed, factory=clients):
-    identity_ops.guard(bundle)
+    identity_ops.guard(bundle, need_identity=False)
     durable_ops.require_reviewed_source(bundle)
     if recipient_plan(bundle, factory) != reviewed:
         raise VerificationError("Recipient diff changed; review again")
@@ -130,7 +130,7 @@ def retire_recipients(bundle, reviewed, factory=clients):
 
 
 def erasure(bundle, factory=clients):
-    identity_ops.guard(bundle)
+    identity_ops.guard(bundle, need_identity=False)
     spec, foundation = bundle["spec"], bundle["bindings"]["foundation"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     table = boto3.resource("dynamodb", region_name=spec["monitor_region"], config=DATABASE_CONFIG).Table(
@@ -163,7 +163,7 @@ def main():
     args = parser.parse_args()
     try:
         bundle = durable_ops.read_bundle(args.bundle, args.review_hash)
-        identity_ops.guard(bundle)
+        identity_ops.guard(bundle, need_identity=args.command == "access-review")
         if args.command == "access-review":
             result = access_review(bundle)
         elif args.command == "recipients-plan":

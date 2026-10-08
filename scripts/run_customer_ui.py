@@ -40,7 +40,6 @@ def environment(path, profile, *, session_factory=boto3.Session):
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
-        "APP_PASSWORD",
         "KIRA_IDENTITY_HEADER",
         "KIRA_ACCESS_POLICY_FILE",
         "KIRA_SESSION_SIGNING_KEY",
@@ -48,6 +47,8 @@ def environment(path, profile, *, session_factory=boto3.Session):
         "KIRA_STAGING_TICKET_FILE",
     ):
         result.pop(key, None)
+    if values.get("KIRA_AUTH_MODE") == "oidc":
+        result.pop("APP_PASSWORD", None)  # Identity mode never inherits a shared password.
     result.update(values)
     result.update(AWS_PROFILE=profile, AWS_EC2_METADATA_DISABLED="true", PYTHON_DOTENV_DISABLED="1")
     return result
@@ -61,6 +62,11 @@ def main():
     args = parser.parse_args()
     try:
         env = environment(args.connection, args.profile)
+        if env.get("KIRA_AUTH_MODE") != "oidc" and not env.get("APP_PASSWORD"):
+            print(
+                "APP_PASSWORD is not set: export it (12+ characters) in this shell first; .env is not loaded.",
+                file=sys.stderr,
+            )
         if args.staging_ticket_file:
             if env["ENVIRONMENT"] != "staging":
                 raise ValueError("Canary ticket export is staging only")

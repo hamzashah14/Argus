@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import durable, durable_templates, owned_ops, reconcile, release, templates
 from infra.aws import clients
-from infra.spec import ROOT, alarm_descriptors, digest, name, tags
+from infra.spec import ROOT, alarm_descriptors, digest, name, prefix, tags
 from infra.verify import (
     VerificationError,
     assert_account,
@@ -493,6 +493,7 @@ def main():
             "verify-candidate",
             "canary",
             "cursor-version",
+            "model-secret-version",
             "identity-version",
             "verify-observations",
             "verify-observation-routing",
@@ -586,6 +587,20 @@ def main():
             versions = [v for v, stages in secret["VersionIdsToStages"].items() if "AWSCURRENT" in stages]
             if len(versions) != 1:
                 raise VerificationError("Cursor secret has no unique current version")
+            value = {"arn": secret["ARN"], "version_id": versions[0]}
+        elif args.command == "model-secret-version":
+            # Out-of-band secret: pin its single AWSCURRENT version; the value is never read.
+            spec = bundle["spec"]
+            if spec.get("model_provider", "bedrock") != "model_api":
+                raise VerificationError("Model API key secret applies only to model_provider model_api")
+            assert_account(clients("sts", spec["bedrock_region"]), spec)
+            secret_name = prefix(spec) + "/model-api-key"
+            secret = clients("secretsmanager", spec["bedrock_region"]).describe_secret(SecretId=secret_name)
+            versions = [
+                v for v, stages in secret.get("VersionIdsToStages", {}).items() if "AWSCURRENT" in stages
+            ]
+            if secret.get("Name") != secret_name or len(versions) != 1:
+                raise VerificationError("Model API key secret has no unique current version")
             value = {"arn": secret["ARN"], "version_id": versions[0]}
         elif args.command == "collect":
             value = collect(bundle, args.stage)

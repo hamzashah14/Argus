@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import asdict
 
-from infra.spec import ROOT, digest, name, tags
+from infra.spec import ROOT, digest, name, prefix, tags
 from infra.templates import att, resource, role, statement, tagged, template
 from infra.verify import VerificationError
 from kira.agentcore import validate_target
@@ -13,9 +13,40 @@ from kira.runtime import Limits
 from kira.work_policy import DEFAULT
 
 
+def model_api(spec):
+    """The generic HTTPS model API settings, or None when Bedrock is the provider."""
+    return spec["model_api"] if spec.get("model_provider", "bedrock") == "model_api" else None
+
+
+def model_secret(spec, bindings):
+    """Exact owned model API key secret and immutable version; created out of band."""
+    try:
+        value = bindings["model_secret"]
+        if (
+            set(value) != {"arn", "version_id"}
+            or not re.fullmatch(
+                rf"arn:aws:secretsmanager:{re.escape(spec['bedrock_region'])}:{spec['account_id']}:secret:{re.escape(prefix(spec))}/model-api-key-[A-Za-z0-9]{{6}}",
+                value["arn"],
+            )
+            or not re.fullmatch(r"[A-Za-z0-9-]{32,64}", value["version_id"])
+        ):
+            raise ValueError()
+    except Exception:
+        raise VerificationError(
+            "Bind the exact owned model API key secret ARN and immutable version"
+        ) from None
+    return value
+
+
 def validate_bindings(spec, config, bindings):
     if spec["executor_mode"] != "qualified":
         raise VerificationError("Owned runtime requires qualified tool executors")
+    if model_api(spec):
+        if config["runtime_target"] != "standalone":
+            raise VerificationError(
+                "model_api is supported only by the standalone runtime; AgentCore is Bedrock-only"
+            )
+        model_secret(spec, bindings)
     tools = bindings.get("tools", {})
     if set(tools) != {"LogsVersionArn", "MetricsVersionArn"}:
         raise VerificationError("Both tool version bindings are required")
@@ -53,7 +84,11 @@ def fingerprint(spec, config, bindings):
     return digest(
         {
             "model_id": spec["model_id"],
-            "model_arns": spec["model_arns"],
+            **(
+                {"model_api": model_api(spec), "model_secret": model_secret(spec, bindings)}
+                if model_api(spec)
+                else {"model_arns": spec["model_arns"]}
+            ),
             "tools": bindings["tools"],
             "limits": asdict(Limits(**config["runtime_limits"])),
             "runtime_target": config["runtime_target"],
@@ -81,11 +116,25 @@ def fingerprint(spec, config, bindings):
     )
 
 
+def model_api_environment(spec, bindings):
+    api, secret = model_api(spec), model_secret(spec, bindings)
+    value = {
+        "protocol": api["protocol"],
+        "base_url": api["base_url"],
+        "secret_arn": secret["arn"],
+        "secret_version": secret["version_id"],
+    }
+    if api["protocol"] == "openai" and "bytes_per_token" in api:
+        value["bytes_per_token"] = api["bytes_per_token"]
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
 def environment(spec, config, bindings):
     validate_bindings(spec, config, bindings)
     env = {
         "ENVIRONMENT": spec["environment"],
-        "EXECUTION_PURPOSE": "incident",
+        # Without identity one host serves chat and incidents; identity splits them.
+        "EXECUTION_PURPOSE": "incident" if "identity" in config else "both",
         "KIRA_DIAGNOSTIC_POLICY": "diagnosis-v1",
         "RUNTIME_TARGET": config["runtime_target"],
         "BEDROCK_REGION": spec["bedrock_region"],
@@ -96,6 +145,7 @@ def environment(spec, config, bindings):
         "METRICS_TOOL_ARN": bindings["tools"]["MetricsVersionArn"],
         "RUNTIME_LIMITS": json.dumps(config["runtime_limits"], sort_keys=True, separators=(",", ":")),
         "RUNTIME_RELEASE": fingerprint(spec, config, bindings),
+        **({"MODEL_API": model_api_environment(spec, bindings)} if model_api(spec) else {}),
         **(
             {"OBS_NAMESPACE": f"{spec['project']}/{spec['environment']}/Pipeline"}
             if "observability" in spec
@@ -111,10 +161,16 @@ def environment(spec, config, bindings):
 
 
 def model_permissions(spec, bindings):
-    return [
-        statement(["bedrock:InvokeModel", "bedrock:CountTokens"], spec["model_arns"]),
-        statement("lambda:InvokeFunction", list(bindings["tools"].values())),
-    ]
+    if model_api(spec):
+        secret = model_secret(spec, bindings)
+        model = statement(
+            "secretsmanager:GetSecretValue",
+            secret["arn"],
+            Condition={"StringEquals": {"secretsmanager:VersionId": secret["version_id"]}},
+        )
+    else:
+        model = statement(["bedrock:InvokeModel", "bedrock:CountTokens"], spec["model_arns"])
+    return [model, statement("lambda:InvokeFunction", list(bindings["tools"].values()))]
 
 
 def caller_environment(spec, config, bindings):
@@ -154,7 +210,7 @@ def agentcore_release(spec, config, bindings, artifact, version=None, *, purpose
         "REPORT_BUCKET": foundation["EvidenceBucket"],
         "REPORT_KMS_KEY_ARN": foundation["EvidenceKeyArn"],
     }
-    env["EXECUTION_PURPOSE"] = purpose
+    env["EXECUTION_PURPOSE"] = purpose if "identity" in config else "both"
     if purpose == "chat":
         for key in ("INCIDENT_TABLE", "REPORT_BUCKET", "REPORT_KMS_KEY_ARN"):
             del env[key]

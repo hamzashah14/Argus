@@ -49,7 +49,7 @@ def test_private_and_unsafe_paths_are_rejected(path):
 
 
 def test_public_example_and_license_paths_are_allowed():
-    for path in (".env.example", "infra/deployment.example.json", "docs/IDENTITY.md", "LICENSE"):
+    for path in (".env.example", "infra/deployment.example.json", "docs/DEPLOY.md", "LICENSE"):
         assert not forbidden_path(path)
 
 

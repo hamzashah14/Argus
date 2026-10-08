@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from infra import durable_templates, owned_runtime, templates  # noqa: E402
-from infra.spec import load, name  # noqa: E402
+from infra.spec import load, name, prefix  # noqa: E402
 
 
 def examples(spec, config, *, include_bindings=False):
@@ -48,6 +48,11 @@ def examples(spec, config, *, include_bindings=False):
         for logical, function in (("Logs", "fetch-logs"), ("Metrics", "fetch-metrics"))
     }
     bindings = {"tools": tools, "foundation": foundation}
+    if owned_runtime.model_api(spec):
+        bindings["model_secret"] = {
+            "arn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{account}:secret:{prefix(spec)}/model-api-key-AbCdEf",
+            "version_id": "a" * 32,
+        }
     tool_artifacts = {
         n: {**artifacts["incident_ingress"], "bucket": templates.bucket_name(spec, "tools")}
         for n in ("fetch_logs", "fetch_metrics")
@@ -106,11 +111,21 @@ def main():
                     path = Path(temp) / f"{mode}-{target}-{stage}.json"
                     path.write_text(json.dumps(value))
                     files.append(str(path))
+            api = {
+                **{k: v for k, v in spec.items() if k != "model_arns"},
+                "model_provider": "model_api",
+                "model_id": "provider-model",
+                "model_api": {"protocol": "openai", "base_url": "https://api.example.com/v1"},
+            }
+            for stage, value in examples(api, {**config, "runtime_target": "standalone"}).items():
+                path = Path(temp) / f"{mode}-model-api-{stage}.json"
+                path.write_text(json.dumps(value))
+                files.append(str(path))
         subprocess.run(
             [str(Path(sys.executable).parent / "cfn-lint"), "--non-zero-exit-code", "warning", "-t", *files],
             check=True,
         )
-    print(f"PASS: {len(files)} standalone/AgentCore same/split-region templates")
+    print(f"PASS: {len(files)} standalone/AgentCore/model-API same/split-region templates")
 
 
 if __name__ == "__main__":

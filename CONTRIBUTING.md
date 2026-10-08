@@ -1,26 +1,99 @@
 # Contributing
 
-Use Python 3.12 and `requirements/dev.lock` with `pip install --require-hashes`.
-Run the checks in [README](README.md#development) before opening a pull request.
-CI also builds and imports deployable packages independently and renders complete
-synthetic releases for both runtime targets.
+Kira is MIT licensed. In each pull request, describe the behavior change, the
+validation you ran and any remaining live limits. Report suspected vulnerabilities
+privately ([SECURITY.md](SECURITY.md)), never in public issues.
 
-Use synthetic fixtures and injected SDK clients in tests. Do not depend on a
-developer's AWS account or invoke paid models, notification channels or deployed
-resources in default tests. Preserve denial, fencing, budget, redaction and
-scope regressions when changing runtime behavior. Exercise meaningful failure
-paths as well as successful requests.
+## Set up and run the checks
 
-Update the relevant customer guide when commands, settings, IAM boundaries or
-manual responsibilities change. Deployment plans bind clean source and immutable
-artifacts; new source/configuration needs a new reviewed release.
+Use Python 3.12. Dependencies are pinned with hashes in `requirements/*.lock`; each
+lock's header shows the `pip-compile` command that produced it. None of the checks
+needs AWS access.
 
-Keep credentials, real inventory, logs, cloud responses and private work records
-under ignored private storage. Never paste sensitive payloads into issues, PRs,
-screenshots or test fixtures. Check `git diff --cached` and run the public-file and
-secret checks before committing. `.gitignore` does not remove previously committed
-data; follow [publishing](docs/PUBLISHING.md) when preparing a new public repository.
+```bash
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements/dev.lock
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+.venv/bin/python scripts/validate_schemas.py
+.venv/bin/python scripts/validate_infrastructure.py
+.venv/bin/python scripts/validate_durable.py          # also lints the model API renders
+.venv/bin/python scripts/validate_observations.py
+.venv/bin/python scripts/validate_identity.py
+.venv/bin/python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
+.venv/bin/python scripts/check_public_repository.py
+.venv/bin/python scripts/check_secrets.py
+```
 
-Explain the concrete behavior change, relevant validation and remaining live
-limits in each pull request. Report suspected vulnerabilities privately as
-described in [SECURITY.md](SECURITY.md).
+The build check needs hash-verified Lambda wheels. `scripts/verify_build.py` builds
+each package set twice, requires identical manifests, then imports each package with
+only its bundled dependencies. Optional targets: `tools`, `pipeline`, `agentcore`,
+`observation` (default: all four).
+
+```bash
+.venv/bin/python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
+.venv/bin/python scripts/verify_build.py [tools] [pipeline] [agentcore] [observation]
+```
+
+CI (`.github/workflows/ci.yml`) runs the same checks plus a `pip-audit` dependency
+scan, the build verification, a build of the synthetic inventory release and renders
+of complete synthetic releases for both runtime targets. A local pass does not
+replace live AWS acceptance.
+
+## Tests and evaluations
+
+Use synthetic fixtures and injected SDK clients. `tests/conftest.py` fails any test
+that opens a network connection or creates an unmocked boto3 client, so tests never
+touch your AWS account, paid models or notification channels. When you change
+runtime behavior, keep the denial, fencing, budget, redaction and scope regressions,
+and test failure paths as well as successful requests. Diagnostic evaluations run
+offline in the checks above; the optional paid model run is described in
+[evaluations/diagnostics/README.md](evaluations/diagnostics/README.md).
+
+Model API tests (`tests/test_model_api.py`) follow the same rule. Pass a fake HTTP
+opener and a fake Secrets Manager client to `ModelAPI`, use `api.example.com` URLs and an
+obviously fake credential, and never contact a real provider. Cover each failure kind,
+the no-redirect and no-retry rules, and the token-accounting paths that must stop the run.
+Identity is optional, so test both the default local mode and the OIDC module when you
+change sign-in, chat or deployment automation.
+
+## Documentation and private data
+
+Update the relevant guide in `docs/` when commands, settings, IAM boundaries or
+manual responsibilities change. `check_public_repository.py` rejects links to files
+that are not tracked, absolute local paths and internal planning references. New
+source or configuration needs a new reviewed release, because deployment plans bind
+clean committed source.
+
+Credentials, real inventory, logs, cloud responses and private work records belong
+in ignored storage (`.local/`, `.env`), never in issues, pull requests, screenshots
+or fixtures. Check `git diff --cached` before committing. `.gitignore` only stops
+future additions; removing a tracked file does not remove it from earlier commits.
+
+## Prepare a clean public repository
+
+Review the README, guides, MIT license, dependency licenses and CI first. If your
+working repository has private history, export a fresh snapshot instead of pushing it:
+
+```bash
+.venv/bin/python scripts/prepare_public_repo.py --output .local/publication
+```
+
+The script needs committed source with no uncommitted tracked changes. It runs the
+secret and public-file checks, then copies only the pinned commit's regular files into
+a new repository with one initial commit on `main`, no history and no remote. Ignored
+and untracked files are not copied, and an existing destination is never overwritten.
+Review the snapshot and run its checks, then connect an empty GitHub repository
+(replace the example owner and name):
+
+```bash
+cd .local/publication
+git remote add origin git@github.com:YOUR_ACCOUNT/YOUR_REPOSITORY.git
+ssh -T git@github.com    # exits nonzero even on success; the greeting must name the intended account
+git push -u origin main
+```
+
+Do not force-push over an existing repository; review any remote history separately.
+Turn on branch protection, required CI and GitHub private vulnerability reporting,
+and keep public claims consistent with the live-acceptance status.

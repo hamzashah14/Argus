@@ -22,11 +22,15 @@ from kira.identity import actor_id
 FIELDS = ("binding", "enabled", "epoch", "role", "instance_ids")
 
 
-def guard(bundle):
-    if bundle["spec"]["reference_only"] or "identity" not in bundle["config"]:
-        raise VerificationError("Access administration requires a customer identity bundle")
-    identity.validate_config(bundle["config"]["identity"])
-    identity.validate_bindings(bundle["spec"], bundle["bindings"])
+def guard(bundle, need_identity=True):
+    """Reject synthetic bundles; access administration additionally needs the identity module."""
+    if bundle["spec"]["reference_only"]:
+        raise VerificationError("Private operations require a customer bundle, not a synthetic reference")
+    if need_identity:
+        if "identity" not in bundle["config"]:
+            raise VerificationError("Access administration requires a customer identity bundle")
+        identity.validate_config(bundle["config"]["identity"])
+        identity.validate_bindings(bundle["spec"], bundle["bindings"])
     owned_runtime.validate_bindings(bundle["spec"], bundle["config"], bundle["bindings"])
 
 

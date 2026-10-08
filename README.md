@@ -1,18 +1,18 @@
-# Kira — AIOps Assistant
+# Kira: an AIOps assistant for your EC2 servers
 
-Kira investigates EC2 service incidents using CloudWatch logs and metrics and
-Amazon Bedrock models. Run the web UI for scoped chat and incident reports; use
-CloudWatch/EventBridge alerts for automatic investigation and notifications.
+When a CloudWatch alarm fires, Kira reads the logs and metrics of the affected
+server, asks an AI model (Amazon Bedrock by default) to reason over that evidence,
+and writes a short report that separates what was observed from what is only a
+guess. You get the alert first and a link to the report when it is ready. You can
+also ask questions in a web chat. You run all of it in your own AWS account.
 
-You deploy and operate every backend resource in your own AWS account. This
-project provides no managed service. Choose `standalone` execution in Lambda or
-`agentcore` execution in separate AWS AgentCore incident and chat runtimes. Both
-use the same Python orchestration and read-only tools.
+- **Read-only.** Its tools only read CloudWatch logs and metrics for the EC2 instances you list.
+- **No automatic fixes.** Kira suggests; a person decides and acts.
+- **Your account.** Everything is deployed and operated by you, in your AWS regions.
+- **You pay for what you use.** AWS bills Bedrock, CloudWatch, Lambda and the other services to you. A Model API provider, if you pick one, bills you separately.
+- **No hosted service.** There is no maintainer account, control plane or subscription.
 
-**Release status:** locally tested, with live AWS, OIDC, model, load, recovery and
-real inbox qualification pending. Treat deployments as staging until you complete
-[production acceptance](docs/PRODUCTION_CHECKLIST.md). Examples are synthetic;
-cloud commands reject them until replaced with customer configuration.
+> **Status:** locally tested, never run against real AWS. Treat your first deployment as staging.
 
 ## How it works
 
@@ -22,139 +22,146 @@ flowchart LR
     Ingress --> Ledger[DynamoDB ledger / outbox]
     Ledger --> Alert[Independent initial notification]
     Ledger --> Worker[Fenced investigation worker]
-    UI[Web UI / customer OIDC] --> Chat[Scoped chat gateway]
-    Chat --> Runtime[Python orchestration / Bedrock]
+    UI[Web UI] --> Runtime[Python orchestration / Bedrock or Model API]
     Worker --> Runtime
     Runtime --> Tools[Pinned read-only tools / CloudWatch]
     Worker --> Evidence[Private versioned reports]
     Evidence --> Followup[Follow-up notification]
 ```
 
-Initial notifications run independently of the model. Investigations use bounded
-tokens, tool calls, query windows and deadlines. Reports retain qualified evidence
-and uncertainty; missing logs alone do not prove a hung service. Users receive
-individual viewer/investigator grants restricted to configured instances. Kira
-does not automatically repair customer workloads.
+The first alert is sent without waiting for the model. Each investigation is
+limited in tokens, tool calls, query windows and time. Missing logs alone are not
+treated as proof of a hang. See the [architecture and glossary](docs/ARCHITECTURE.md).
 
-See [architecture and workflows](docs/ARCHITECTURE.md).
+## Three choices
 
-## Local UI preview
+You make each choice when you deploy. The defaults need the least setup.
 
-Use Python 3.12. A preview needs no AWS resources:
+| Choice | Default | Option |
+| --- | --- | --- |
+| Who signs in | **Local single-user mode.** One shared password protects the web UI. | **OIDC module.** Sign-in through your identity provider with MFA, per-person grants, revocation, audit and quotas. |
+| Which model | **Amazon Bedrock.** | **Model API.** An OpenAI-compatible or Anthropic Messages endpoint. Its key lives in AWS Secrets Manager. |
+| Where it runs | **Standalone AWS Lambda.** | **Amazon Bedrock AgentCore.** Bedrock only, so it cannot be combined with a Model API. |
 
+Pass `--identity` to `init` for the OIDC module. Set `model_provider` in
+`deployment.json` for a Model API. The [deployment guide](docs/DEPLOY.md) covers both.
+The Model API option has never run against a live provider, and diagnosis quality
+on non-Claude models is unmeasured.
+
+## Try the UI locally in about 10 minutes
+
+You need Python 3.12. The preview needs no AWS account.
 ```bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements/app.lock
-cp .env.example .env
+cp .env.example .env    # skip this if you already have a .env, and keep yours
+chmod 600 .env
 ```
 
-If `.env` already exists, preserve it. Set `ENVIRONMENT=development` and a private
-`APP_PASSWORD` of at least 12 characters. Keep the file private (`chmod 600 .env`).
+In `.env`, keep `ENVIRONMENT=development` and set `APP_PASSWORD` to a private value
+of at least 12 characters. Then start the UI and open `http://127.0.0.1:8501/`:
 
 ```bash
 .venv/bin/streamlit run app.py --server.address 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8501/`. Without verified backend configuration, the UI shows
-setup guidance and disables chat. Preview login is separate from production SSO.
+Sign in with that password. With no backend settings, the UI shows a "Connect your
+runtime" checklist and chat stays disabled. That is expected. The same password
+sign-in is the default mode of a deployed backend; the FAQ explains what it does and
+does not protect.
 
-## Deploy in your AWS account
+## Deploy to your AWS account
 
-Start with the [administrator checklist](docs/ADMINISTRATOR_SETUP_CHECKLIST.md).
-Before applying, you need:
-
-- An AWS account and scoped operator, UI workload and CloudFormation roles.
-- Existing monitored EC2 workloads, configured CloudWatch agents, exact inventory,
-  metrics/logs, collector heartbeat and application readiness behavior.
-- A Bedrock model/region supporting required token counting and Converse tools,
-  with model access, sufficient quotas and an approved budget.
-- A customer OIDC application with MFA, exact callback and authorized user subjects.
-- Primary/fallback mailboxes, a fixed HTTPS incident-status URL, and operational owners.
-
-Install the development lock for deployment/build tools, then download verified
-Lambda wheels:
+Run from a clean, committed checkout on macOS or Linux (Windows: WSL) with the
+development lock installed. Init, fill in the three private files it writes, dry-run, check,
+apply, then launch the UI:
 
 ```bash
-.venv/bin/python -m pip install --require-hashes -r requirements/dev.lock
-.venv/bin/python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
+# Default local single-user mode. Add --identity for the OIDC module.
 .venv/bin/python -m infra.automation init --work-dir .local/customer
-```
-
-Fill the three generated private JSON files. Then preview and check:
-
-```bash
 .venv/bin/python -m infra.automation dry-run --config .local/customer/automation.json --work-dir .local/customer
 .venv/bin/python -m infra.automation check --config .local/customer/automation.json --work-dir .local/customer
-```
-
-`dry-run` makes no AWS calls. `check` uses read-only APIs and a conservative
-permission screen. Review the plan before applying with its displayed hash:
-
-```bash
 .venv/bin/python -m infra.automation apply --config .local/customer/automation.json --work-dir .local/customer --plan-hash YOUR_PLAN_HASH
 .venv/bin/python -m infra.automation status --work-dir .local/customer
-```
-
-`apply` creates billable backend resources and resumes interrupted stages. It
-stops for native login/canary and human dependencies. It does not create monitored
-EC2 workloads, install collectors, register an IdP, host the UI or confirm inboxes.
-Provisioning finishes with investigations paused and manual acceptance pending.
-Read [automation and settings](docs/DEPLOYMENT_AUTOMATION.md) before applying.
-
-Launch the UI from the generated connection file with the appropriate scoped
-staging/operational AWS profile and configured OIDC secrets:
-
-```bash
+# Default mode only: set the UI password (12+ characters) in this shell. .env is not loaded.
+read -rs APP_PASSWORD; export APP_PASSWORD
 .venv/bin/python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-ui
 ```
 
-The backend runs in your AWS regions; the UI runs where you launch it. Alerts
-continue when the UI is closed. Team UI hosting, HTTPS and network controls are
-customer responsibilities. [Deployment location and costs](docs/DEPLOYMENT_AND_COST.md)
-explain the resources and ongoing charges.
+`dry-run` makes no AWS calls and shows the plan hash. `check` only reads AWS.
+`apply` creates billable resources, stops at steps only you can do (the paid canary,
+confirming inboxes and, with the OIDC module, identity-provider sign-in) and ends with
+investigations paused. The generated files are synthetic examples that `check` and
+`apply` reject until you replace them with real values; keep them private. For a
+Model API, create its key secret in Secrets Manager yourself before `check`. You also
+set up your servers and UI hosting yourself, and your identity provider if you use
+the OIDC module. Full steps: [deployment guide](docs/DEPLOY.md).
+
+## What does it cost?
+
+There is no cost estimate yet. The main cost drivers are:
+
+- **Model tokens** for each automatic investigation and each chat question: Bedrock, or your Model API provider's bill.
+- **CloudWatch** log ingestion, Logs Insights queries, metrics and alarms.
+- **Always-on storage and keys:** DynamoDB (with point-in-time recovery), S3 versioning, KMS and Secrets Manager.
+- **Messaging and compute:** Lambda, SNS and SQS, plus optional AgentCore.
+
+Limits on tokens, tool calls and queries bound each request, but they are not a
+dollar cap, and billing alerts do not stop spend. Stored data, keys and alarms keep
+costing money while investigations are paused. Watch Cost Explorer for the first
+week, and set a budget before you enable investigations. To cut model spend fast,
+pause investigations and stop chat ([operations](docs/OPERATE.md)).
+
+## FAQ
+
+**Does Kira change my servers?** No. Its tools only read CloudWatch logs and
+metrics, and recommendations are text for a person to review. Setup does create
+AWS resources of its own, and you install the CloudWatch agent on your servers
+yourself ([server setup](docs/SERVERS.md)).
+
+**Can I use it without OIDC/SSO?** Yes, that is the default. The UI then has one shared
+password, and chat runs with the UI's own AWS role and no gateway. The instance
+allowlist, pinned tools, runtime limits, release binding and redaction still apply.
+Per-person identity, audit, revocation and a shared spend cap do not exist, and the
+20 requests per hour limit is per browser session, so a new session resets it.
+Anyone with the password can use the model and tools the UI role reaches and read
+every incident report. Keep the UI on `127.0.0.1` or behind your own SSO or VPN
+proxy, or enable the OIDC module. Details: [SECURITY.md](SECURITY.md).
+
+**What if the model is down?** The initial alert is still sent. The investigation is
+retried within fixed limits, then recorded as degraded ("operator review
+required"). Chat shows an error with a reference.
+
+**Is my data sent anywhere?** With Bedrock, redacted log and metric excerpts go to
+Amazon Bedrock in your account and region. With a Model API, those excerpts and the
+questions you type leave your AWS account for the provider's HTTPS endpoint. That
+provider sets its own retention and quotas and bills you. Reports are stored in a
+private, versioned S3 bucket you own. Output is redacted by pattern matching before
+it returns to the model or is stored; this is best effort, not a guarantee. Kira
+makes no calls to the maintainers, and Streamlit usage statistics are turned off.
+
+**Can I use a model other than Bedrock?** Yes, on standalone Lambda: an
+OpenAI-compatible endpoint with tool calling, or the Anthropic Messages API. Run the
+paid staging canary and the [diagnostic evaluation](evaluations/diagnostics/README.md)
+against it first. An OpenAI-compatible endpoint has no token-count call, so Kira
+reserves a local estimate that is not an upper bound. It stops the run if the provider
+reports more input than estimated, or no usage.
+
+**What is not supported yet?** Automatic server discovery (you list instances),
+health probes of private VPC-only endpoints, a desktop app, Windows servers (the
+telemetry setup is for Linux EC2) and a Model API with AgentCore.
 
 ## Documentation
 
-See the [documentation index](docs/README.md) for setup, infrastructure, identity,
-telemetry, recovery, security operations and evaluation guides.
+1. [Deployment guide](docs/DEPLOY.md): prerequisites, costs, setup, the optional identity module and Model API.
+2. [Server setup](docs/SERVERS.md): CloudWatch agent, heartbeat and Nginx on your hosts.
+3. [Operations](docs/OPERATE.md): incidents, replay, recipients, rotation, erasure, restore.
+4. [Architecture](docs/ARCHITECTURE.md): components, workflows and a glossary.
+5. [Live acceptance](docs/ACCEPTANCE.md): the checklist to complete before relying on it.
+6. [Diagnostic evaluations](evaluations/diagnostics/README.md): synthetic cases and optional paid model tests.
 
-## Development
+## Contributing and license
 
-```bash
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
-.venv/bin/python scripts/validate_schemas.py
-.venv/bin/python scripts/validate_infrastructure.py
-.venv/bin/python scripts/validate_durable.py
-.venv/bin/python scripts/validate_observations.py
-.venv/bin/python scripts/validate_identity.py
-.venv/bin/python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
-.venv/bin/python scripts/check_public_repository.py
-.venv/bin/python scripts/check_secrets.py
-```
-
-CI additionally checks independent deterministic package builds, isolated imports,
-complete release renders and dependency vulnerabilities. Local tests do not replace
-AWS acceptance. See [contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).
-
-| Path | Purpose |
-| --- | --- |
-| `app.py`, `.streamlit/`, `.env.example` | Streamlit UI and configuration shapes |
-| `kira/`, `kira_agentcore.py` | Shared runtime, identity, safety and optional AgentCore host |
-| `lambda/` | Read-only tools, incident handlers and observers |
-| `infra/` | Inventory, templates and deployment/operator CLI |
-| `schemas/`, `agent-instruction.txt` | Tool contracts and runtime prompt |
-| `scripts/`, `tests/`, `evaluations/` | Build/validation tools and synthetic regressions |
-| `requirements/` | Hash-locked UI, development and deployed dependencies |
-| `docs/` | Current customer and contributor guides |
-| `.local/`, `.build/` | Ignored private settings, receipts and generated artifacts |
-
-Inventory is explicit and release-owned; fleet changes require reviewed releases.
-Current health probing supports approved public HTTPS routes. Private VPC probes,
-automatic fleet discovery and desktop packaging are not implemented.
-
-## License
-
-[MIT](LICENSE). Third-party dependencies retain their own licenses. AWS resources
-and model usage are billed to the deploying customer.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and checks, and
+[SECURITY.md](SECURITY.md) to report a vulnerability privately. Released under the
+[MIT license](LICENSE). Dependencies keep their own licenses.

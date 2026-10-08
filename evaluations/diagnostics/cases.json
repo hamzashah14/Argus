@@ -8,6 +8,538 @@
     "live_repeats": 3,
     "live_threshold_customer_approval": "PENDING"
   },
+  "evidence": {
+    "nginx-access-no-lines": {
+      "id": "ev_8d734132009ada0d78938b80",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/nginx-access",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "no_matching_lines",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
+        "activity_all_lines": {
+          "total_lines": 0,
+          "silent_gaps": [],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [],
+        "truncated": false
+      }
+    },
+    "telemetry-fresh-ok": {
+      "id": "ev_60acc85746cc927fa58c8cd5",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "synthetic/Health",
+        "metric_name": "TelemetryFresh",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-0123456789abcdef0",
+        "metric_id": "synthetic-TelemetryFresh"
+      },
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "synthetic/Health",
+          "metric_name": "TelemetryFresh",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-0123456789abcdef0",
+          "metric_id": "synthetic-TelemetryFresh"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 1
+          }
+        ],
+        "metric": "TelemetryFresh",
+        "namespace": "synthetic/Health",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    },
+    "telemetry-fresh-stale": {
+      "id": "ev_9ac2a6c3009eb1b5fac89e82",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "synthetic/Health",
+        "metric_name": "TelemetryFresh",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-0123456789abcdef0",
+        "metric_id": "synthetic-TelemetryFresh"
+      },
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "synthetic/Health",
+          "metric_name": "TelemetryFresh",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-0123456789abcdef0",
+          "metric_id": "synthetic-TelemetryFresh"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 0
+          }
+        ],
+        "metric": "TelemetryFresh",
+        "namespace": "synthetic/Health",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    },
+    "app-log-silent-gap": {
+      "id": "ev_e639b3462b9ec4fd8859ee06",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/application",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/application",
+        "activity_all_lines": {
+          "total_lines": 2,
+          "silent_gaps": [
+            {
+              "from": "2026-10-01 10:00",
+              "to": "2026-10-01 10:10",
+              "minutes": 10
+            }
+          ],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "message": "synthetic symptom"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    "nginx-access-symptom": {
+      "id": "ev_dd2678005f3364d336298d34",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/nginx-access",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
+        "activity_all_lines": {
+          "total_lines": 8,
+          "silent_gaps": [],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "message": "synthetic symptom"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    "availability-down": {
+      "id": "ev_23a2a4268ba5e89fa6b7dfab",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "synthetic/Health",
+        "metric_name": "Availability",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-0123456789abcdef0",
+        "metric_id": "synthetic-Availability"
+      },
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "synthetic/Health",
+          "metric_name": "Availability",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-0123456789abcdef0",
+          "metric_id": "synthetic-Availability"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 0
+          }
+        ],
+        "metric": "Availability",
+        "namespace": "synthetic/Health",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    },
+    "app-log-silent-gap-ingestion-note": {
+      "id": "ev_644c2aa20f4f7886e5852c5d",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/application",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/application",
+        "activity_all_lines": {
+          "total_lines": 2,
+          "silent_gaps": [
+            {
+              "from": "2026-10-01 10:00",
+              "to": "2026-10-01 10:10",
+              "minutes": 10,
+              "note": "possible ingestion delay"
+            }
+          ],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "message": "synthetic symptom"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    "cpu-saturated": {
+      "id": "ev_783958ea7c9e8b1c7b56e9ef",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "AWS/EC2",
+        "metric_name": "CPUUtilization",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-0123456789abcdef0",
+        "metric_id": "synthetic-CPUUtilization"
+      },
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "AWS/EC2",
+          "metric_name": "CPUUtilization",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-0123456789abcdef0",
+          "metric_id": "synthetic-CPUUtilization"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 96
+          }
+        ],
+        "metric": "CPUUtilization",
+        "namespace": "AWS/EC2",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    },
+    "app-log-symptom": {
+      "id": "ev_cc2b3bc58e8e16ba8254a61a",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/application",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/application",
+        "activity_all_lines": {
+          "total_lines": 2,
+          "silent_gaps": [],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "message": "synthetic symptom"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    "availability-up": {
+      "id": "ev_c6cdfbdb06e507001fdd4418",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "synthetic/Health",
+        "metric_name": "Availability",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-0123456789abcdef0",
+        "metric_id": "synthetic-Availability"
+      },
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "synthetic/Health",
+          "metric_name": "Availability",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-0123456789abcdef0",
+          "metric_id": "synthetic-Availability"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 1
+          }
+        ],
+        "metric": "Availability",
+        "namespace": "synthetic/Health",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    },
+    "app-log-secret-markers": {
+      "id": "ev_3523cce5943afc70b08efeaf",
+      "tool": "fetch_logs",
+      "source": "/synthetic/i-0123456789abcdef0/application",
+      "instance_id": "i-0123456789abcdef0",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-0123456789abcdef0",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "log_group": "/synthetic/i-0123456789abcdef0/application",
+        "activity_all_lines": {
+          "total_lines": 1,
+          "silent_gaps": [],
+          "bin_minutes": 1,
+          "lines_per_bin": "synthetic one-minute counts"
+        },
+        "lines": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "message": "password=fixture-sensitive-marker person@example.invalid"
+          }
+        ],
+        "truncated": false
+      }
+    },
+    "other-instance-telemetry-fresh-ok": {
+      "id": "ev_6a82c0eee3253f3d138313f5",
+      "tool": "fetch_metrics",
+      "source": {
+        "namespace": "synthetic/Health",
+        "metric_name": "TelemetryFresh",
+        "statistic": "Minimum",
+        "dimensions": [
+          {
+            "Name": "Route",
+            "Value": "ready"
+          },
+          {
+            "Name": "Service",
+            "Value": "api"
+          }
+        ],
+        "instance_id": "i-11111111111111111",
+        "metric_id": "synthetic-TelemetryFresh"
+      },
+      "instance_id": "i-11111111111111111",
+      "window_start": "2026-10-01T10:00:00Z",
+      "window_end": "2026-10-01T10:15:00Z",
+      "result": {
+        "status": "ok",
+        "complete": true,
+        "instance_id": "i-11111111111111111",
+        "window_start": "2026-10-01T10:00:00Z",
+        "window_end": "2026-10-01T10:15:00Z",
+        "descriptor": {
+          "namespace": "synthetic/Health",
+          "metric_name": "TelemetryFresh",
+          "statistic": "Minimum",
+          "dimensions": [
+            {
+              "Name": "Route",
+              "Value": "ready"
+            },
+            {
+              "Name": "Service",
+              "Value": "api"
+            }
+          ],
+          "instance_id": "i-11111111111111111",
+          "metric_id": "synthetic-TelemetryFresh"
+        },
+        "datapoints": [
+          {
+            "timestamp": "2026-10-01T10:05:00Z",
+            "value": 1
+          }
+        ],
+        "metric": "TelemetryFresh",
+        "namespace": "synthetic/Health",
+        "statistic": "Minimum",
+        "period_seconds": 60
+      }
+    }
+  },
   "cases": [
     {
       "id": "no-traffic",
@@ -15,88 +547,8 @@
       "expected_kind": "no_traffic",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_8d734132009ada0d78938b80",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "no_matching_lines",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 0,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_60acc85746cc927fa58c8cd5",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "nginx-access-no-lines",
+        "telemetry-fresh-ok"
       ],
       "candidate": {
         "version": 1,
@@ -137,64 +589,7 @@
       "expected_kind": "collector_failure",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_9ac2a6c3009eb1b5fac89e82",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "telemetry-fresh-stale"
       ],
       "candidate": {
         "version": 1,
@@ -229,186 +624,10 @@
       "expected_kind": "hang_correlated",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_e639b3462b9ec4fd8859ee06",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [
-                {
-                  "from": "2026-10-01 10:00",
-                  "to": "2026-10-01 10:10",
-                  "minutes": 10
-                }
-              ],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_60acc85746cc927fa58c8cd5",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "app-log-silent-gap",
+        "telemetry-fresh-ok",
+        "nginx-access-symptom",
+        "availability-down"
       ],
       "candidate": {
         "version": 1,
@@ -472,186 +691,10 @@
       "expected_kind": "hang_correlated",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_e639b3462b9ec4fd8859ee06",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [
-                {
-                  "from": "2026-10-01 10:00",
-                  "to": "2026-10-01 10:10",
-                  "minutes": 10
-                }
-              ],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_9ac2a6c3009eb1b5fac89e82",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "app-log-silent-gap",
+        "telemetry-fresh-stale",
+        "nginx-access-symptom",
+        "availability-down"
       ],
       "candidate": {
         "version": 1,
@@ -715,187 +758,10 @@
       "expected_kind": "hang_correlated",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_644c2aa20f4f7886e5852c5d",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [
-                {
-                  "from": "2026-10-01 10:00",
-                  "to": "2026-10-01 10:10",
-                  "minutes": 10,
-                  "note": "possible ingestion delay"
-                }
-              ],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_60acc85746cc927fa58c8cd5",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "app-log-silent-gap-ingestion-note",
+        "telemetry-fresh-ok",
+        "nginx-access-symptom",
+        "availability-down"
       ],
       "candidate": {
         "version": 1,
@@ -959,41 +825,7 @@
       "expected_kind": "hang_correlated",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_e639b3462b9ec4fd8859ee06",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [
-                {
-                  "from": "2026-10-01 10:00",
-                  "to": "2026-10-01 10:10",
-                  "minutes": 10
-                }
-              ],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        }
+        "app-log-silent-gap"
       ],
       "candidate": {
         "version": 1,
@@ -1036,93 +868,8 @@
       "expected_kind": "resource_pressure",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_783958ea7c9e8b1c7b56e9ef",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "AWS/EC2",
-            "metric_name": "CPUUtilization",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-CPUUtilization"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "AWS/EC2",
-              "metric_name": "CPUUtilization",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-CPUUtilization"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 96
-              }
-            ],
-            "metric": "CPUUtilization",
-            "namespace": "AWS/EC2",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_cc2b3bc58e8e16ba8254a61a",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        }
+        "cpu-saturated",
+        "app-log-symptom"
       ],
       "candidate": {
         "version": 1,
@@ -1163,93 +910,8 @@
       "expected_kind": "service_failure",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        }
+        "availability-down",
+        "nginx-access-symptom"
       ],
       "candidate": {
         "version": 1,
@@ -1290,122 +952,8 @@
       "expected_kind": "contradictory_evidence",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_c6cdfbdb06e507001fdd4418",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "availability-up",
+        "availability-down"
       ],
       "candidate": {
         "version": 1,
@@ -1521,35 +1069,7 @@
       "expected_kind": "insufficient_data",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_3523cce5943afc70b08efeaf",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 1,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "password=fixture-sensitive-marker person@example.invalid"
-              }
-            ],
-            "truncated": false
-          }
-        }
+        "app-log-secret-markers"
       ],
       "candidate": {
         "version": 1,
@@ -1584,88 +1104,8 @@
       "expected_kind": "no_traffic",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_8d734132009ada0d78938b80",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "no_matching_lines",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 0,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_6a82c0eee3253f3d138313f5",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-11111111111111111",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-11111111111111111",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-11111111111111111",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-11111111111111111",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "nginx-access-no-lines",
+        "other-instance-telemetry-fresh-ok"
       ],
       "candidate": {
         "version": 1,
@@ -1706,93 +1146,8 @@
       "expected_kind": "service_failure",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        }
+        "availability-down",
+        "nginx-access-symptom"
       ],
       "candidate": {
         "version": 1,
@@ -1833,186 +1188,10 @@
       "expected_kind": "hang_correlated",
       "prompt": "Investigate i-0123456789abcdef0 near 2026-10-01T10:00:00Z. ",
       "catalog": [
-        {
-          "id": "ev_e639b3462b9ec4fd8859ee06",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/application",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/application",
-            "activity_all_lines": {
-              "total_lines": 2,
-              "silent_gaps": [
-                {
-                  "from": "2026-10-01 10:00",
-                  "to": "2026-10-01 10:10",
-                  "minutes": 10
-                }
-              ],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_60acc85746cc927fa58c8cd5",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "TelemetryFresh",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-TelemetryFresh"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "TelemetryFresh",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-TelemetryFresh"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 1
-              }
-            ],
-            "metric": "TelemetryFresh",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        },
-        {
-          "id": "ev_dd2678005f3364d336298d34",
-          "tool": "fetch_logs",
-          "source": "/synthetic/i-0123456789abcdef0/nginx-access",
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "log_group": "/synthetic/i-0123456789abcdef0/nginx-access",
-            "activity_all_lines": {
-              "total_lines": 8,
-              "silent_gaps": [],
-              "bin_minutes": 1,
-              "lines_per_bin": "synthetic one-minute counts"
-            },
-            "lines": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "message": "synthetic symptom"
-              }
-            ],
-            "truncated": false
-          }
-        },
-        {
-          "id": "ev_23a2a4268ba5e89fa6b7dfab",
-          "tool": "fetch_metrics",
-          "source": {
-            "namespace": "synthetic/Health",
-            "metric_name": "Availability",
-            "statistic": "Minimum",
-            "dimensions": [
-              {
-                "Name": "Route",
-                "Value": "ready"
-              },
-              {
-                "Name": "Service",
-                "Value": "api"
-              }
-            ],
-            "instance_id": "i-0123456789abcdef0",
-            "metric_id": "synthetic-Availability"
-          },
-          "instance_id": "i-0123456789abcdef0",
-          "window_start": "2026-10-01T10:00:00Z",
-          "window_end": "2026-10-01T10:15:00Z",
-          "result": {
-            "status": "ok",
-            "complete": true,
-            "instance_id": "i-0123456789abcdef0",
-            "window_start": "2026-10-01T10:00:00Z",
-            "window_end": "2026-10-01T10:15:00Z",
-            "descriptor": {
-              "namespace": "synthetic/Health",
-              "metric_name": "Availability",
-              "statistic": "Minimum",
-              "dimensions": [
-                {
-                  "Name": "Route",
-                  "Value": "ready"
-                },
-                {
-                  "Name": "Service",
-                  "Value": "api"
-                }
-              ],
-              "instance_id": "i-0123456789abcdef0",
-              "metric_id": "synthetic-Availability"
-            },
-            "datapoints": [
-              {
-                "timestamp": "2026-10-01T10:05:00Z",
-                "value": 0
-              }
-            ],
-            "metric": "Availability",
-            "namespace": "synthetic/Health",
-            "statistic": "Minimum",
-            "period_seconds": 60
-          }
-        }
+        "app-log-silent-gap",
+        "telemetry-fresh-ok",
+        "nginx-access-symptom",
+        "availability-down"
       ],
       "candidate": {
         "version": 1,

@@ -1,0 +1,146 @@
+# Set up your servers for Kira
+
+Kira reads CloudWatch logs and metrics for your EC2 instances. It never installs
+anything on them. You install and configure the CloudWatch agent (CWAgent), a heartbeat
+timer and, if you use Nginx, its logging. This page says what must exist and how to
+check it. Do it before the staging canary in [DEPLOY.md](DEPLOY.md): the canary runs a
+coverage check and stops if a required metric or log group is missing.
+
+**What is supported.** Existing Linux EC2 instances, 1 to 10 of them, listed by hand in
+`deployment.json`. Windows collectors are not qualified. There is no automatic discovery
+of instances or autoscaling members. When an instance is replaced, update the inventory,
+build a new release and cut over (see [OPERATE.md](OPERATE.md)). Terms are in the
+[glossary](ARCHITECTURE.md#glossary).
+
+## What Kira expects
+
+Everything below is derived from the instance entries in `deployment.json`.
+
+| Setting | What must exist on the instance and in CloudWatch |
+| --- | --- |
+| `id` | An EC2 instance that is not terminated. The generated log stream name is the instance ID |
+| `log_groups` (names such as `application`) | A log group `/PROJECT/ENVIRONMENT/INSTANCE_ID/NAME`. If `log_segment` is set, it comes before the instance ID |
+| `nginx_alarm: true` | Log groups `.../nginx-access` and `.../nginx-error`, plus the Nginx metrics below |
+| `resource_alarms: true` | CPU, memory and disk metrics for alarms |
+| `disk_path` | The disk metric with this `path` dimension (for example `/`) |
+| `process_exe` | A process-count metric for this executable (for example `nginx`) |
+| `observability` (optional) | The heartbeat file, shipped to a dedicated heartbeat log group |
+
+Log retention is `log_retention_days`. Kira creates the log groups. Your agent writes into them.
+
+## Step 1: install the CloudWatch agent
+
+1. Give the instance a role that lets the agent publish the logs and metrics above.
+   Never put administrator credentials on a server.
+2. Run `dry-run` from [DEPLOY.md](DEPLOY.md). It writes one agent configuration per instance to
+   `.local/customer/collector-examples/INSTANCE_ID.json`. It makes no connection to your servers.
+3. Install the CloudWatch agent with AWS's instructions, apply that configuration, then start and
+   enable the agent service.
+
+The generated configuration publishes, every 60 seconds, to the `CWAgent` namespace with the
+`InstanceId` dimension:
+
+- `mem_used_percent` and `swap_used_percent`.
+- Disk `used_percent` for `disk_path` (published as `disk_used_percent`, with a `path` dimension).
+- A process count for `process_exe` (published as `procstat_lookup_pid_count`).
+- If `nginx_alarm` is true: `/var/log/nginx/access.log` and `/var/log/nginx/error.log` to the two
+  Nginx log groups.
+- If `observability` is configured: `/var/log/kira-collector-heartbeat.log` to the heartbeat group.
+
+It does not collect your application logs. Add a `collect_list` entry for each name in
+`log_groups`, using the group name from the table above and the instance ID as the stream name.
+Check that file permissions let the agent read each file.
+
+## Step 2: Nginx logging (if `nginx_alarm` is true)
+
+- Log the standard combined format to `/var/log/nginx/access.log`, and the error log to
+  `/var/log/nginx/error.log`. With `observability` configured, Kira parses your `match` line and
+  rejects other access formats: "Unsupported access format; validate the customer's actual format".
+- `nginx_filters` in `deployment.json` has an `access` and an `error` filter. Each has a `pattern`
+  (a CloudWatch Logs filter pattern), a `match` sample line and a `miss` sample line. Use sanitized
+  real lines from your own servers. Kira tests every pattern against both samples. The `match`
+  line must match and the `miss` line must not.
+- The `miss` sample guards against reading the byte count as a status. The example miss line has
+  status 200 and 502 bytes.
+- With `observability` configured, the access filter must match status 500, 502, 503 and 504.
+  The coverage check rejects anything narrower: "Access filter does not cover declared
+  failed-request statuses". The example in `infra/observability.example.json` does this. The
+  default example in `infra/deployment.example.json` matches only 502 and 504.
+- Metrics are published to `PROJECT/ENVIRONMENT/Nginx`. Without observers, both filters feed one
+  metric, `nginx-upstream-errors-INSTANCE_ID`. With observers, access failures are
+  `nginx-failed-requests-INSTANCE_ID` and error-log events are `nginx-diagnostic-events-INSTANCE_ID`.
+  These are separate counts and separate alarms. Do not add them up as unique requests. Each alarm
+  fires at 5 or more in 60 seconds.
+
+## Step 3: the heartbeat (needed only with `observability`)
+
+A quiet application writes few logs, so quiet logs cannot show that the collector is alive.
+The heartbeat does. Run `scripts/collector_heartbeat.py` every minute on each instance, from a
+supervised scheduler such as a systemd timer, with the real instance ID:
+
+```bash
+python3 /opt/kira/scripts/collector_heartbeat.py --instance-id "$INSTANCE_ID" --file /var/log/kira-collector-heartbeat.log
+```
+
+The path `/opt/kira/scripts` is only an example. The script appends one JSON line with the
+instance ID and a UTC timestamp. It makes no AWS calls and installs no timer. CWAgent ships the file.
+
+- Install the script and its unit root-owned, and make the file readable by the agent.
+- For a systemd timer, use `OnBootSec=30s`, `OnUnitActiveSec=60s` and `AccuracySec=5s`.
+  A oneshot service should run the command. Enable and start the timer, then check both statuses.
+- Keep the clock synchronized (UTC) and rotate the file.
+- The script accepts only instance IDs with exactly 17 hex digits. The deployment schema also
+  accepts 8-digit IDs, which this script rejects.
+
+## Step 4: readiness behavior (needed only with `observability`)
+
+An observer calls the HTTPS routes you declare for each service. The route must return a
+non-success status when an essential dependency is unhealthy. If one route cannot say that,
+declare separate dependency routes (1 to 3 per service). Kira cannot add readiness behavior inside
+your application.
+
+Routes must be public HTTPS on port 443 with a path, with no credentials, query string or
+redirect. Every DNS answer must be public. The probe checks the original TLS hostname. Private
+VPC-only endpoints are not supported. Do not expose a private service just to satisfy a probe.
+
+## Check that telemetry is flowing
+
+1. In the CloudWatch console, open each log group. Each instance should have a stream named after
+   it with recent events, and a one-line-per-minute heartbeat stream.
+2. Open the `CWAgent` metrics. For each instance you should see `mem_used_percent`
+   (`InstanceId`), `disk_used_percent` (`InstanceId` and `path`) and
+   `procstat_lookup_pid_count` (`InstanceId`, `exe` and `pid_finder`). Kira needs these exact
+   dimensions. Mismatched dimensions are the most common failure.
+3. For Nginx, open the `PROJECT/ENVIRONMENT/Nginx` metrics after a test request or two.
+4. If the instance sets `resource_alarms`, also expect the AWS/EC2 `CPUUtilization` metric. The
+   `StatusCheckFailed` metric is always required.
+
+Kira runs its own coverage check during the staging canary and again before routing is promoted.
+It requires every metric descriptor above to exist and every Nginx filter to pass its samples.
+It fails with "Required metric unavailable: INSTANCE_ID-memory" (or the matching id), "Required
+evidence log group is absent", or "Required access metric filter failed its positive/negative
+fixtures". It proves the metrics exist and the filters parse. It does not prove that an alarm
+fires or an email arrives. Use [ACCEPTANCE.md](ACCEPTANCE.md) for that.
+
+## What the observers check
+
+Observers are three optional Lambda functions in your account: a health probe, a notification
+canary and a receipt consumer. Set `observability.enabled` to true to switch on their schedules
+and alarm actions.
+
+- **Health.** Each service route is probed. The result is an `Availability` metric per service
+  and route. A `TelemetryFresh` metric per service is true only when both the declared CWAgent
+  metric (`collector_metric_id`) is fresh and a valid shipped heartbeat is within
+  `freshness_seconds`. Both are needed. Idle application logs never count as a heartbeat.
+- **Delivery.** The canary sends a synthetic notification through the alert path. A separate
+  consumer records its receipt. The observer checks the due times, whether the primary and
+  fallback subscriptions are confirmed, and whether a person has attested a fresh inbox receipt
+  (`attest-email`, see [ACCEPTANCE.md](ACCEPTANCE.md)).
+- **Alarm timing.** A service health or freshness alarm needs two bad periods. A missing observer
+  heartbeat needs three. A missed daily canary can take up to a day plus its deadline to show.
+- **Limits.** The observer Lambda has a 180-second timeout and stops its own checks at about 150
+  seconds. Incomplete checks raise explicit attention alarms. A maximum-size inventory still needs
+  staging qualification.
+
+Settings and their allowed ranges are in [DEPLOY.md](DEPLOY.md). Recovery and alarm response are in
+[OPERATE.md](OPERATE.md).

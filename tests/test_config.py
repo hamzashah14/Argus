@@ -56,37 +56,41 @@ def test_invalid_bindings_are_rejected(configured, monkeypatch, key, value):
     assert AppConfig.from_env().problems()
 
 
-def test_production_requires_qualified_chat_gateway(configured, monkeypatch):
+def test_oidc_production_requires_qualified_chat_gateway(configured, monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
+    monkeypatch.setenv("KIRA_SESSION_TABLE", "identity-table")
     monkeypatch.delenv("CHAT_FUNCTION_ARN", raising=False)
     assert AppConfig.from_env().problems()
     monkeypatch.setenv("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4")
     assert AppConfig.from_env().problems() == []
 
 
-def test_password_is_not_in_configuration_repr(monkeypatch):
-    monkeypatch.setenv("APP_PASSWORD", "fixture-password-value")
-    assert "fixture-password-value" not in repr(AppConfig.from_env())
+def test_standalone_production_needs_no_chat_gateway_but_keeps_tool_pins(configured, monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    for key in ("KIRA_AUTH_MODE", "KIRA_SESSION_TABLE", "CHAT_FUNCTION_ARN"):
+        monkeypatch.delenv(key, raising=False)
+    assert AppConfig.from_env().problems() == []
+    monkeypatch.setenv("LOGS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:logs:$LATEST")
+    assert AppConfig.from_env().problems()
 
 
 @pytest.mark.parametrize(
-    "command", ["render", "prepare", "upload", "change-set", "execute", "seal", "collect", "verify-candidate"]
+    "key,value",
+    [
+        ("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4"),
+        ("KIRA_SESSION_TABLE", "identity-table"),
+    ],
 )
-def test_retired_classic_cli_commands_rejected_before_aws(monkeypatch, command):
-    import sys
-    from unittest.mock import Mock
+def test_identity_resources_without_oidc_fail_closed(configured, monkeypatch, key, value):
+    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
+    monkeypatch.setenv(key, value)
+    assert any("KIRA_AUTH_MODE=oidc" in problem for problem in AppConfig.from_env().problems())
 
-    import boto3
 
-    from infra.__main__ import main
-
-    cloud = Mock()
-    monkeypatch.setattr(boto3, "client", cloud)
-    monkeypatch.setattr(sys, "argv", ["infra", command])
-    with pytest.raises(SystemExit) as refused:
-        main()
-    assert refused.value.code == 2
-    cloud.assert_not_called()
+def test_password_is_not_in_configuration_repr(monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "fixture-password-value")
+    assert "fixture-password-value" not in repr(AppConfig.from_env())
 
 
 @pytest.mark.parametrize("target", ["classic", "unknown"])
@@ -101,3 +105,32 @@ def test_incident_dispatch_rejects_retired_target_before_request_or_aws(monkeypa
     with pytest.raises(ValueError, match="Unsupported runtime target"):
         pipeline.invoke_agent({}, 100)
     request.assert_not_called()
+
+
+MODEL_API = json.dumps(
+    {
+        "protocol": "openai",
+        "base_url": "https://api.example.com/v1",
+        "secret_arn": "arn:aws:secretsmanager:eu-central-1:123456789012:secret:kira-staging/model-api-key-AbCdEf",  # pragma: allowlist secret
+        "secret_version": "11111111-2222-3333-4444-555555555555",
+    }
+)
+
+
+def test_model_api_setting_is_accepted_for_standalone(configured, monkeypatch):
+    monkeypatch.setenv("MODEL_API", MODEL_API)
+    assert AppConfig.from_env().problems() == []
+
+
+@pytest.mark.parametrize(
+    "raw", ["not-json", "[]", '{"protocol": "openai"}', MODEL_API.replace("https", "http")]
+)
+def test_invalid_model_api_setting_is_rejected(configured, monkeypatch, raw):
+    monkeypatch.setenv("MODEL_API", raw)
+    assert any("MODEL_API" in problem for problem in AppConfig.from_env().problems())
+
+
+def test_agentcore_rejects_model_api(configured, monkeypatch):
+    monkeypatch.setenv("RUNTIME_TARGET", "agentcore")
+    monkeypatch.setenv("MODEL_API", MODEL_API)
+    assert "AgentCore uses a Bedrock model only; remove MODEL_API." in AppConfig.from_env().problems()

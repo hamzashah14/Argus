@@ -117,6 +117,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    if os.getenv("MODEL_API"):
+        raise SystemExit("MODEL_API is set, but the AgentCore target is Bedrock-only; unset MODEL_API")
     bind = "0.0.0.0" if os.getenv("AGENTCORE_HOSTING") == "true" else "127.0.0.1"
     ThreadingHTTPServer((bind, 8080), Handler).serve_forever()
 

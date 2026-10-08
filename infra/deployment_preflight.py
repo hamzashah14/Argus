@@ -2,6 +2,8 @@
 
 import json
 
+from botocore.exceptions import ClientError
+
 from infra.spec import prefix
 from infra.templates import bucket_name
 from infra.verify import VerificationError
@@ -322,26 +324,46 @@ def check(plan, factory, *, remaining_reserved=None):
         raise VerificationError("Create/configure the declared EC2 inventory before deployment")
     from infra.verify import assert_concurrency
 
-    requested = config["initial_reserved_concurrency"] + 2 + (1 if "identity" in config else 0)
+    # Investigate (2) and Chat (1) are reserved only by identity-enabled templates.
+    requested = config["initial_reserved_concurrency"] + (3 if "identity" in config else 0)
     assert_concurrency(
         factory("lambda", spec["monitor_region"]),
         requested if remaining_reserved is None else remaining_reserved,
     )
-    bedrock = factory("bedrock", spec["bedrock_region"])
-    if any(
-        ":inference-profile/" in arn or ":application-inference-profile/" in arn for arn in spec["model_arns"]
-    ):
-        model = bedrock.get_inference_profile(inferenceProfileIdentifier=spec["model_id"])
-        if (
-            model.get("inferenceProfileArn") not in spec["model_arns"]
-            or not model.get("models")
-            or any(item.get("modelArn") not in spec["model_arns"] for item in model["models"])
-        ):
-            raise VerificationError("Model profile and its destination models must match declared model_arns")
+    model_api = spec.get("model_provider", "bedrock") == "model_api"
+    if model_api:
+        # Existence and a unique current version only; the key value is never read. A missing
+        # secret is a blocker, but AccessDenied stays an error rather than being read as absence.
+        secret_name = prefix(spec) + "/model-api-key"
+        try:
+            secret = factory("secretsmanager", spec["bedrock_region"]).describe_secret(SecretId=secret_name)
+        except ClientError as exc:
+            if exc.response["Error"]["Code"] != "ResourceNotFoundException":
+                raise
+            raise VerificationError(
+                f"Create the model API key secret {secret_name} before deploying"
+            ) from None
+        if sum("AWSCURRENT" in stages for stages in secret.get("VersionIdsToStages", {}).values()) != 1:
+            raise VerificationError("Model API key secret has no unique current version")
     else:
-        model = bedrock.get_foundation_model(modelIdentifier=spec["model_id"])
-        if model.get("modelDetails", {}).get("modelArn") not in spec["model_arns"]:
-            raise VerificationError("Model catalog ARN differs from declared model_arns")
+        bedrock = factory("bedrock", spec["bedrock_region"])
+        if any(
+            ":inference-profile/" in arn or ":application-inference-profile/" in arn
+            for arn in spec["model_arns"]
+        ):
+            model = bedrock.get_inference_profile(inferenceProfileIdentifier=spec["model_id"])
+            if (
+                model.get("inferenceProfileArn") not in spec["model_arns"]
+                or not model.get("models")
+                or any(item.get("modelArn") not in spec["model_arns"] for item in model["models"])
+            ):
+                raise VerificationError(
+                    "Model profile and its destination models must match declared model_arns"
+                )
+        else:
+            model = bedrock.get_foundation_model(modelIdentifier=spec["model_id"])
+            if model.get("modelDetails", {}).get("modelArn") not in spec["model_arns"]:
+                raise VerificationError("Model catalog ARN differs from declared model_arns")
     checks = []
     for request in permission_requests(spec, {**config, "_initial_access": plan["initial_access"]}):
         checks.extend(simulate(iam, request))
@@ -350,12 +372,19 @@ def check(plan, factory, *, remaining_reserved=None):
         "status": "BLOCKED" if denied else "SIMULATED",
         "account_matches": True,
         "inventory_present": True,
-        "model_catalog_visible": True,
+        # None: the Bedrock catalog check does not apply to a model API.
+        "model_catalog_visible": None if model_api else True,
+        **({"model_secret_present": True} if model_api else {}),
         "permission_checks": checks,
         "blockers": denied,
         "limitations": [
             "Simulation is a preliminary screen, not effective authorization or a complete IAM policy generator",
             "Session policies, trust conditions, resource policies, organizational and endpoint controls can differ at execution",
             "Model entitlements, telemetry, delivery and real identity require runtime verification",
+            *(
+                ["Model API key value, endpoint reachability and quota are not read or called by this check"]
+                if model_api
+                else []
+            ),
         ],
     }

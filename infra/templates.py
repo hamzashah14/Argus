@@ -399,7 +399,7 @@ def service_routing(spec):
                                 if s["instance_id"] == alarm["instance_id"]
                             )
                         )
-                        + "; docs/OPERATIONS.md"
+                        + "; docs/OPERATE.md"
                     }
                     if "observability" in spec
                     else {}

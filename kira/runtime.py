@@ -12,7 +12,7 @@ from pathlib import Path
 import boto3
 from botocore.config import Config
 
-from kira import diagnosis, safety
+from kira import diagnosis, model_api, safety
 from kira.telemetry import emit
 from kira.time import iso_utc, parse_utc
 from kira.transport import clip_utf8
@@ -267,7 +267,7 @@ def run(
         and os.getenv("KIRA_DIAGNOSTIC_POLICY") != diagnosis.VERSION
     ):
         raise RuntimeStop("DIAGNOSTIC_POLICY_UNAVAILABLE")
-    client = client or sdk_client("bedrock-runtime", region)
+    client = client or model_api.from_env() or sdk_client("bedrock-runtime", region)
     messages = [
         {"role": m["role"], "content": [{"text": safety.text(m["content"])}]}
         for m in history[-24:]

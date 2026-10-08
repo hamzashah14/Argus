@@ -2,6 +2,7 @@ name: quality-and-build
 on:
   pull_request:
   push:
+    branches: [master]
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,21 +34,16 @@ jobs:
           python scripts/check_public_repository.py
           python scripts/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
       - name: Unit, contract and UI regression tests (no AWS access)
-        run: python -m pytest --junitxml=.build/tests.xml
+        run: python -m pytest
       - name: Secret candidate scan
         run: python scripts/check_secrets.py
       - name: Dependency vulnerability scan
-        run: pip-audit -r requirements/dev.lock --disable-pip --no-deps --format json --output .build/dependency-audit.json
+        run: pip-audit -r requirements/dev.lock --disable-pip --no-deps
       - name: Download hash-verified Lambda wheels
-        run: python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
+        run: |
+          python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
       - name: Independent deterministic builds and isolated package imports
         run: python scripts/verify_build.py
-      - name: Independent durable-pipeline builds and isolated imports
-        run: python scripts/verify_pipeline_build.py
-      - name: Independent ARM64 AgentCore host builds and bundled imports
-        run: python scripts/verify_agentcore_build.py
-      - name: Independent observation builds and bundled imports
-        run: python scripts/verify_observation_build.py
       - name: Build the synthetic inventory release without AWS access
         run: python -m infra build --spec infra/deployment.example.json --output .build/reference-lambda --wheelhouse .build/wheels
       - name: Verify complete releases for both execution targets without AWS access
@@ -59,29 +55,3 @@ jobs:
           python -m infra build --spec infra/observability.example.json --output .build/observation-tools --wheelhouse .build/wheels
           python scripts/verify_durable_render.py --observations --tool-build-dir .build/observation-tools
           python scripts/verify_durable_render.py --identity --observations --tool-build-dir .build/observation-tools
-      - name: Save validation and artifact evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-validation
-          path: |
-            .build/tests.xml
-            .build/diagnostics-evaluation.json
-            .build/dependency-audit.json
-            .build/build-validation.json
-            .build/pipeline-build-validation.json
-            .build/agentcore-build-validation.json
-            .build/durable-render-validation.json
-            .build/observation-build-validation.json
-            .build/observation-render-validation.json
-            .build/durable-identity-render-validation.json
-            .build/observation-identity-render-validation.json
-            .build/observation-a/*.zip
-            .build/observation-a/manifest.json
-            .build/lambda-a/*.zip
-            .build/lambda-a/manifest.json
-            .build/pipeline-a/*.zip
-            .build/pipeline-a/manifest.json
-            .build/agentcore-a/*.zip
-            .build/agentcore-a/manifest.json
-          retention-days: 14

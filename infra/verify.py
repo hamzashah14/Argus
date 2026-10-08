@@ -41,15 +41,6 @@ def assert_concurrency(client, requested):
         raise VerificationError("Reserved concurrency would consume Lambda's required unreserved capacity")
 
 
-def put_targets_checked(events, **kwargs):
-    result = events.put_targets(**kwargs)
-    if result.get("FailedEntryCount", 0) or result.get("FailedEntries"):
-        raise VerificationError("EventBridge rejected one or more targets")
-    if "FailedEntryCount" not in result:
-        raise VerificationError("EventBridge response omitted its per-entry outcome")
-    return result
-
-
 def exact_metric_exists(client, descriptor):
     token = None
     while True:

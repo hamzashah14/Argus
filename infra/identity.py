@@ -176,8 +176,6 @@ def permissions(spec, bindings, *, issuer=False, purpose=None):
 
 def verify_ui_role(bundle, factory):
     """Check the actual post-promotion workload role, including trust and extra grants."""
-    if "identity" not in bundle["config"]:
-        return
     from infra import durable_ops, durable_templates, owned_ops
 
     spec = bundle["spec"]

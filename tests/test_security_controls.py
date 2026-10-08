@@ -22,7 +22,7 @@ from kira.quotas import Quotas
 from scripts import evaluate_diagnostics
 from tests.test_identity import ACTOR, IID, RELEASE
 from tests.test_identity import setup as identity_fixture
-from tests.test_identity_wiring import CONFIG, SPEC, bindings
+from tests.test_identity_wiring import BASE, CONFIG, SPEC, bindings
 from tests.test_runtime import answer, drive
 
 
@@ -425,6 +425,16 @@ def test_default_evaluation_records_model_not_run_and_passes():
     result = evaluate_diagnostics.offline()
     assert result["status"] == "PASS" and result["model"] is None and len(result["cases"]) == 16
     assert result["live_model_evaluation"] == "NOT_RUN"
+
+
+def test_suite_rejects_unknown_evidence_reference(tmp_path, monkeypatch):
+    (tmp_path / "evaluations/diagnostics").mkdir(parents=True)
+    (tmp_path / "evaluations/diagnostics/cases.json").write_text(
+        json.dumps({"evidence": {}, "cases": [{"id": "x", "catalog": ["missing"]}]})
+    )
+    monkeypatch.setattr(evaluate_diagnostics, "ROOT", tmp_path)
+    with pytest.raises(ValueError, match="unknown evidence.*missing"):
+        evaluate_diagnostics.suite()
 
 
 def test_paid_evaluation_aggregate_budget_is_enforced():
@@ -948,18 +958,158 @@ def test_erasure_decimal_plan_roundtrip_is_reviewable_and_applies(eraser, tmp_pa
     assert erase.apply(reviewed)["status"] == "DELETED"
 
 
-def test_canary_without_individual_identity_rejects_before_any_aws_client():
+def canary_bundle(config):
+    return {
+        "spec": SPEC,
+        "config": {**config, "runtime_target": "standalone"},
+        "bindings": bindings(),
+        "review_hash": "r" * 64,
+    }
+
+
+def canary_client(bundle):
+    result = {
+        "release": owned_runtime.fingerprint(SPEC, bundle["config"], bundle["bindings"]),
+        "complete": True,
+        "tools": ["fetch_logs", "fetch_metrics"],
+        "evidence": ["fetch_logs", "fetch_metrics"],
+        "text": "synthetic diagnosis",
+        "diagnosis": {"status": "VALID", "policy": "diagnosis-v1"},
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+    client = Mock()
+    client.invoke.return_value = {"StatusCode": 200, "Payload": BytesIO(json.dumps(result).encode())}
+    return client
+
+
+def test_canary_with_identity_requires_a_ticket_before_any_aws_client():
     from infra import owned_ops
 
     factory = Mock()
-    with pytest.raises(VerificationError, match="identity-enabled"):
-        owned_ops.canary(
-            {"spec": {"environment": "staging"}, "config": {}},
-            factory,
-            allow_model_invocation=True,
-            access_ticket="synthetic",
-        )
+    bundle = canary_bundle(CONFIG)
+    with pytest.raises(VerificationError, match="individual-session"):
+        owned_ops.canary(bundle, factory, allow_model_invocation=True)
     factory.assert_not_called()
+
+
+def test_canary_without_identity_needs_no_ticket_and_uses_the_staging_runtime_canary(monkeypatch):
+    from infra import owned_ops
+
+    monkeypatch.setattr(owned_ops, "verify_candidate", Mock())
+    monkeypatch.setattr(owned_ops, "coverage", Mock())
+    bundle = canary_bundle(BASE)
+    client = canary_client(bundle)
+    receipt = owned_ops.canary(bundle, Mock(), allow_model_invocation=True, client=client)
+    assert receipt["status"] == "PASS" and receipt["runtime_target"] == "standalone"
+    call = client.invoke.call_args.kwargs
+    assert call["FunctionName"] == bundle["bindings"]["versions"]["InvestigateVersionArn"]
+    event = json.loads(call["Payload"])
+    assert set(event) == {"runtime_canary"}
+    # Exactly what an identity-free execution host accepts: no session ticket.
+    assert set(event["runtime_canary"]) == {"version", "release", "mode", "prompt", "history"}
+    assert event["runtime_canary"]["mode"] == "chat"
+
+
+def test_canary_with_identity_sends_the_ticket_to_the_dedicated_chat_gateway(monkeypatch):
+    from infra import owned_ops
+
+    monkeypatch.setattr(owned_ops, "verify_candidate", Mock())
+    monkeypatch.setattr(owned_ops, "coverage", Mock())
+    bundle = canary_bundle(CONFIG)
+    client = canary_client(bundle)
+    owned_ops.canary(bundle, Mock(), allow_model_invocation=True, client=client, access_ticket="synthetic")
+    call = client.invoke.call_args.kwargs
+    assert call["FunctionName"] == bundle["bindings"]["chat_version"]["ChatVersionArn"]
+    event = json.loads(call["Payload"])
+    assert set(event) == {"runtime_chat"} and event["runtime_chat"]["access_ticket"] == "synthetic"
+
+
+@pytest.mark.parametrize("config", [BASE, CONFIG], ids=["default-local", "identity"])
+def test_canary_still_requires_paid_authorization_in_staging(config):
+    from infra import owned_ops
+
+    factory = Mock()
+    for spec, allowed in (({"environment": "staging"}, False), ({"environment": "production"}, True)):
+        with pytest.raises(VerificationError, match="staging"):
+            owned_ops.canary(
+                {"spec": spec, "config": config}, factory, allow_model_invocation=allowed, access_ticket="t"
+            )
+    factory.assert_not_called()
+
+
+def plain_bundle():
+    return {
+        "spec": {**SPEC, "reference_only": False},
+        "config": BASE,
+        "bindings": bindings(),
+        "stages": {},
+        "review_hash": "r" * 64,
+    }
+
+
+def test_access_review_and_grants_remain_identity_only():
+    from infra import identity_ops
+
+    bundle, factory = plain_bundle(), Mock()
+    with pytest.raises(VerificationError, match="identity"):
+        security_ops.access_review(bundle, factory=factory)
+    with pytest.raises(VerificationError, match="identity"):
+        identity_ops.guard(bundle)
+    with pytest.raises(VerificationError, match="identity"):
+        identity_ops.plan_grant(bundle, {}, factory)
+    with pytest.raises(VerificationError, match="identity"):
+        identity_ops.pin_secret(bundle, factory)
+    factory.assert_not_called()
+
+
+def test_erasure_and_recipient_commands_do_not_require_identity(monkeypatch):
+    from infra import identity_ops
+
+    bundle = plain_bundle()
+    identity_ops.guard(bundle, need_identity=False)
+    monkeypatch.setattr(security_ops, "assert_account", Mock())
+    monkeypatch.setattr(security_ops.boto3, "resource", Mock())
+    assert security_ops.erasure(bundle, Mock()).bucket == bundle["bindings"]["foundation"]["EvidenceBucket"]
+    assert security_ops.recipient_plan(bundle, Mock())["retire"] == []
+
+
+def test_identity_free_guard_still_rejects_synthetic_reference_bundles():
+    from infra import identity_ops
+
+    bundle = {**plain_bundle(), "spec": {**SPEC, "reference_only": True}}
+    with pytest.raises(VerificationError):
+        identity_ops.guard(bundle, need_identity=False)
+    with pytest.raises(VerificationError):
+        security_ops.recipient_plan(bundle, Mock())
+
+
+@pytest.mark.parametrize(
+    "command,allowed", [("access-review", False), ("recipients-plan", True), ("erase-plan", True)]
+)
+def test_security_cli_requires_identity_only_for_access_review(
+    command, allowed, tmp_path, monkeypatch, capsys
+):
+    bundle = plain_bundle()
+    monkeypatch.setattr(security_ops.durable_ops, "read_bundle", lambda *a: bundle)
+    monkeypatch.setattr(security_ops, "recipient_plan", lambda b: {"status": "PLANNED"})
+    monkeypatch.setattr(security_ops, "erasure", lambda b: Mock(plan=lambda incident: {"status": "PLANNED"}))
+    monkeypatch.setattr(
+        __import__("sys"),
+        "argv",
+        [
+            "security_ops",
+            command,
+            "--bundle",
+            str(tmp_path),
+            "--review-hash",
+            "x",
+            "--output",
+            str(tmp_path / "o"),
+        ],
+    )
+    assert security_ops.main() == (0 if allowed else 2)
+    assert (tmp_path / "o").exists() == allowed
+    assert ("failed" in capsys.readouterr().err) == (not allowed)
 
 
 @pytest.mark.parametrize("field", ["token", "access_ticket", "aws_secret_access_key", "session_token"])

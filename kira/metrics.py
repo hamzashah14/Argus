@@ -126,31 +126,6 @@ def allowed_instance(value):
     return value
 
 
-def alarm_metric_id(instance_id, alarm):
-    """Map a simple firing alarm to an exact catalog entry, without guessing dimensions."""
-    dimensions = alarm.get("Dimensions")
-    if not isinstance(dimensions, list):
-        return None
-    dims = {}
-    for item in dimensions:
-        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
-            return None
-        if item["name"] in dims or not isinstance(item.get("value"), str):
-            return None
-        dims[item["name"]] = item["value"]
-    for entry in catalog():
-        if (
-            entry["instance_id"] == instance_id
-            and entry["namespace"] == alarm.get("Namespace")
-            and entry["metric_name"] == alarm.get("MetricName")
-            and entry["statistic"] == alarm.get("Statistic")
-            and entry["dimensions"] == dims
-            and (not alarm.get("Unit") or entry.get("unit") == alarm["Unit"])
-        ):
-            return entry["id"]
-    return None
-
-
 def resolve(params):
     iid = allowed_instance(params.get("instance_id"))
     metric_id = params.get("metric_id")

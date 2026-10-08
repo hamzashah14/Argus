@@ -55,6 +55,7 @@ def setup(monkeypatch, tmp_path):
     monkeypatch.setenv("KIRA_WORK_POLICY", json.dumps(DEFAULT))
     monkeypatch.setenv("EXECUTION_PURPOSE", "chat")
     monkeypatch.setenv("KIRA_DIAGNOSTIC_POLICY", "diagnosis-v1")
+    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
     policy = {
         "version": 1,
         "binding": ["production", "123456789012", RELEASE],

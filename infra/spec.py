@@ -31,10 +31,15 @@ def load(path):
             raise ValueError(f"{field} must be an explicit role in the target account")
     if len({value[f] for f in ("ui_principal_arn", "ci_principal_arn", "deployment_role_arn")}) != 3:
         raise ValueError("UI, CI and deployment identities must be distinct")
-    for arn in value["model_arns"]:
+    # Schema guarantees model_arns exists exactly when the provider is Bedrock.
+    for arn in value.get("model_arns", []):
         if ":foundation-model/" not in arn and f":{account}:" not in arn:
             raise ValueError("Model profile must belong to the target account")
-    if value["model_id"].startswith("arn:") and value["model_id"] not in value["model_arns"]:
+    if (
+        value.get("model_provider", "bedrock") == "bedrock"
+        and value["model_id"].startswith("arn:")
+        and value["model_id"] not in value["model_arns"]
+    ):
         raise ValueError("Model ARN must be included in model_arns")
     if "observability" in value:
         from kira.observation_config import validate

@@ -214,10 +214,9 @@ def verify_chat(bundle, factory):
 def canary(bundle, factory, *, allow_model_invocation=False, client=None, access_ticket=None):
     if not allow_model_invocation or bundle["spec"]["environment"] != "staging":
         raise VerificationError("Canary requires explicit paid invocation authorization in staging")
-    if not isinstance(access_ticket, str) or not 1 <= len(access_ticket) <= 1024:
+    with_identity = "identity" in bundle.get("config", {})
+    if with_identity and (not isinstance(access_ticket, str) or not 1 <= len(access_ticket) <= 1024):
         raise VerificationError("A private individual-session ticket is required for the staging chat canary")
-    if "identity" not in bundle.get("config", {}):
-        raise VerificationError("Canary requires an identity-enabled dedicated chat release")
     verify_candidate(bundle, factory)
     coverage(bundle["spec"], factory)
     release_hash = owned_runtime.fingerprint(bundle["spec"], bundle["config"], bundle["bindings"])
@@ -226,7 +225,7 @@ def canary(bundle, factory, *, allow_model_invocation=False, client=None, access
         "version": 1,
         "release": release_hash,
         "mode": "chat",
-        "access_ticket": access_ticket,
+        **({"access_ticket": access_ticket} if with_identity else {}),
         "history": [],
         "prompt": f"Investigate instance {iid} using fetch_logs discovery/search and fetch_metrics. State missing data and uncertainty; use a window of at most {bundle['config']['runtime_limits']['window_minutes']} minutes per side.",
     }
@@ -234,13 +233,11 @@ def canary(bundle, factory, *, allow_model_invocation=False, client=None, access
     response = client.invoke(
         FunctionName=(
             chat.version(bundle["spec"], bundle["bindings"])
-            if "identity" in bundle["config"]
+            if with_identity
             else bundle["bindings"]["versions"]["InvestigateVersionArn"]
         ),
         InvocationType="RequestResponse",
-        Payload=json.dumps(
-            {"runtime_chat" if "identity" in bundle["config"] else "runtime_canary": payload}
-        ).encode(),
+        Payload=json.dumps({"runtime_chat" if with_identity else "runtime_canary": payload}).encode(),
     )
     stream = response["Payload"]
     try:

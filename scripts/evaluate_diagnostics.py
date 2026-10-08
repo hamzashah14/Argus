@@ -1,6 +1,7 @@
 """Versioned deterministic controls, optionally repeated paid synthetic model evaluation."""
 
 import argparse
+import copy
 import hashlib
 import json
 import sys
@@ -11,12 +12,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from infra.security_ops import private_write  # noqa: E402
-from kira import diagnosis, runtime, safety, work_policy  # noqa: E402
+from kira import diagnosis, model_api, runtime, safety, work_policy  # noqa: E402
 
 
 def suite():
     path = ROOT / "evaluations/diagnostics/cases.json"
-    return json.loads(path.read_text()), hashlib.sha256(path.read_bytes()).hexdigest()
+    data = json.loads(path.read_text())
+    evidence = data.pop("evidence")  # shared catalog entries; cases list them by name
+    for case in data["cases"]:
+        if unknown := [name for name in case["catalog"] if name not in evidence]:
+            raise ValueError(f"Case {case['id']!r} references unknown evidence {unknown}")
+        case["catalog"] = [copy.deepcopy(evidence[name]) for name in case["catalog"]]
+    return data, hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def offline():
@@ -137,7 +144,7 @@ def live(model, region, repeats, token_budget):
         }
     )
     total = EvaluationBudget(token_budget)
-    client = runtime.sdk_client("bedrock-runtime", region)
+    client = model_api.from_env() or runtime.sdk_client("bedrock-runtime", region)
     grades = []
     # Valid reference cases are the held-out behavior targets; adversarial invalid
     # candidates are tested deterministically, not supplied as model answers.
