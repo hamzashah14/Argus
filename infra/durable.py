@@ -133,11 +133,6 @@ def render(
         "foundation-monitor": templates.foundation(spec, "monitor"),
         "durable-foundation": durable_templates.foundation(spec, config),
     }
-    if "identity" in config:
-        from infra import identity
-
-        stages["identity-foundation"] = identity.foundation(spec, bindings)
-        stages["identity-secret"] = identity.signing_secret(spec)
     if "tool_artifacts" in bindings:
         if not tool_build or set(bindings["tool_artifacts"]) != {"fetch_logs", "fetch_metrics"}:
             raise VerificationError("Verified inventory-bound tool artifacts are required")
@@ -244,22 +239,6 @@ def render(
                 stages["agentcore-endpoint"] = owned_runtime.agentcore_endpoint(
                     spec, runtime_id, candidate["RuntimeVersion"]
                 )
-            if "identity" in config:
-                stages["agentcore-chat-runtime"] = owned_runtime.agentcore_release(
-                    spec, config, bindings, host, purpose="chat"
-                )
-                chat_candidate = bindings.get("agentcore_chat_candidate")
-                if chat_candidate:
-                    chat_id = chat_candidate.get("RuntimeId", "")
-                    if not re.fullmatch(
-                        re.escape(resource_name(spec, "agentcore-chat", True).replace("-", "_") + "-")
-                        + r"[A-Za-z0-9]{10}",
-                        chat_id,
-                    ):
-                        raise VerificationError("Chat AgentCore candidate belongs to another release")
-                    stages["agentcore-chat-endpoint"] = owned_runtime.agentcore_endpoint(
-                        spec, chat_id, chat_candidate["RuntimeVersion"]
-                    )
             if "agentcore" not in bindings:
                 # Render the host stages before its immutable endpoint exists.
                 artifacts = None
@@ -267,15 +246,7 @@ def render(
             stages["durable-runtime"] = durable_templates.runtime(
                 spec, config, artifacts, foundation, owned_bindings=bindings
             )
-        if (
-            artifacts
-            and "identity" in config
-            and (config["runtime_target"] == "standalone" or "agentcore_chat" in bindings)
-        ):
-            from infra import chat
-
-            stages["chat-runtime"] = chat.runtime(spec, config, bindings, artifacts["incident_investigate"])
-        if artifacts and "versions" in bindings and ("identity" not in config or "chat_version" in bindings):
+        if artifacts and "versions" in bindings:
             versions = bindings["versions"]
             if set(versions) != {
                 name + "VersionArn"
@@ -329,9 +300,6 @@ def render(
                         "durable-runtime",
                         "owned-tools",
                         "agentcore-runtime",
-                        "agentcore-chat-runtime",
-                        "agentcore-chat-endpoint",
-                        "chat-runtime",
                         "agentcore-endpoint",
                         "observation-runtime",
                     },
@@ -342,10 +310,7 @@ def render(
                     "foundation-tools",
                     "owned-tools",
                     "agentcore-runtime",
-                    "agentcore-chat-runtime",
-                    "agentcore-chat-endpoint",
                     "agentcore-endpoint",
-                    "identity-secret",
                 }
                 else spec["monitor_region"],
                 "create_only": stage
@@ -353,11 +318,8 @@ def render(
                     "durable-runtime",
                     "owned-tools",
                     "agentcore-runtime",
-                    "agentcore-chat-runtime",
-                    "agentcore-chat-endpoint",
                     "agentcore-endpoint",
                     "observation-runtime",
-                    "chat-runtime",
                 },
                 "template_hash": templates.template_hash(value),
             }

@@ -1,4 +1,4 @@
-"""Private customer access review and reviewed evidence erasure; no deployment."""
+"""Private reviewed recipient retirement and evidence erasure; no deployment."""
 
 import argparse
 import json
@@ -7,10 +7,9 @@ import sys
 from pathlib import Path
 
 import boto3
-from boto3.dynamodb.types import TypeDeserializer
 from botocore.exceptions import BotoCoreError, ClientError
 
-from infra import durable_ops, identity, identity_ops, owned_runtime
+from infra import durable_ops, owned_runtime
 from infra.aws import clients
 from infra.spec import digest, topic_arn
 from infra.verify import VerificationError, assert_account
@@ -23,52 +22,6 @@ def guard(bundle):
     if bundle["spec"]["reference_only"]:
         raise VerificationError("Private operations require a customer bundle, not a synthetic reference")
     owned_runtime.validate_bindings(bundle["spec"], bundle["config"], bundle["bindings"])
-
-
-def access_review(bundle, factory=clients):
-    identity_ops.guard(bundle)  # Grants exist only in the optional identity module.
-    spec = bundle["spec"]
-    assert_account(factory("sts", spec["monitor_region"]), spec)
-    client, decoder = factory("dynamodb", spec["monitor_region"]), TypeDeserializer()
-    rows, after = [], None
-    expected = [
-        spec["environment"],
-        spec["account_id"],
-        owned_runtime.fingerprint(spec, bundle["config"], bundle["bindings"]),
-    ]
-    while True:
-        kw = {
-            "TableName": identity.table_name(spec),
-            "FilterExpression": "begins_with(PK, :prefix)",
-            "ExpressionAttributeValues": {":prefix": {"S": "IDENTITY#"}},
-            "ConsistentRead": True,
-        }
-        if after:
-            kw["ExclusiveStartKey"] = after
-        result = client.scan(**kw)
-        for raw in result.get("Items", []):
-            row = {k: decoder.deserialize(v) for k, v in raw.items()}
-            rows.append(
-                {
-                    "actor": row["PK"].removeprefix("IDENTITY#"),
-                    "enabled": row.get("enabled"),
-                    "epoch": int(row.get("epoch", 0)),
-                    "role": row.get("role"),
-                    "instance_ids": row.get("instance_ids"),
-                    "current_release": row.get("binding") == expected,
-                }
-            )
-        if len(rows) > 10000:
-            raise VerificationError("Access review exceeds supported bounded inventory")
-        after = result.get("LastEvaluatedKey")
-        if not after:
-            break
-    # Human owner attestation decides stale access; never infer current employment.
-    return {
-        "status": "REVIEW_REQUIRED",
-        "grants": sorted(rows, key=lambda r: r["actor"]),
-        "automatic_revocation": False,
-    }
 
 
 def recipient_plan(bundle, factory=clients):
@@ -160,7 +113,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "command",
-        choices=("access-review", "erase-plan", "erase-apply", "recipients-plan", "recipients-apply"),
+        choices=("erase-plan", "erase-apply", "recipients-plan", "recipients-apply"),
     )
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--review-hash", required=True)
@@ -170,10 +123,8 @@ def main():
     args = parser.parse_args()
     try:
         bundle = durable_ops.read_bundle(args.bundle, args.review_hash)
-        identity_ops.guard(bundle, need_identity=args.command == "access-review")
-        if args.command == "access-review":
-            result = access_review(bundle)
-        elif args.command == "recipients-plan":
+        guard(bundle)
+        if args.command == "recipients-plan":
             result = recipient_plan(bundle)
         elif args.command == "recipients-apply":
             if not args.plan or args.plan.stat().st_size > 4000000:

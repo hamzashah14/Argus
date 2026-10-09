@@ -10,7 +10,6 @@ from infra.templates import att, resource, role, statement, tagged, template
 from infra.verify import VerificationError
 from kira.agentcore import validate_target
 from kira.runtime import Limits
-from kira.work_policy import DEFAULT
 
 
 def model_api(spec):
@@ -56,16 +55,14 @@ def validate_bindings(spec, config, bindings):
             re.escape(prefix) + r"[1-9][0-9]*", tools[key]
         ):
             raise VerificationError("Tool binding is outside this qualified release")
-    for key, suffix in (("agentcore", "agentcore"), ("agentcore_chat", "agentcore-chat")):
-        if key not in bindings:
-            continue
-        remote = bindings[key]
+    if "agentcore" in bindings:
+        remote = bindings["agentcore"]
         if set(remote) != {"RuntimeArn", "EndpointName", "RuntimeVersion", "EndpointArn"}:
             raise VerificationError("Incomplete AgentCore release bindings")
         validate_target(
             remote["RuntimeArn"], remote["EndpointName"], spec["bedrock_region"], spec["account_id"]
         )
-        expected = name(spec, suffix, True).replace("-", "_")
+        expected = name(spec, "agentcore", True).replace("-", "_")
         if not remote["RuntimeArn"].split("/")[-1].startswith(expected + "-") or remote[
             "EndpointName"
         ] != "release_" + spec["release_id"].replace("-", "_"):
@@ -92,15 +89,6 @@ def fingerprint(spec, config, bindings):
             "tools": bindings["tools"],
             "limits": asdict(Limits(**config["runtime_limits"])),
             "runtime_target": config["runtime_target"],
-            **(
-                {
-                    "identity": config["identity"],
-                    "identity_secret": bindings.get("identity"),
-                    "security": config.get("security", DEFAULT),
-                }
-                if "identity" in config
-                else {}
-            ),
             "release_id": spec["release_id"],
             "contracts": {
                 p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest()
@@ -133,8 +121,7 @@ def environment(spec, config, bindings):
     validate_bindings(spec, config, bindings)
     env = {
         "ENVIRONMENT": spec["environment"],
-        # Without identity one host serves chat and incidents; identity splits them.
-        "EXECUTION_PURPOSE": "incident" if "identity" in config else "both",
+        "EXECUTION_PURPOSE": "both",
         "KIRA_DIAGNOSTIC_POLICY": "diagnosis-v1",
         "RUNTIME_TARGET": config["runtime_target"],
         "BEDROCK_REGION": spec["bedrock_region"],
@@ -152,11 +139,6 @@ def environment(spec, config, bindings):
             else {}
         ),
     }
-
-    if "identity" in config:
-        from infra.identity import environment as identity_environment
-
-        env.update(identity_environment(spec, config, bindings, env["RUNTIME_RELEASE"]))
     return env
 
 
@@ -198,7 +180,7 @@ def caller_permissions(spec, config, bindings):
     ]
 
 
-def agentcore_release(spec, config, bindings, artifact, version=None, *, purpose="incident"):
+def agentcore_release(spec, config, bindings, artifact, version=None):
     """Create-only Runtime, then a reviewed endpoint pinned to its collected version."""
     t = template(spec, spec["bedrock_region"], "Create-only code-owned AgentCore candidate")
     foundation = bindings["foundation"]
@@ -210,11 +192,7 @@ def agentcore_release(spec, config, bindings, artifact, version=None, *, purpose
         "REPORT_BUCKET": foundation["EvidenceBucket"],
         "REPORT_KMS_KEY_ARN": foundation["EvidenceKeyArn"],
     }
-    env["EXECUTION_PURPOSE"] = purpose if "identity" in config else "both"
-    if purpose == "chat":
-        for key in ("INCIDENT_TABLE", "REPORT_BUCKET", "REPORT_KMS_KEY_ARN"):
-            del env[key]
-    runtime_name = name(spec, "agentcore-chat" if purpose == "chat" else "agentcore", True).replace("-", "_")
+    runtime_name = name(spec, "agentcore", True).replace("-", "_")
     if len(runtime_name) > 48:
         raise VerificationError("AgentCore runtime name exceeds the service limit")
     t["Resources"]["ExecutionRole"] = role(
@@ -222,19 +200,12 @@ def agentcore_release(spec, config, bindings, artifact, version=None, *, purpose
         "bedrock-agentcore.amazonaws.com",
         [
             *model_permissions(spec, bindings),
-            *(identity_permissions(spec, config, bindings, purpose=purpose) if "identity" in config else []),
-            *(
-                [
-                    statement(
-                        ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:PutItem"],
-                        foundation["TableArn"],
-                    ),
-                    statement("s3:PutObject", f"arn:aws:s3:::{foundation['EvidenceBucket']}/incidents/*"),
-                    statement(["kms:Encrypt", "kms:GenerateDataKey"], foundation["EvidenceKeyArn"]),
-                ]
-                if purpose == "incident"
-                else []
+            statement(
+                ["dynamodb:GetItem", "dynamodb:UpdateItem", "dynamodb:PutItem"],
+                foundation["TableArn"],
             ),
+            statement("s3:PutObject", f"arn:aws:s3:::{foundation['EvidenceBucket']}/incidents/*"),
+            statement(["kms:Encrypt", "kms:GenerateDataKey"], foundation["EvidenceKeyArn"]),
             statement("s3:GetObjectVersion", f"arn:aws:s3:::{artifact['bucket']}/{artifact['key']}"),
             statement(
                 "logs:CreateLogGroup",
@@ -326,11 +297,3 @@ def agentcore_endpoint(spec, runtime_id, version):
 
 def agentcore_log_group(runtime_id, endpoint):
     return f"/aws/bedrock-agentcore/runtimes/{runtime_id}-{endpoint}"
-
-
-def identity_permissions(spec, config, bindings, *, issuer=False, purpose=None):
-    if "identity" not in config or (not issuer and purpose != "chat"):
-        return []
-    from infra.identity import permissions
-
-    return permissions(spec, bindings, issuer=issuer, purpose=purpose)

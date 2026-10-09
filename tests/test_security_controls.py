@@ -1,55 +1,23 @@
 """security hostile inputs, concurrency, erasure and private operations; no AWS."""
 
 import copy
-import hashlib
 import json
-import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from boto3.dynamodb.types import TypeDeserializer
 from botocore.exceptions import ClientError
 
-from infra import chat as chat_infra
-from infra import durable_templates, owned_runtime, security_ops
-from infra import identity as identity_infra
+from infra import owned_runtime, security_ops
 from infra.verify import VerificationError
-from kira import chat_gateway, diagnosis, execution, identity, runtime, safety, work_policy
-from kira.quotas import Quotas
+from kira import diagnosis, runtime, safety, work_policy
 from scripts.dev import evaluate_diagnostics
-from tests.test_identity import ACTOR, RELEASE
-from tests.test_identity import setup as identity_fixture
 from tests.test_owned_runtime import BASE, SPEC, bindings
 from tests.test_runtime import answer, drive
 
 IID = "i-0123456789abcdef0"
-# Identity-mode shims for the identity tests that Task 7 deletes together with these lines.
-CONFIG = {**BASE, "identity": {"issuer": "https://identity.example.invalid", "audience": "customer-ui"}}
-SECRET = {
-    "SigningSecretArn": f"arn:aws:secretsmanager:{SPEC['bedrock_region']}:{SPEC['account_id']}:secret:{identity_infra.secret_name(SPEC)}-123abc",
-    "SigningSecretVersion": "a" * 32,
-}
-
-
-def identity_bindings(spec=SPEC, target="standalone"):
-    data = bindings(spec, target)
-    data["identity"] = {
-        **SECRET,
-        "SigningSecretArn": SECRET["SigningSecretArn"].replace(
-            SPEC["bedrock_region"], spec["bedrock_region"]
-        ),
-    }
-    chat_infra.fixture_bindings(spec, data)
-    return data
-
-
-@pytest.fixture
-def setup(monkeypatch, tmp_path):
-    return identity_fixture.__wrapped__(monkeypatch, tmp_path)
 
 
 @pytest.mark.parametrize(
@@ -93,261 +61,12 @@ def test_boundaries_reject_excessive_depth_size_and_nonfinite_numbers():
         safety.bounded(value)
 
 
-class AtomicDatabase:
-    """Independent transactional store fake: all conditions before any mutation."""
-
-    def __init__(self):
-        self.name = "synthetic"
-        self.rows, self.lock = {}, threading.Lock()
-
-    @staticmethod
-    def unpack(value):
-        return {k: TypeDeserializer().deserialize(v) for k, v in value.items()}
-
-    def transact_write_items(self, TransactItems, **kwargs):
-        with self.lock:
-            updates = []
-            for write in TransactItems:
-                if "Update" in write:
-                    op = write["Update"]
-                    key = self.unpack(op["Key"])["PK"]
-                    values = self.unpack(op["ExpressionAttributeValues"])
-                    row = self.rows.get(key, {"requests": 0, "tokens": 0})
-                    allowed = row["requests"] <= values[":cap"] and row["tokens"] <= values.get(
-                        ":token_cap", float("inf")
-                    )
-                    updates.append(
-                        (
-                            key,
-                            {
-                                **row,
-                                "requests": row["requests"] + 1,
-                                "tokens": row["tokens"] + values.get(":tokens", 0),
-                            },
-                        )
-                    )
-                else:
-                    op = write["Put"]
-                    row = self.unpack(op["Item"])
-                    key = row["PK"]
-                    previous = self.rows.get(key)
-                    allowed = (
-                        previous is None
-                        or previous["until"] <= self.unpack(op["ExpressionAttributeValues"])[":now"]
-                    )
-                    updates.append((key, row))
-                if not allowed:
-                    raise ClientError(
-                        {
-                            "Error": {"Code": "TransactionCanceledException"},
-                            "CancellationReasons": [{"Code": "ConditionalCheckFailed"}],
-                        },
-                        "TransactWriteItems",
-                    )
-            self.rows.update(updates)
-
-    def delete_item(self, Key, **kwargs):
-        with self.lock:
-            previous = self.rows.get(Key["PK"])
-            if not previous or previous["owner"] != kwargs["ExpressionAttributeValues"][":owner"]:
-                raise ClientError({"Error": {"Code": "ConditionalCheckFailedException"}}, "DeleteItem")
-            self.rows.pop(Key["PK"])
-
-
-@pytest.fixture
-def quotas(monkeypatch):
-    monkeypatch.setenv("KIRA_WORK_POLICY", json.dumps(work_policy.DEFAULT))
-    db = AtomicDatabase()
-    now = [7200]
-    return Quotas(db, clock=lambda: now[0], client=db), db, now
-
-
-def actor(n):
-    return hashlib.sha256(str(n).encode()).hexdigest()
-
-
-def test_concurrent_users_cannot_overcharge_shared_budget(quotas):
-    q, db, _ = quotas
-
-    def admit(n):
-        try:
-            lease = q.admit(actor(n % 5), "chat")
-            q.release(lease)
-            return True
-        except runtime.RuntimeStop:
-            return False
-
-    with ThreadPoolExecutor(max_workers=12) as pool:
-        successes = sum(pool.map(admit, range(100)))
-    shared = db.rows["QUOTA#chat#global#2"]
-    assert 1 <= successes <= 8 and shared["requests"] == successes
-    assert (
-        shared["tokens"]
-        == successes * work_policy.DEFAULT["chat_limits"]["tokens_reserved"]
-        <= work_policy.DEFAULT["tokens_global"]
-    )
-    assert all(
-        v["requests"] <= 4 for k, v in db.rows.items() if k.startswith("QUOTA#chat#") and "global" not in k
-    )
-
-
-def test_capacity_lease_no_refund_and_foreign_release_cannot_unlock(quotas):
-    q, db, _ = quotas
-    first, second = q.admit(actor(1), "chat"), q.admit(actor(2), "chat")
-    with pytest.raises(runtime.RuntimeStop):
-        q.admit(actor(1), "chat")
-    with pytest.raises(runtime.RuntimeStop):
-        q.admit(actor(3), "chat")
-    q.release({**first, "owner": "foreign"})
-    assert "SLOT#" + actor(1) in db.rows
-    q.release(first)
-    third = q.admit(actor(3), "chat")
-    assert db.rows["QUOTA#chat#global#2"]["requests"] == 3
-    q.release(second)
-    q.release(third)
-
-
-def test_abandoned_slot_expiry_does_not_refund_prior_hour_charges(quotas):
-    q, db, now = quotas
-    q.admit(actor(1), "chat")
-    now[0] += 241
-    q.admit(actor(1), "chat")
-    assert db.rows["QUOTA#chat#global#2"]["requests"] == 2
-
-
-def test_login_budgets_are_distributed_and_no_chat_slot_is_used(quotas):
-    q, db, _ = quotas
-    for _ in range(10):
-        q.admit(actor(1), "login")
-    with pytest.raises(runtime.RuntimeStop):
-        q.admit(actor(1), "login")
-    assert db.rows["QUOTA#login#global#2"]["requests"] == 10
-    assert not any(k.startswith("SLOT#") for k in db.rows)
-
-
-@pytest.mark.parametrize(
-    "code,reasons",
-    [
-        ("ProvisionedThroughputExceededException", []),
-        ("TransactionCanceledException", []),
-        ("TransactionCanceledException", [{"Code": "TransactionConflict"}]),
-        ("TransactionCanceledException", [{"Code": "None"}]),
-    ],
-)
-def test_ambiguous_admission_is_not_retried(code, reasons, monkeypatch):
-    monkeypatch.setenv("KIRA_WORK_POLICY", json.dumps(work_policy.DEFAULT))
-    client = Mock()
-    client.transact_write_items.side_effect = ClientError(
-        {"Error": {"Code": code}, "CancellationReasons": reasons}, "TransactWriteItems"
-    )
-    with pytest.raises(runtime.RuntimeStop, match="ADMISSION_UNAVAILABLE"):
-        Quotas(SimpleNamespace(name="synthetic"), client=client).admit(actor(1), "chat")
-    assert client.transact_write_items.call_count == 1
-
-
 @pytest.mark.parametrize(
     "key,value", [("chat_user", 0), ("tokens_global", True), ("audit_days", 91), ("chat_global", 1)]
 )
 def test_work_policy_invalid_allowances_fail_closed(key, value):
     with pytest.raises(ValueError):
         work_policy.validate({**work_policy.DEFAULT, key: value})
-
-
-def test_access_audit_is_retained_scoped_and_contains_no_claims(setup, capsys):
-    ticket = setup.sessions.issue(setup.claims)
-    setup.sessions.authorize(ticket, "report", IID)
-    rows = [v for k, v in setup.table.rows.items() if k.startswith("AUDIT#")]
-    assert rows and rows[-1]["actor"] == ACTOR and rows[-1]["instance_id"] == IID
-    assert rows[-1]["ttl"] == setup.now[0] + 30 * 86400
-    rendered = json.dumps(rows) + capsys.readouterr().out
-    assert (
-        ticket not in rendered
-        and setup.claims["email"] not in rendered
-        and setup.claims["sub"] not in rendered
-    )
-
-
-def test_audit_outage_blocks_login_and_report_access(setup, monkeypatch):
-    ticket = setup.sessions.issue(setup.claims)
-    monkeypatch.setattr(setup.sessions, "record", Mock(side_effect=RuntimeError("synthetic")))
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.authorize(ticket, "report", IID)
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.issue(setup.claims)
-
-
-def test_key_rotation_and_grant_epoch_disable_old_sessions(setup, monkeypatch):
-    ticket = setup.sessions.issue(setup.claims)
-    monkeypatch.setenv("KIRA_SESSION_SIGNING_KEY", "rotated-fixture-" * 8)
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.authorize(ticket, "chat")
-    new = setup.sessions.issue(setup.claims)
-    setup.table.rows["IDENTITY#" + ACTOR]["epoch"] += 1
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.authorize(new, "chat")
-
-
-@pytest.mark.parametrize("target", ["standalone", "agentcore"])
-def test_chat_ui_and_automatic_capacity_and_iam_are_independent(target):
-    cfg = {**CONFIG, "runtime_target": target}
-    data = identity_bindings(target=target)
-    artifact = {"bucket": "synthetic", "key": "fixture.zip", "version_id": "synthetic", "sha256": "a" * 64}
-    t = chat_infra.runtime(SPEC, cfg, data, artifact)
-    assert t["Resources"]["Chat"]["Properties"]["ReservedConcurrentExecutions"] == 1
-    assert t["Resources"]["Chat"]["Properties"]["Environment"]["Variables"]["EXECUTION_PURPOSE"] == "chat"
-    routing = durable_templates.active_routing(
-        SPEC,
-        data["foundation"],
-        data["versions"],
-        config=cfg,
-        owned_bindings=data,
-    )
-    grants = routing["Resources"]["UiRole"]["Properties"]["Policies"][0]["PolicyDocument"]
-    assert "bedrock:InvokeModel" not in json.dumps(
-        grants
-    ) and "bedrock-agentcore:InvokeAgentRuntime" not in json.dumps(grants)
-    assert chat_infra.version(SPEC, data) in json.dumps(grants)
-    if target == "agentcore":
-        remote = owned_runtime.agentcore_release(SPEC, cfg, data, artifact, purpose="chat")
-        env = remote["Resources"]["Runtime"]["Properties"]["EnvironmentVariables"]
-        assert env["EXECUTION_PURPOSE"] == "chat" and "INCIDENT_TABLE" not in env
-        assert data["agentcore_chat"]["RuntimeArn"] != data["agentcore"]["RuntimeArn"]
-        assert data["foundation"]["TableArn"] not in json.dumps(remote)
-    assert not owned_runtime.identity_permissions(SPEC, cfg, data)
-
-
-def test_wrong_execution_purpose_cannot_reach_model_or_store(setup, monkeypatch):
-    monkeypatch.setenv("EXECUTION_PURPOSE", "incident")
-    monkeypatch.setattr(execution, "run", Mock())
-    with pytest.raises(runtime.RuntimeStop, match="PURPOSE_MISMATCH"):
-        execution.execute({"version": 1, "release": RELEASE, "mode": "chat"})
-    execution.run.assert_not_called()
-
-
-def test_gateway_closes_stream_and_requires_exact_release_without_retry():
-    payload = {"release": RELEASE}
-    result = {
-        "version": 1,
-        "release": RELEASE,
-        "complete": False,
-        "text": "Operator review",
-        "code": "ADMISSION_UNAVAILABLE",
-        "tools": [],
-        "evidence": [],
-        "usage": {"input_tokens": 0, "output_tokens": 0},
-    }
-    stream = BytesIO(json.dumps(result).encode())
-    client = Mock()
-    client.invoke.return_value = {"StatusCode": 200, "Payload": stream}
-    got = chat_gateway.invoke(
-        payload,
-        arn="arn:aws:lambda:eu-central-1:123456789012:function:chat:1",
-        region="eu-central-1",
-        account="123456789012",
-        deadline=time.time() + 30,
-        client=client,
-    )
-    assert got["code"] == "ADMISSION_UNAVAILABLE" and stream.closed and client.invoke.call_count == 1
 
 
 @pytest.mark.parametrize("case", evaluate_diagnostics.suite()[0]["cases"], ids=lambda c: c["id"])
@@ -466,11 +185,9 @@ def test_paid_evaluation_aggregate_budget_is_enforced():
     assert budget.used["tokens_reserved"] == 15
 
 
-@pytest.mark.parametrize(
-    "command", ["access-review", "erase-plan", "erase-apply", "recipients-plan", "recipients-apply"]
-)
+@pytest.mark.parametrize("command", ["erase-plan", "erase-apply", "recipients-plan", "recipients-apply"])
 def test_synthetic_security_cli_denies_before_aws(command, tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(security_ops.durable_ops, "read_bundle", lambda *a: {"spec": SPEC, "config": CONFIG})
+    monkeypatch.setattr(security_ops.durable_ops, "read_bundle", lambda *a: {"spec": SPEC, "config": BASE})
     monkeypatch.setattr(
         __import__("sys"),
         "argv",
@@ -668,60 +385,6 @@ def test_notification_replay_and_status_access_refuse_erased_incident(monkeypatc
     assert load("b" * 32) is None
 
 
-def test_access_review_paginates_only_grants_and_requires_human_attestation(monkeypatch):
-    from infra.identity_ops import pack
-
-    bundle = {"spec": {**SPEC, "reference_only": False}, "config": CONFIG, "bindings": identity_bindings()}
-    expected = [
-        SPEC["environment"],
-        SPEC["account_id"],
-        owned_runtime.fingerprint(SPEC, CONFIG, bundle["bindings"]),
-    ]
-    ddb = Mock()
-    ddb.scan.side_effect = [
-        {
-            "Items": [
-                pack(
-                    {
-                        "PK": "IDENTITY#" + actor(1),
-                        "SK": "META",
-                        "role": "viewer",
-                        "epoch": 1,
-                        "enabled": True,
-                        "instance_ids": [IID],
-                        "binding": expected,
-                    }
-                )
-            ],
-            "LastEvaluatedKey": {"PK": {"S": "continuation"}},
-        },
-        {
-            "Items": [
-                pack(
-                    {
-                        "PK": "IDENTITY#" + actor(2),
-                        "SK": "META",
-                        "role": "viewer",
-                        "epoch": 2,
-                        "enabled": False,
-                        "instance_ids": [IID],
-                        "binding": ["retired"],
-                    }
-                )
-            ]
-        },
-    ]
-    monkeypatch.setattr(security_ops, "assert_account", Mock())
-    result = security_ops.access_review(bundle, factory=lambda *args: ddb)
-    assert result["status"] == "REVIEW_REQUIRED" and len(result["grants"]) == 2
-    assert not result["automatic_revocation"] and {r["current_release"] for r in result["grants"]} == {
-        True,
-        False,
-    }
-    assert ddb.scan.call_args.kwargs["ExclusiveStartKey"] == {"PK": {"S": "continuation"}}
-    ddb.put_item.assert_not_called()
-
-
 def test_private_operation_output_is_owner_only_and_symlinks_are_denied(tmp_path):
     path = tmp_path / "evidence.json"
     security_ops.private_write(path, {"classification": "restricted"})
@@ -731,86 +394,6 @@ def test_private_operation_output_is_owner_only_and_symlinks_are_denied(tmp_path
     with pytest.raises(OSError):
         security_ops.private_write(link, {"unsafe": True})
     assert json.loads(path.read_text()) == {"classification": "restricted"}
-
-
-@pytest.fixture
-def audit_factory():
-    from datetime import datetime, timezone
-
-    from infra import evidence_audit
-
-    desired = durable_templates.foundation(SPEC, CONFIG)["Resources"]
-    props = desired["AccessAuditTrail"]["Properties"]
-    s3, trail = Mock(), Mock()
-    s3.get_bucket_versioning.return_value = {"Status": "Enabled"}
-    s3.get_public_access_block.return_value = {
-        "PublicAccessBlockConfiguration": {
-            k: True
-            for k in ("BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets")
-        }
-    }
-    s3.get_bucket_encryption.return_value = {
-        "ServerSideEncryptionConfiguration": {
-            "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
-        }
-    }
-    s3.get_bucket_policy.return_value = {
-        "Policy": json.dumps(desired["AccessAuditPolicy"]["Properties"]["PolicyDocument"])
-    }
-    s3.get_bucket_lifecycle_configuration.return_value = {
-        "Rules": [{"Expiration": {"Days": 30}, "NoncurrentVersionExpiration": {"NoncurrentDays": 30}}]
-    }
-    trail.get_trail.return_value = {
-        "Trail": {
-            "TrailARN": f"arn:aws:cloudtrail:{SPEC['monitor_region']}:{SPEC['account_id']}:trail/{props['TrailName']}",
-            "S3BucketName": props["S3BucketName"],
-            "IsMultiRegionTrail": False,
-            "LogFileValidationEnabled": True,
-        }
-    }
-    trail.get_trail_status.return_value = {
-        "IsLogging": True,
-        "LatestDeliveryTime": datetime.now(timezone.utc),
-    }
-    trail.get_event_selectors.return_value = {"AdvancedEventSelectors": props["AdvancedEventSelectors"]}
-    return (
-        evidence_audit,
-        {"spec": SPEC, "config": CONFIG},
-        lambda service, region: {"s3": s3, "cloudtrail": trail}[service],
-        s3,
-        trail,
-    )
-
-
-def test_audit_configuration_and_retention_are_verified_with_private_destination(audit_factory):
-    audit, bundle, factory, s3, _ = audit_factory
-    audit.verify(bundle, factory)
-    assert s3.get_bucket_policy.call_args.kwargs["ExpectedBucketOwner"] == SPEC["account_id"]
-
-
-@pytest.mark.parametrize(
-    "drift", ["public", "unencrypted", "retention", "policy", "stopped", "delivery_error", "selectors"]
-)
-def test_audit_drift_is_not_accepted_as_qualified(audit_factory, drift):
-    audit, bundle, factory, s3, trail = audit_factory
-    if drift == "public":
-        s3.get_public_access_block.return_value["PublicAccessBlockConfiguration"]["BlockPublicPolicy"] = False
-    elif drift == "unencrypted":
-        s3.get_bucket_encryption.return_value["ServerSideEncryptionConfiguration"]["Rules"][0][
-            "ApplyServerSideEncryptionByDefault"
-        ]["SSEAlgorithm"] = "none"
-    elif drift == "retention":
-        s3.get_bucket_lifecycle_configuration.return_value["Rules"][0]["Expiration"]["Days"] = 365
-    elif drift == "policy":
-        s3.get_bucket_policy.return_value = {"Policy": json.dumps({"Statement": []})}
-    elif drift == "stopped":
-        trail.get_trail_status.return_value["IsLogging"] = False
-    elif drift == "delivery_error":
-        trail.get_trail_status.return_value["LatestDeliveryError"] = "synthetic"
-    else:
-        trail.get_event_selectors.return_value = {"AdvancedEventSelectors": []}
-    with pytest.raises(VerificationError):
-        audit.verify(bundle, factory)
 
 
 @pytest.mark.parametrize(
@@ -835,7 +418,7 @@ def recipients(monkeypatch):
 
     bundle = {
         "spec": {**SPEC, "reference_only": False},
-        "config": CONFIG,
+        "config": BASE,
         "bindings": bindings(),
         "review_hash": "synthetic-review",
         "stages": {s: {} for s in ("routing", "durable-foundation", "observation-foundation")},
@@ -910,45 +493,6 @@ def test_pending_owned_recipient_requires_explicit_resolution(recipients):
     sns.unsubscribe.assert_not_called()
 
 
-def test_real_low_level_sdk_accepts_typed_admission_parameters_without_double_serialization(monkeypatch):
-    import boto3
-    from botocore.stub import Stubber
-
-    monkeypatch.setenv("KIRA_WORK_POLICY", json.dumps(work_policy.DEFAULT))
-    # Explicit synthetic credentials and Stubber ensure no credential-chain/AWS access.
-    client = boto3.session.Session().client(
-        "dynamodb",
-        region_name="eu-central-1",
-        aws_access_key_id="synthetic",
-        aws_secret_access_key="synthetic",
-    )
-    observed = []
-    client.meta.events.register(
-        "before-parameter-build.dynamodb.TransactWriteItems",
-        lambda params, **kw: observed.append(copy.deepcopy(params)),
-    )
-    with Stubber(client) as stub:
-        stub.add_response("transact_write_items", {})
-        q = Quotas(SimpleNamespace(name="synthetic"), client=client, clock=lambda: 7200)
-        q.admit(actor(1), "chat")
-    op = observed[0]["TransactItems"][0]["Update"]
-    assert op["Key"]["PK"] == {"S": f"QUOTA#chat#{actor(1)}#2"}
-    assert op["ExpressionAttributeValues"][":tokens"] == {"N": "24000"}
-
-
-def test_restored_old_grants_and_sessions_remain_denied_after_new_release_binding(setup, monkeypatch):
-    ticket = setup.sessions.issue(setup.claims)
-    new_release = "b" * 64
-    monkeypatch.setenv("RUNTIME_RELEASE", new_release)
-    setup.policy = copy.deepcopy(setup.policy)
-    setup.policy["binding"][2] = new_release
-    setup.path.write_text(json.dumps(setup.policy))
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.authorize(ticket, "report", IID)
-    with pytest.raises(identity.AccessDenied):
-        setup.sessions.issue(setup.claims)
-
-
 def test_production_missing_diagnostic_policy_fails_before_creating_model_client(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.delenv("KIRA_DIAGNOSTIC_POLICY", raising=False)
@@ -983,7 +527,7 @@ def canary_bundle(config):
     return {
         "spec": SPEC,
         "config": {**config, "runtime_target": "standalone"},
-        "bindings": identity_bindings(),
+        "bindings": bindings(),
         "review_hash": "r" * 64,
     }
 
@@ -1003,7 +547,7 @@ def canary_client(bundle):
     return client
 
 
-def test_canary_without_identity_needs_no_ticket_and_uses_the_staging_runtime_canary(monkeypatch):
+def test_canary_needs_no_ticket_and_uses_the_staging_runtime_canary(monkeypatch):
     from infra import owned_ops
 
     monkeypatch.setattr(owned_ops, "verify_candidate", Mock())
@@ -1016,7 +560,7 @@ def test_canary_without_identity_needs_no_ticket_and_uses_the_staging_runtime_ca
     assert call["FunctionName"] == bundle["bindings"]["versions"]["InvestigateVersionArn"]
     event = json.loads(call["Payload"])
     assert set(event) == {"runtime_canary"}
-    # Exactly what an identity-free execution host accepts: no session ticket.
+    # Exactly what the execution host accepts: no session ticket.
     assert set(event["runtime_canary"]) == {"version", "release", "mode", "prompt", "history"}
     assert event["runtime_canary"]["mode"] == "chat"
 
@@ -1041,44 +585,25 @@ def plain_bundle():
     }
 
 
-def test_access_review_and_grants_remain_identity_only():
-    from infra import identity_ops
-
-    bundle, factory = plain_bundle(), Mock()
-    with pytest.raises(VerificationError, match="identity"):
-        security_ops.access_review(bundle, factory=factory)
-    with pytest.raises(VerificationError, match="identity"):
-        identity_ops.guard(bundle)
-    with pytest.raises(VerificationError, match="identity"):
-        identity_ops.plan_grant(bundle, {}, factory)
-    with pytest.raises(VerificationError, match="identity"):
-        identity_ops.pin_secret(bundle, factory)
-    factory.assert_not_called()
-
-
-def test_erasure_and_recipient_commands_do_not_require_identity(monkeypatch):
-    from infra import identity_ops
-
+def test_erasure_and_recipient_commands_accept_a_plain_customer_bundle(monkeypatch):
     bundle = plain_bundle()
-    identity_ops.guard(bundle, need_identity=False)
+    security_ops.guard(bundle)
     monkeypatch.setattr(security_ops, "assert_account", Mock())
     monkeypatch.setattr(security_ops.boto3, "resource", Mock())
     assert security_ops.erasure(bundle, Mock()).bucket == bundle["bindings"]["foundation"]["EvidenceBucket"]
     assert security_ops.recipient_plan(bundle, Mock())["retire"] == []
 
 
-def test_identity_free_guard_still_rejects_synthetic_reference_bundles():
-    from infra import identity_ops
-
+def test_guard_rejects_synthetic_reference_bundles():
     bundle = {**plain_bundle(), "spec": {**SPEC, "reference_only": True}}
     with pytest.raises(VerificationError):
-        identity_ops.guard(bundle, need_identity=False)
+        security_ops.guard(bundle)
     with pytest.raises(VerificationError):
         security_ops.recipient_plan(bundle, Mock())
 
 
 @pytest.mark.parametrize("command", ["recipients-plan", "erase-plan"])
-def test_security_cli_commands_do_not_require_identity(command, tmp_path, monkeypatch, capsys):
+def test_security_cli_commands_run_on_a_plain_customer_bundle(command, tmp_path, monkeypatch, capsys):
     bundle = plain_bundle()
     monkeypatch.setattr(security_ops.durable_ops, "read_bundle", lambda *a: bundle)
     monkeypatch.setattr(security_ops, "recipient_plan", lambda b: {"status": "PLANNED"})
