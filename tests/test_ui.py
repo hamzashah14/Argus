@@ -318,6 +318,7 @@ def test_team_refuses_people_who_are_not_allowed(team_mode, monkeypatch, claims,
 
 def test_team_viewer_sees_the_input_disabled_and_the_server_side_refuses_too(team_mode, monkeypatch):
     team_mode(users=(("user-1", "viewer", [TEAM_IID]),))
+    calls = audit_spy(monkeypatch)
     invoke = Mock()
     monkeypatch.setattr(chat, "invoke", invoke)
     test = app(False).run()
@@ -327,6 +328,7 @@ def test_team_viewer_sees_the_input_disabled_and_the_server_side_refuses_too(tea
     monkeypatch.setattr(streamlit, "chat_input", lambda *args, **kwargs: "question")
     test.run()
     invoke.assert_not_called()
+    assert [call[0] for call in calls] == [("user-1", "viewer", None, "chat", "DENIED_ROLE")]
 
 
 def test_team_removed_user_is_refused_on_the_next_request(team_mode):
@@ -376,10 +378,12 @@ def test_team_incident_link_is_scoped_and_audited_once(team_mode, monkeypatch):
 
 def test_team_incident_outside_the_list_looks_like_a_missing_incident(team_mode, monkeypatch):
     team_mode()
-    monkeypatch.setattr(incident_status, "load", Mock(return_value=None))
+    load = Mock(return_value=None)
+    monkeypatch.setattr(incident_status, "load", load)
     test = app(False)
     test.query_params["incident"] = "a" * 32
     test.run()
+    assert load.call_args.kwargs == {"allowed": frozenset({TEAM_IID})}
     assert any("not found" in item.value for item in test.info)
 
 

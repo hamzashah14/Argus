@@ -406,6 +406,7 @@ if retry:
     clear_conversation()
 if prompt and prompt.strip():
     if member is not None and member.role != "investigator":
+        team.audit(member.sub, member.role, None, "chat", "DENIED_ROLE", instance_count=len(member.instances))
         st.stop()  # Defence in depth: the input is disabled for viewers.
     if member is not None and not team.admit(member.sub, roster.chat_per_hour):
         team.audit(
