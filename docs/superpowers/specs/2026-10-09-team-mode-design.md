@@ -53,25 +53,36 @@ This design replaces that module with a much smaller **team mode**:
 
 ## 3. What the identity module is today
 
-Core files (lines): `kira/identity.py` 383, `kira/quotas.py` 114,
-`kira/work_policy.py` 53, `kira/governance.py` 178, `kira/chat_gateway.py` 69,
-`kira/status.py` 83 (report access checks), `infra/identity.py` 286,
-`infra/identity_ops.py` 211, `infra/evidence_audit.py` 189,
-`infra/security_ops.py` 195, `infra/chat.py` 80, and the identity branches in
-`infra/automation.py`, `infra/durable*.py`, `infra/owned_*.py`,
-`infra/deployment_preflight.py`, `scripts/run_customer_ui.py` and `app.py`.
-Tests are about 1,300 lines (`test_identity.py`, `test_identity_ops.py`,
-`test_identity_wiring.py` and the identity parts of other files).
+Files that go away: `kira/identity.py` (383 lines), `kira/quotas.py` (114),
+`kira/chat_gateway.py` (69), `infra/identity.py` (286), `infra/identity_ops.py`
+(211), `infra/evidence_audit.py` (189), `infra/chat.py` (80),
+`scripts/dev/validate_identity.py` and `examples/identity.example.json`.
+The identity branches also come out of `kira/config.py`, `kira/execution.py`,
+`kira/chat.py`, `kira/status.py`, `app.py`, `infra/automation.py`,
+`infra/durable*.py`, `infra/owned_*.py`, `infra/deployment_preflight.py` and
+`scripts/run_customer_ui.py`. Tests are about 1,300 lines (`test_identity.py`,
+`test_identity_ops.py`, `test_identity_wiring.py` and the identity parts of
+other files).
 
 Deployment stages it adds: `identity-foundation`, `identity-secret`,
 `identity-foundation-bound`, `chat-runtime` and `initial-access`. Resources it
 creates: an identity table, a signing secret, a session-issuer role, a chat
 gateway function and role, a CloudTrail trail and an audit bucket.
 
-Some of these files are shared with non-identity code and must be trimmed, not
-deleted. For example `kira/work_policy.py` also supplies default work limits to
-the deployment renderer and the evaluation script. The implementation plan
-resolves each one by reading its callers.
+Things that look related but stay, verified in the code:
+
+- `kira/governance.py` (`Erasure`) erases incident evidence (incident rows and
+  stored report versions), not identity data. It backs the `erase-plan` and
+  `erase-apply` commands, which stay.
+- `infra/security_ops.py` keeps `erase-plan`, `erase-apply`, `recipients-plan`
+  and `recipients-apply`. Only `access-review` is removed.
+- `verify_ui_role` (in `infra/identity.py`) is also used by default mode, so it
+  moves into `infra/durable_ops.py`. The reference-only and binding check in
+  `identity_ops.guard` is also used by the recipient and erase commands, so a
+  local copy moves into `security_ops.py`.
+- `kira/work_policy.py` is trimmed, not deleted: the diagnostics evaluation
+  script still reads its chat limits.
+- `kira/safety.py` keeps its redaction vocabulary.
 
 ## 4. The new team mode
 
@@ -87,9 +98,19 @@ configuration has no team block, and the tool creates nothing for team mode.
 ### Sign-in
 
 Streamlit's native OIDC login (`st.login`), configured in
-`.streamlit/secrets.toml` under `[auth]` exactly as the current guide
-describes. The existing guard stays: team mode refuses to run if Streamlit's
-trusted-header override is set or XSRF protection is off.
+`.streamlit/secrets.toml` under `[auth]`. The existing guard stays: team mode
+refuses to run if Streamlit's trusted-header override is set or XSRF
+protection is off.
+
+The installed OIDC library forwards `prompt` to the provider but ignores
+`max_age`, which the current guide recommends. The new guide uses
+`prompt = "login"` to force a fresh sign-in and relies on `session_hours` for
+the age limit. Whether a provider sends `auth_time` and `amr` cannot be
+checked offline.
+
+Team mode requires `RUNTIME_TARGET=standalone`: chat runs in the UI process,
+while the AgentCore host applies its own instance allowlist. The UI reports a
+configuration problem for any other target.
 
 ### The team file (`team.toml`)
 
@@ -123,11 +144,19 @@ Rules:
 
 A request is allowed only when all of these hold:
 
-1. the signed-in subject is listed and the token's issuer equals `issuer`;
-2. the token's `auth_time` is within `session_hours` and, when
-   `require_mfa` is true, its `amr` claim contains `mfa`;
+1. the token's issuer equals `issuer` and the signed-in subject is listed;
+2. the token's `auth_time` (or `iat` when the provider sends no `auth_time`) is
+   within `session_hours`, and, when `require_mfa` is true, its `amr` claim
+   contains `mfa`;
 3. the role permits the action (viewers cannot chat);
 4. the instance is in that user's list.
+
+`exp` is deliberately not checked. Streamlit keeps its sign-in cookie for 30
+days and never refreshes the token, and ID tokens usually expire within the
+hour, so requiring a future `exp` would sign people out early. `session_hours`
+is the limit. A timestamp more than five minutes in the future is also refused.
+Every claim is type-checked, so a malformed claim is a denial and never an
+error.
 
 A signed-in user who is not listed sees a message saying so and nothing else.
 If the provider supplies no `amr` claim and `require_mfa` is true, the user is
@@ -146,8 +175,9 @@ must be in the user's list.
 ### Audit
 
 Each request writes one structured JSON line to standard output: time,
-subject, role, instance, action, outcome and token counts. It never contains
-prompt text or log content. The team's container or process platform keeps the
+subject, role, the instance when the action names one (report views), the
+number of authorized instances, action, outcome and token counts when known.
+It never contains prompt text or log content. The team's container or process platform keeps the
 log.
 
 ### Hosting
@@ -165,9 +195,9 @@ release binding, diagnostic policy and redaction still apply.
 
 ## 5. What is removed
 
-- Code: the identity module, quotas, governance (identity-data erasure), the
-  chat gateway and its subprocess client, the identity branches of the
-  deployment and UI code, and the identity parts of `status.py`.
+- Code: the identity module, quotas, the chat gateway and its subprocess
+  client, the identity branches of the deployment and UI code, and the
+  identity checks in `status.py`.
 - Deployment: the five stages above, `init --identity`, the `identity` and
   `security` blocks of `runtime.json`, `initial_access` in `automation.json`,
   the staging-ticket path of the canary and the launcher, and the identity
@@ -257,13 +287,14 @@ These come after team mode and each gets its own design:
 
 ## 11. Risks and open questions
 
-- **Token claims.** Confirm which claims Streamlit's login exposes
-  (`sub`, `iss`, `auth_time`, `amr`). If `amr` is missing for common
-  providers, `require_mfa = true` would block them. The fallback is to rely on
-  the provider enforcing MFA, stated in the documentation, with the check
-  optional.
-- **Session lifetime.** `st.login` manages the session cookie. The age check
-  uses `auth_time` from the token. Confirm it is available.
+- **Token claims.** Streamlit passes the provider's ID-token claims through
+  unfiltered, but providers differ: some send `auth_time` and `amr`, some do
+  not. If `amr` is missing, `require_mfa = true` blocks that provider. The
+  fallback is `require_mfa = false`, with MFA enforced at the provider and
+  stated in the documentation. Nothing here has run against a real provider.
+- **Silent re-login.** With the default `prompt`, some providers reuse their
+  session and keep an old `auth_time`, which would deny the user repeatedly.
+  The guide uses `prompt = "login"`.
 - **Shared files.** Several modules are shared with non-identity code. The
   plan must trim, not delete, those (for example the default work limits).
 - **Size.** The removal is large, roughly 2,000 lines of code and 1,300 lines
