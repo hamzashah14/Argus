@@ -42,6 +42,9 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None, allo
         return failure(
             "NOT_CONFIGURED", "Complete the agent connection settings before starting an investigation."
         )
+    if allowed is not None and (identity.required() or settings.runtime_target != "standalone"):
+        # Only the in-process path enforces a scope; refuse rather than silently widen access.
+        return failure("SCOPE_UNSUPPORTED", "This deployment cannot restrict chat to a list of instances.")
     text = ""
     try:
         if identity.required():

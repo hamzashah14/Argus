@@ -175,3 +175,25 @@ def test_failures_carry_no_usage():
     from kira import chat
 
     assert chat.failure("X", "message").usage == {}
+
+
+@pytest.mark.parametrize("auth_mode,target", [("", "agentcore"), ("oidc", "standalone")])
+def test_a_scope_is_refused_where_the_runtime_cannot_enforce_it(monkeypatch, auth_mode, target):
+    from kira import agentcore, chat_gateway
+
+    calls = [Mock(), Mock(), Mock()]
+    monkeypatch.setattr(execution, "execute", calls[0])
+    monkeypatch.setattr(agentcore, "invoke", calls[1])
+    monkeypatch.setattr(chat_gateway, "invoke", calls[2])
+    monkeypatch.setattr(
+        identity, "Sessions", Mock(side_effect=AssertionError("refusal must precede any identity call"))
+    )
+    monkeypatch.setenv("KIRA_AUTH_MODE", auth_mode)
+    settings = Mock()
+    settings.problems.return_value = []
+    settings.runtime_target = target
+    result = chat.invoke("question", "session", settings, allowed={"i-0123456789abcdef0"})
+    assert (result.status, result.code) == ("error", "SCOPE_UNSUPPORTED")
+    assert result.message == "This deployment cannot restrict chat to a list of instances."
+    for call in calls:
+        call.assert_not_called()
