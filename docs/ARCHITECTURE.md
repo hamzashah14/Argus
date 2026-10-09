@@ -7,11 +7,10 @@ Unfamiliar terms are defined in the [glossary](#glossary).
 
 Three choices shape a deployment, and each is made when you deploy:
 
-- **Sign-in.** The default is local single-user mode with one shared UI password. The
-  optional identity module adds OIDC with MFA, grants, sessions, audit, per-user and
-  shared quotas and a dedicated chat gateway. It is enabled by an `identity` block in
-  `runtime.json` (`init --identity`), which sets `KIRA_AUTH_MODE=oidc` for the UI and
-  runtime.
+- **Sign-in.** The default is local single-user mode with one shared UI password.
+  Optional team mode adds OIDC sign-in through your identity provider and a `team.toml`
+  allowlist of people and instances on the UI host. It is on when `KIRA_TEAM_FILE` is
+  set, creates no AWS resources and works with the standalone target only.
 - **Model provider.** Amazon Bedrock is the default. A Model API (OpenAI-compatible
   or Anthropic Messages) is the alternative, for the standalone target only.
 - **Runtime target.** Standalone Lambda is the default. AgentCore is Bedrock only.
@@ -20,15 +19,14 @@ Three choices shape a deployment, and each is made when you deploy:
 
 | Component | Responsibility |
 | --- | --- |
-| Streamlit UI | Shared-password sign-in by default (native OIDC login with the optional identity module), chat, incident status and report access |
-| Session issuer and qualified chat gateway (optional identity module) | Release-bound identity, audit and distributed work allowances |
+| Streamlit UI | Shared-password sign-in by default (native OIDC login and the team file in team mode), chat, incident status and report access |
+| Team file (team mode only) | `team.toml` on the UI host: who may sign in, with which role and instances. The UI process reads it, and nothing is stored in AWS |
 | Shared Python runtime | Token counting and inference through a model provider (Bedrock `CountTokens`/`Converse`, or the Model API adapter in `kira/model_api.py` selected by the `MODEL_API` setting), bounded read-only tools, redaction and structured diagnosis |
-| Standalone Lambda or AgentCore hosts | Incident execution with pinned versions and policies. Dedicated chat hosts exist only with the identity module. By default chat runs in the UI process (standalone) or in the same AgentCore runtime as incidents. AgentCore is Bedrock only |
+| Standalone Lambda or AgentCore hosts | Incident execution with pinned versions and policies. Chat runs in the UI process (standalone) or in the same AgentCore runtime as incidents. AgentCore is Bedrock only |
 | SNS, SQS and durable pipeline | Accepted-event capture, dispatch, independent notifications and fenced workers |
 | DynamoDB incident ledger/outbox | Dedupe, transitions, leases, budgets, delivery intents and recovery accounting |
-| Separate DynamoDB identity storage (optional identity module) | Grants, epochs, sessions, audit and distributed allowances |
-| Private versioned S3 and KMS | Redacted checkpoints/reports, artifacts and retained audit objects |
-| Secrets Manager | Independent log cursor secret, plus the session signing secret (identity module) and the Model API key (Model API provider, created by you), each pinned to an exact version |
+| Private versioned S3 and KMS | Redacted checkpoints/reports and artifacts |
+| Secrets Manager | Independent log cursor secret, plus the Model API key (Model API provider, created by you), each pinned to an exact version |
 | CloudWatch, schedules and optional observers | Telemetry, health/freshness, queue/delivery monitoring and notification canaries |
 
 There is no local SQL database to install. AWS storage is provisioned by the
@@ -40,18 +38,17 @@ application checks deny expired or erased evidence independently.
 1. Establish scoped AWS identities, model access (Bedrock, or a Model API account and
    key), regions, quotas and budget.
 2. Identify existing workloads and install/configure telemetry and heartbeat.
-3. Register notification recipients. With the optional identity module, also register
-   OIDC/MFA, the exact callback/origin and authorized users. With a Model API, create
-   the key secret in Secrets Manager yourself.
+3. Register notification recipients. With optional team mode, also register the app with
+   your OIDC identity provider (MFA, the exact callback/origin) and write the team file
+   on the UI host. With a Model API, create the key secret in Secrets Manager yourself.
 4. Generate private settings, review the offline plan and run read-only preflight.
 5. Apply from clean committed source. The CLI builds inventory-bound packages,
    provisions foundations, pins storage/secret versions and seals candidates.
-6. Explicitly authorize the paid bounded canary. With the identity module, first
-   configure native UI login and a release-bound investigator grant and obtain a
-   private staging ticket.
+6. Explicitly authorize the paid bounded canary.
 7. Resume reviewed routing, confirm subscriptions and prove actual primary/fallback
    inbox delivery. Configure the operational UI role and connection references. In the
-   default mode, export `APP_PASSWORD` in the shell that launches the UI.
+   default mode, export `APP_PASSWORD` in the shell that launches the UI. In team mode,
+   launch it with `--team-file` instead.
 8. Complete staging/load/security/recovery acceptance and a reviewed production
    cutover. Provisioning alone leaves investigations paused.
 
@@ -60,8 +57,8 @@ and [server setup](SERVERS.md) for telemetry and the heartbeat.
 
 ## Chat workflow
 
-**Default (local single-user mode).** Chat has no gateway. There is no per-person
-identity, shared spend cap or dedicated chat capacity.
+**Default (local single-user mode).** There is no per-person sign-in, shared spend cap
+or dedicated chat capacity.
 
 1. The browser user signs in with the shared password. The session ends after 30 minutes.
 2. The UI process checks the prompt and a throttle of 20 requests per hour, kept per
@@ -71,14 +68,18 @@ identity, shared spend cap or dedicated chat capacity.
    incidents. Either way it uses the UI role's AWS credentials, the instance
    allowlist, bounded runtime limits and the release binding.
 
-**With the optional identity module.**
+**With optional team mode** (standalone target only).
 
-1. Native OIDC authenticates the browser user; the UI workload separately assumes
-   its scoped AWS role. A browser login does not grant direct AWS resource access.
-2. The issuer checks recent MFA and the immutable subject's enabled grant,
-   instance scope, role, epoch and release binding, then retains an audited session.
-3. An investigator selects an authorized instance. The qualified chat gateway
-   validates session/scope, reserves distributed allowances and invokes the runtime.
+1. Streamlit's native OIDC login authenticates the browser user. The UI process
+   separately uses its scoped AWS role. A browser login does not grant direct AWS
+   resource access.
+2. The UI checks the token's issuer, the immutable subject against the team file, the
+   sign-in age and, if required, the `mfa` claim. A person who is not allowed sees only a
+   message.
+3. An investigator asks about an instance on their list. Kira's code checks that list,
+   not IAM, because one AWS role serves everyone. Each request counts against a
+   per-person hourly limit in the UI process and writes one audit line to standard
+   output. Then chat runs in the UI process as in the default mode.
 
 **Both modes continue here.**
 
@@ -90,8 +91,8 @@ identity, shared spend cap or dedicated chat capacity.
    handlers itself with your own AWS credentials instead.) Redaction runs
    before subsequent model requests and persisted/delivered output.
 6. Structured diagnosis validates citations, correlation and uncertainty. The UI
-   displays the qualified answer. With the identity module, viewer grants do not
-   authorize investigation.
+   displays the qualified answer. In team mode, viewers read reports but cannot start
+   investigations.
 
 ### Model provider seam
 
@@ -133,28 +134,25 @@ validation, release rendering, `plan()` and the AgentCore host's startup.
    link to prior incidents; they do not cancel running work or remediate workloads.
 
 See [operations](OPERATE.md) for recovery and data boundaries, the
-[deployment guide](DEPLOY.md) for the optional identity setup and the
+[deployment guide](DEPLOY.md) for the optional team mode setup and the
 [live acceptance checklist](ACCEPTANCE.md) for what to prove before relying on a deployment.
 
 ## Glossary
 
-- **Allowance (quota) (identity module only):** A limit on logins, chat requests and reserved model tokens, per user and shared by everyone, counted per UTC hour. It is charged before work starts and is never refunded, even if the request fails. You choose the numbers in `runtime.json`.
-- **Canary:** A deliberate test run with a known input. The staging canary is one paid chat request through the candidate chat function (the candidate investigation function in the default mode), run before promotion. A notification canary is a synthetic alarm that an optional observer sends through the alert path on a schedule, to check that the alert and its receipt still arrive.
+- **Canary:** A deliberate test run with a known input. The staging canary is one paid request through the candidate investigation function, run before promotion. A notification canary is a synthetic alarm that an optional observer sends through the alert path on a schedule, to check that the alert and its receipt still arrive.
 - **Change set:** CloudFormation's preview of what a stack update would do. The deployment tooling creates one named `review-` plus the start of the review hash, checks it against the rendered template, and only then runs it. Deletions, replacements and drift stop the automation.
 - **DLQ (dead-letter queue):** A queue that holds messages that could not be delivered or processed. The pipeline queues move a message there after five failed receives. Alarms watch these queues; inspect messages before deleting anything.
-- **Epoch (identity module only):** A counter on each user grant. Every change to a grant, including revoking it with `enabled: false`, adds one. A session carries the epoch it was issued under and stops working when the stored epoch differs.
-- **Grant (identity module only):** The record that lets one person use Kira. It is keyed by the identity provider's issuer and immutable subject (not an email address) and holds a role (`viewer` or `investigator`), the instances they are scoped to, an enabled flag, an epoch and a release binding. Viewers read reports; investigators can also start chat investigations.
-- **Identity module (OIDC module):** The optional part of Kira that adds individual sign-in. It brings OIDC with MFA, grants, epochs, sessions, an audit trail, per-user and shared allowances, the qualified chat gateway, access review and erasure of identity data. You enable it with an `identity` block in `runtime.json`, for example by running `init --identity`. Without it Kira runs in local single-user mode.
 - **Ledger:** The DynamoDB table that records each accepted event, its incident and the work still owed, written with conditional updates so duplicates are rejected. It also holds leases, budgets and recovery accounting.
 - **Lease and fence:** A worker claims an incident by taking a time-limited lease (owner and expiry) in the ledger. Each claim increments a fencing token, and every later write must present the current token, so a slow worker whose lease expired cannot overwrite the newer attempt.
-- **Local single-user mode:** The default. One shared password (`APP_PASSWORD`, at least 12 characters) protects the web UI, and chat runs without a gateway using the UI role's AWS credentials. There are no grants, sessions, per-person quotas or identity tables. The throttle of 20 requests per hour is kept per browser session.
-- **Local tools mode:** A development-only option for chat. With `KIRA_LOCAL_TOOLS` set to a one-file JSON config, the UI process runs the two read-only tool handlers itself with the AWS credentials on your machine, so nothing is deployed. It needs `ENVIRONMENT=development`, the standalone target and password sign-in, and it cannot run incident investigations. The handlers are the deployed ones; only the transport differs. IAM no longer limits them to your instances and log groups. See the [README recipe](../README.md#try-it-against-your-own-cloudwatch-no-deployment).
+- **Local single-user mode:** The default. One shared password (`APP_PASSWORD`, at least 12 characters) protects the web UI, and chat runs in the UI process using the UI role's AWS credentials. There is no per-person sign-in. The throttle of 20 requests per hour is kept per browser session.
+- **Local tools mode:** A development-only option for chat. With `KIRA_LOCAL_TOOLS` set to a one-file JSON config, the UI process runs the two read-only tool handlers itself with the AWS credentials on your machine, so nothing is deployed. It needs `ENVIRONMENT=development` and the standalone target, is meant for the password UI on your own machine, and cannot run incident investigations. The handlers are the deployed ones; only the transport differs. IAM no longer limits them to your instances and log groups. See the [README recipe](../README.md#try-it-against-your-own-cloudwatch-no-deployment).
 - **Model API provider:** An alternative to Bedrock for the standalone target. It is an OpenAI-compatible Chat Completions endpoint with tool calling, or the Anthropic Messages API, set by `model_provider` and `model_api` in `deployment.json`. Its API key lives in a Secrets Manager secret that you create, and each release pins one version of it. Redacted excerpts leave your AWS account for that provider.
 - **Outbox and intent:** An intent is a ledger row saying that something still has to happen, such as the initial notification, an investigation or the follow-up. Intents start as `PENDING` and become `SENT` once queued. The message is queued first, so a crash can cause a duplicate but never a lost intent. The set of pending intents is the outbox.
 - **Plan hash and review hash:** The plan hash is a SHA-256 digest of the `dry-run` plan, and `apply` refuses to run without it. The review hash is the digest of a rendered release bundle (source, settings, templates and bindings); operator commands refuse a bundle that does not match it.
-- **Qualified chat gateway (identity module only):** The dedicated chat function the UI calls when the identity module is enabled. "Qualified" means an exact numbered Lambda version in your account and region (not `$LATEST`) that was created and sealed as part of the release. It validates the session and scope, reserves allowances and runs the runtime. The UI role may invoke only this version.
-- **Release binding (bindings):** The environment, account ID and release fingerprint. Every chat request must carry the running release's fingerprint. With the identity module they are also stored with each grant and session, which only work with the release they were issued for, so a new release needs reviewed grant rebinding. In the deployment tooling, `bindings` also means the recorded outputs (table names, secret and function versions) that a release is pinned to.
-- **RuntimeConnection:** A CloudFormation output of the reviewed routing stack. It is JSON with the settings the UI needs (region, model, account, release fingerprint, limits, function or runtime ARNs, work policy, and the `MODEL_API` setting if you use one). It holds references, never secrets. `apply` copies it into `ui-connection.json`.
+- **Release binding (bindings):** The environment, account ID and release fingerprint. Every chat request must carry the running release's fingerprint. In the deployment tooling, `bindings` also means the recorded outputs (table names, secret and function versions) that a release is pinned to.
+- **RuntimeConnection:** A CloudFormation output of the reviewed routing stack. It is JSON with the settings the UI needs (region, model, account, release fingerprint, limits, function or runtime ARNs, diagnostic policy, and the `MODEL_API` setting if you use one). It holds references, never secrets. `apply` copies it into `ui-connection.json`.
 - **Sealed (seal):** After a release stack is created, the tooling attaches a stack policy that denies every update to it. A sealed release cannot be edited in place; changes need a new release ID.
-- **Standalone vs AgentCore:** The two runtime targets, set by `runtime_target`. `standalone` runs investigations and chat in AWS Lambda. `agentcore` runs them in separate Amazon Bedrock AgentCore incident and chat runtimes with their own endpoints. Both use the same Python orchestration and read-only tools. AgentCore supports Bedrock only.
-- **Tombstone and erasure:** Erasure removes an incident's report content and every stored version after a reviewed plan, and leaves a minimal tombstone (incident and event IDs, fence, review reference, no report content). The tombstone stops a replayed event from bringing the incident back. A revoked grant is likewise kept, disabled, so it cannot be recreated at epoch 1.
+- **Standalone vs AgentCore:** The two runtime targets, set by `runtime_target`. `standalone` runs investigations in AWS Lambda and chat in the UI process. `agentcore` runs them in an Amazon Bedrock AgentCore runtime with its own endpoint. Both use the same Python orchestration and read-only tools. AgentCore supports Bedrock only.
+- **Team file:** The `team.toml` allowlist on the UI host. It names the identity provider's issuer, whether MFA is required, the longest sign-in age, a per-person hourly chat limit and each person's immutable subject, role (`viewer` or `investigator`) and instances. It holds no secrets. The UI re-reads it when it changes, so removing a person applies on their next request, and an invalid file stops the UI.
+- **Team mode:** An option that lets several people share one UI. It is on when the UI host sets `KIRA_TEAM_FILE`. People sign in through Streamlit's native OIDC login, and the team file says what each may do. It creates no AWS resources and works with the standalone target only. Chat runs in the UI process with the UI role's credentials, so Kira's code, not IAM, enforces each person's instance list. There is no remote logout.
+- **Tombstone and erasure:** Erasure removes an incident's report content and every stored version after a reviewed plan, and leaves a minimal tombstone (incident and event IDs, fence, review reference, no report content). The tombstone stops a replayed event from bringing the incident back.

@@ -17,15 +17,16 @@ an option.
 
 | Choice | Default (the shortest path) | Option | Where |
 | --- | --- | --- | --- |
-| Who signs in to the UI | **Local single-user mode.** You run the UI on your own machine and protect it with one shared password. There is no identity provider, grant, session ticket, identity table, signing secret or chat gateway function | **Team sign-in with OIDC.** Your identity provider and MFA, per-person grants, audit records, per-user quotas and a dedicated chat gateway | Section 7 |
+| Who signs in to the UI | **Local single-user mode.** You run the UI on your own machine and protect it with one shared password. There is no identity provider | **Team mode.** Several people share one UI. Each signs in through your identity provider and sees only the instances on their allowlist entry. One small file on the UI host, no AWS resources | Section 7 |
 | Which model | **Amazon Bedrock** | **A model API:** an OpenAI-compatible or Anthropic Messages endpoint, with its key in AWS Secrets Manager. Your prompts leave your AWS account | Section 8 |
 | Which runtime | **`standalone`:** Lambda functions | **`agentcore`:** Amazon Bedrock AgentCore hosts. Bedrock models only | Section 9 |
 
-The options combine freely, with one exception: a model API works only with `standalone`. The
-tool rejects the other combination.
+The options combine freely, with two exceptions. A model API works only with `standalone`, and the
+tool rejects the other combination. Team mode also needs `standalone`: the UI reports a
+configuration problem for `agentcore`.
 
-Team sign-in is on if, and only if, `runtime.json` contains an `identity` block. `init --identity`
-only gives you a starting file that has one.
+Team mode is on if, and only if, the UI host sets `KIRA_TEAM_FILE` (section 7). The deployment
+tool knows nothing about it and creates nothing for it.
 
 ## Who does what
 
@@ -35,7 +36,7 @@ only gives you a starting file that has one.
 | Your AWS account | Hosts everything Kira creates: Lambda functions, queues, DynamoDB tables, S3 buckets, secrets, alarms |
 | Your monitored servers | You install the CloudWatch agent and a heartbeat on each ([SERVERS.md](SERVERS.md)). Kira never installs software on them |
 | Your mailboxes | People confirm subscription emails and check that alerts really arrive |
-| Your identity provider (IdP), optional | Only with team sign-in: you register Kira's web UI there and enforce MFA. Kira cannot do that for you |
+| Your identity provider (IdP), optional | Only with team mode: you register Kira's web UI there and enforce MFA. Kira cannot do that for you |
 | Your model API provider, optional | Only with a model API: you hold the account and the API key, create the secret that stores it, and pay the provider |
 
 **The whole path (default)**
@@ -49,7 +50,7 @@ only gives you a starting file that has one.
    [ACCEPTANCE.md](ACCEPTANCE.md).
 7. Open the UI on your own machine (section 4).
 
-Team sign-in adds an IdP registration, a first login and a staging ticket (section 7). A model API
+Team mode adds an IdP registration and a `team.toml` file on the UI host (section 7). A model API
 adds a secret that you create before `check` (section 8).
 
 ## 1. What you need before you start
@@ -68,7 +69,7 @@ your account, regions, model, fleet, schedules, retention and usage. Review thes
   you pay the provider instead, outside your AWS bill (section 8).
 - CloudWatch log ingestion, Logs Insights queries, metrics, alarms and the dashboard.
 - Lambda, DynamoDB (including point-in-time recovery), S3 versioning, KMS, Secrets Manager, SNS
-  and SQS, and CloudTrail data events (releases with team sign-in create a trail).
+  and SQS.
 
 Retained storage, keys and alarms keep costing money even when investigations and observers are
 paused. Token reservations and query counts bound the work. They are not a dollar cap. Kira has
@@ -87,7 +88,7 @@ apply, finish the named human steps, resume apply.** Every command is safe to re
 work keeps its progress. Run everything from the repository root.
 
 The tool deploys the backend only. It does not install software on servers, create an EC2 host
-for the UI, confirm inboxes, or (with team sign-in) register your IdP.
+for the UI, confirm inboxes, or (with team mode) register your IdP.
 
 ### 3.1 Install and prepare
 
@@ -115,14 +116,13 @@ python -m infra.automation init --work-dir .local/customer
 
 This makes the folder (mode 700) and three owner-only files (mode 600). It makes no AWS call and
 never overwrites existing files. The work directory must be under `.local/` in this checkout.
-Plain `init` copies `examples/durable.example.json` as `runtime.json`, which is local single-user mode.
-For team sign-in add `--identity` (section 7).
+`init` copies `examples/durable.example.json` as `runtime.json`.
 
 | File | What it holds |
 | --- | --- |
-| `automation.json` | Which AWS profile to use, where the other files and the wheels are, and your first user grants (empty in default mode) |
+| `automation.json` | Which AWS profile to use, and where the other files and the wheels are |
 | `deployment.json` | Account, regions, release ID, model, IAM roles, server inventory, Nginx filters, primary recipient |
-| `runtime.json` | Status URL, fallback recipient, retention, capacity, model and tool limits. With team sign-in it also holds the OIDC issuer and audience and the usage allowances |
+| `runtime.json` | Status URL, fallback recipient, retention, capacity, model and tool limits |
 
 The examples are synthetic (`reference_only: true`, `.invalid` addresses). `check` and `apply`
 reject them before they touch AWS. Keep every real value, secret and receipt out of Git.
@@ -131,7 +131,7 @@ reject them before they touch AWS. Keep every real value, secret and receipt out
 
 All relative paths resolve against `automation.json`, not your terminal's folder.
 
-**`automation.json`.** It must contain exactly these six keys, or you get "Automation
+**`automation.json`.** It must contain exactly these five keys, or you get "Automation
 configuration has unknown or missing fields".
 
 | Key | Value |
@@ -140,7 +140,6 @@ configuration has unknown or missing fields".
 | `spec`, `runtime_config` | Paths to `deployment.json` and `runtime.json` (the generated names) |
 | `profile` | AWS profile name (letters, digits, `_ . @ -`, up to 128 characters), or `null` for the standard credential chain. A named profile is used for every check and subprocess, and ambient static keys cannot override it |
 | `wheelhouse` | Path to the verified wheels. `init` writes the absolute path of `.build/wheels` in your checkout |
-| `initial_access` | Must be `[]` in default mode. The tool rejects a non-empty list with "initial_access needs an identity block in the runtime configuration". With team sign-in it holds up to 100 first user grants (section 7) |
 
 ```json
 {
@@ -148,8 +147,7 @@ configuration has unknown or missing fields".
   "spec": "deployment.json",
   "runtime_config": "runtime.json",
   "profile": "customer-deployment",
-  "wheelhouse": "../../.build/wheels",
-  "initial_access": []
+  "wheelhouse": "../../.build/wheels"
 }
 ```
 
@@ -182,8 +180,8 @@ and configuring agents stays your job.
 | Runtime | `runtime_target`: `standalone` (default) or `agentcore` (section 9) |
 | `runtime_limits` | All eight fields are required. Each is at least 1 and at most: `tokens_reserved` 100000, `model_steps` 16, `tool_calls` 16, `log_queries` 48, `output_tokens` 4096, `window_minutes` 30 (minutes on each side of the incident time), `context_bytes` 64000, `tool_bytes` 20000. `output_tokens` must be below `tokens_reserved`. The example uses 32000, 8, 8, 24, 1024, 15, 48000 and 20000 |
 
-These are limits and reservations, not measured production sizing. Do not add an `identity` or
-`security` block unless you want team sign-in (section 7).
+These are limits and reservations, not measured production sizing. Team mode adds nothing to
+`runtime.json`.
 
 **Optional: observers.** Observers add health probes and notification canaries. To use them, copy
 the `observability` object from `examples/observability.example.json` into `deployment.json` and fill
@@ -216,11 +214,11 @@ also writes `collector-examples/INSTANCE_ID.json`, one CloudWatch agent configur
 It prints a `plan_hash`. You need that hash for `apply`.
 
 Read `plan.json` before going on. It lists the ordered steps, stack names and regions, the exact
-bootstrap templates, the permission screen and the steps left to you. In default mode the
+bootstrap templates, the permission screen and the steps left to you. The
 ordered steps are `foundation-tools`, `foundation-monitor`, `durable-foundation`, `owned-tools`,
 `durable-runtime`, `candidate-verification`, `staging-canary`, `routing`,
-`registration-verification` and `manual-acceptance`. Observers add their own steps. There are no
-identity steps. A model API adds a `model-secret` step before `owned-tools`.
+`registration-verification` and `manual-acceptance`. Observers add their own steps. A model API
+adds a `model-secret` step before `owned-tools`.
 
 The plan is not a price quote, proof of permissions or a real CloudFormation change set. Later
 templates need real outputs, so their exact form appears during `apply`, where each real change
@@ -269,7 +267,7 @@ passes. Then it works through these steps:
 5. **Stops** for the human step in 3.7. It then continues with the canary, routing and
    registration checks, and writes `ui-connection.json` as its last step.
 
-Team sign-in and AgentCore add steps of their own (sections 7 and 9).
+AgentCore adds steps of its own (section 9).
 
 A CloudFormation stack is a group of resources managed together. A change set is its preview. The
 approved plan authorizes additive steps without a prompt for each one. Every change set is still
@@ -284,18 +282,17 @@ immediately.
 
 **The work directory.** `.local/customer` holds `state.json` (the resume journal), `bundle/`
 (rendered templates and `bundle.json`), `build/`, `bindings.json`, `preflight.json`, change-set
-reviews, the canary receipt, `operations.log` and `ui-connection.json`. With team sign-in it also
-holds key and grant receipts. Keep it, and never edit or discard the journal to force a retry. A
-file lock stops two processes from using one directory. Never run the same release from two
-directories at once.
+reviews, the canary receipt, `operations.log` and `ui-connection.json`. Keep it, and never edit or
+discard the journal to force a retry. A file lock stops two processes from using one directory.
+Never run the same release from two directories at once.
 
 ### 3.7 The human steps
 
 `apply` stops for these. None can be skipped.
 
-**A. "Candidate ready" (exit 2).** The backend candidate is built and verified. In default mode the
-message is "Candidate ready: resume with --allow-model-invocation". There is no sign-in and no
-ticket. Run `apply` again with the same config and plan hash and one more flag:
+**A. "Candidate ready" (exit 2).** The backend candidate is built and verified. The message is
+"Candidate ready: resume with --allow-model-invocation". Run `apply` again with the same config
+and plan hash and one more flag:
 
 ```bash
 python -m infra.automation apply --config .local/customer/automation.json --work-dir .local/customer --plan-hash YOUR_PLAN_HASH --allow-model-invocation
@@ -304,8 +301,8 @@ python -m infra.automation apply --config .local/customer/automation.json --work
 This **spends money**: one bounded model request that calls the staging Investigate function. It
 must use both the log and metric tools and return a valid diagnosis. Before it, a coverage check
 must pass. Your servers must already publish the metrics, or it stops with "Required metric
-unavailable". With a model API, the provider bills this request, not AWS. Because no ticket is
-needed, you may add `--allow-model-invocation` to the very first `apply` and skip this stop.
+unavailable". With a model API, the provider bills this request, not AWS. You may add
+`--allow-model-invocation` to the very first `apply` and skip this stop.
 Leave it off the first time if you want to check your telemetry before the paid call.
 
 **B. Confirm the emails.** AWS sends subscription emails. The fallback address gets one for the
@@ -331,8 +328,6 @@ Two more stops can appear. "Legacy resource retirement requires separate review"
 retirement plan names alarms or subscriptions to remove. The tool never deletes them, so review
 them with the commands in Appendix A. Production environments stop as described in 3.8.
 
-With team sign-in, step A also needs a login and a private staging ticket (section 7).
-
 ### 3.8 Status, finished and what comes after
 
 | Status | Exit | Meaning |
@@ -356,7 +351,7 @@ inbox and acceptance checks in [ACCEPTANCE.md](ACCEPTANCE.md).
 stops with `WAITING`: "Production candidates provisioned; existing gates require separately
 qualified staging and production cutover". The message says "production" even for `development`.
 No flag continues past it, because the paid canary and the promotion receipt exist only for
-staging. In default mode the tool writes no `ui-connection.json` for these environments (it writes
+staging. The tool writes no `ui-connection.json` for these environments (it writes
 one only at the end of a staging run). This repository has no command that promotes a production
 bundle. Qualify a staging release first, then treat production cutover as a separate, reviewed
 customer process.
@@ -373,7 +368,7 @@ Only want to try chat without deploying anything? Use the README recipe
 [Try it against your own CloudWatch](../README.md#try-it-against-your-own-cloudwatch-no-deployment)
 instead of this section. It is for development only.
 
-This section is for default mode (team sign-in: section 7). The tool writes `ui-connection.json`
+This section is for default mode (team mode: section 7). The tool writes `ui-connection.json`
 as its last step, so start here when `status` shows
 `INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING`.
 
@@ -411,12 +406,12 @@ address does not reach your machine, open the same `?incident=ID` on the local a
   versions, bounded limits (`RUNTIME_LIMITS`), release binding, the diagnostic policy and
   redaction. They come from the generated connection file.
 - The only throttle is 20 requests per hour for each browser session. There is no per-person
-  identity, grant, audit record or shared quota.
+  sign-in, audit line or shared limit.
 
 **Do not host a default-mode UI for other people.** It is protected by one shared password. Anyone
 who knows that password can start model and tool calls with the UI role's AWS permissions, and can
 read every incident report. Keep it on `127.0.0.1`, or put it behind your own SSO or VPN proxy. If
-several people need their own access, use team sign-in (section 7).
+several people need their own access, use team mode (section 7).
 
 ## 5. Troubleshooting
 
@@ -429,9 +424,9 @@ public places.
 | "Deployment files must live under ignored .local/", "Init never overwrites existing customer files" | `--work-dir` must be inside `.local/` of this checkout. For a fresh start use a new work directory |
 | "Synthetic reference inputs cannot check/deploy AWS" | `reference_only` is still `true`, or the examples are unchanged |
 | "Deployment failed (ValueError); no success claimed. Inspect private evidence." | A setting in `deployment.json` or `runtime.json` breaks a rule in 3.3, and the automation tool does not say which. Run `python -m infra.durable --spec .local/customer/deployment.json --config .local/customer/runtime.json --output .local/customer/check-render`. It makes no AWS call and ends with the exact message. Examples: "Invalid deployment field: NAME", "UI, CI and deployment identities must be distinct", "Model ARN must be included in model_arns", "Invalid durable URL, distinct fallback recipient or retention", "Invalid runtime limit: NAME" |
-| "Automation configuration has unknown or missing fields", "Invalid AWS profile name", "Supply spec, runtime configuration and verified wheelhouse paths" | `automation.json` must have exactly the six keys in 3.3, with valid values |
+| "Automation configuration has unknown or missing fields", "Invalid AWS profile name", "Supply spec, runtime configuration and verified wheelhouse paths" | `automation.json` must have exactly the five keys in 3.3, with valid values |
 | "Initial deployment must keep investigation_paused true; activation is a separate qualified release" | Set `investigation_paused` to `true` in `runtime.json` |
-| "initial_access needs an identity block in the runtime configuration", "--access-ticket-file applies only with an identity block in runtime.json" | You are in default mode. Leave `initial_access` empty and do not pass a ticket. For team sign-in, see section 7 |
+| "Team sign-in changed: remove the identity, security and initial_access settings. Team access is now a team.toml allowlist on the UI host; see docs/DEPLOY.md section 7." | An older `runtime.json` still has an `identity` or `security` block, or an older `automation.json` still has `initial_access`. Delete those keys. Team access is now the `team.toml` file on the UI host (section 7), and the deployment tool no longer deals with it |
 | "Run dry-run and supply its exact --plan-hash before apply" | Rerun `dry-run` and copy the new hash. Any change to settings or the commit changes it |
 | "Apply requires a clean reviewed source checkout" | Commit or remove every change, including untracked files |
 | "Wrong AWS account; no writes permitted", "Run with the configured CI/operator role credentials" | The profile points at another account, or is not a session of `ci_principal_arn` |
@@ -453,23 +448,22 @@ public places.
 | "Confirm the subscription emails sent to the addresses configured as ..." | `WAITING`, exit 2. A subscription email is still unconfirmed. Click the link in each one, then resume with the same plan hash (3.7 B) |
 | "Required metric unavailable: ID", "Required evidence log group is absent", "Required access metric filter failed its positive/negative fixtures", "Access filter does not cover declared failed-request statuses" | Telemetry is not yet as declared. See [SERVERS.md](SERVERS.md), then resume with `--retry-canary` (3.7 C) |
 | "Canary requires explicit paid invocation authorization in staging" | The canary needs `environment: staging` and `--allow-model-invocation` |
-| "A private individual-session ticket is required for the staging chat canary", "A canary ticket requires explicit paid model authorization", "Canary ticket and parent directory must be private, with a bounded nonempty ticket" | Team sign-in only. The canary needs a ticket (mode 600, in a folder with mode 700, not a symlink) and `--allow-model-invocation` (section 7) |
 | "Owned runtime canary failed", "Canary did not prove both successful tool contracts and model completion" | The function failed or the run stopped early. Read the staging Investigate function's CloudWatch logs in the monitor region. With a model API, common causes are an API host that Lambda cannot reach, a rejected key, a model without tool calling, or a token report that fails Kira's accounting check (8.1). The failed canary is ambiguous (3.7 C) |
 | "Canary receipt expired/differs", "Previous paid canary outcome is ambiguous" | See 3.7 C |
 | "Legacy resource retirement requires separate review" | Review the named alarms or subscriptions by hand. The tool never deletes them |
 | "Routing includes an unexpected or unconfirmed subscriber" | A subscriber differs from the plan, for example another address or protocol, or one that is missing or unsubscribed. This stays `FAILED`. Correct it, then resume. A pending email alone waits instead (3.7 B) |
-| "Access administration failed; verify the private inputs, ownership and reviewed source" | Team sign-in only. A `grant-plan` or `grant-apply` input, the owner or the clean checkout is wrong. The message hides the details on purpose |
-| "UI profile must assume the generated UI role (or limited staging issuer); do not use deployment credentials", "Connection file must be private (chmod 600) and not a symlink" | Fix the profile (section 4, or 7.8 with team sign-in), or run `chmod 600` on `ui-connection.json` |
+| "UI profile must assume the generated UI role; do not use deployment credentials", "Connection file must be private (chmod 600) and not a symlink" | Fix the profile (section 4), or run `chmod 600` on `ui-connection.json` |
 | "APP_PASSWORD is not set: export it (12+ characters) in this shell first; .env is not loaded." | Default mode. Export `APP_PASSWORD` before you run the launcher (section 4). The UI page may mention a `.env` file, but the launcher does not read it |
 | "Set a valid MODEL_API setting (...)" | The `MODEL_API` setting in the UI environment is malformed. Use the generated `ui-connection.json` unchanged |
-| "Set KIRA_AUTH_MODE=oidc, or remove CHAT_FUNCTION_ARN and KIRA_SESSION_TABLE." | The UI environment mixes team sign-in settings with default mode. Use one generated connection file unchanged |
+| "The team access list cannot be used. Team file field 'users[0].instances' is invalid" (the message names a field, never a value) | Team mode only. Fix that entry in `team.toml` (7.4): an unknown key, a duplicate `sub`, or an instance that is not in your deployment inventory. The same message covers a missing or unreadable file, one over 256 KiB or one that group or others can write (use `chmod 600`). The UI stops. It never opens to everyone |
+| "Team mode requires XSRF protection and disabled trusted-header identity overrides." | Team mode only. Streamlit's XSRF protection is off, or `trustedUserHeaders` is set. Turn XSRF protection back on and empty `trustedUserHeaders` in `.streamlit/config.toml` (or wherever you set them), then restart (7.6) |
 | "Deployment failed (ErrorType); no success claimed" | An unexpected error. Read `error.json` if present, and `operations.log` |
 
 ## 6. Next steps
 
-- Prove it works: [ACCEPTANCE.md](ACCEPTANCE.md) (real inbox delivery, fault drills, identity
-  checks if you enabled team sign-in, handover).
-- Run it day to day: [OPERATE.md](OPERATE.md) (incidents, recipients, access review, rotation,
+- Prove it works: [ACCEPTANCE.md](ACCEPTANCE.md) (real inbox delivery, fault drills, team-mode
+  checks if you enabled it, handover).
+- Run it day to day: [OPERATE.md](OPERATE.md) (incidents, recipients, team access, rotation,
   backup, rollback, spend).
 - Understand the design: [ARCHITECTURE.md](ARCHITECTURE.md). Report a security problem:
   [SECURITY.md](../SECURITY.md).
@@ -478,64 +472,39 @@ public places.
 
 **Sections 7 to 9 are optional. Skip them on the default path.**
 
-## 7. Optional: team sign-in with OIDC
+## 7. Optional: team mode
 
-Without this module, the UI uses one shared password and chat runs inside the UI process (section
-4). With it, Kira uses your IdP for sign-in (native OIDC in Streamlit) and its own grants for who
-may do what. You get MFA, per-person grants, audit records, per-user work allowances and a dedicated
-chat gateway function. A grant is keyed by the IdP's issuer and immutable subject, never by email.
-There is no public sign-up and no automatic first administrator. Roles are `viewer` (read reports)
-and `investigator` (also start investigations), both limited to the instances you list. AWS
-deployment rights are separate IAM roles. Revoking, rotating and restoring are in
-[OPERATE.md](OPERATE.md#access-review-grants-revocation-and-secret-rotation).
+Team mode lets several people share one UI, each with their own sign-in and their own list of
+instances. It needs no AWS resources and no deployment step. You write one small file on the
+machine that runs the UI. It is on when `KIRA_TEAM_FILE` is set; otherwise the UI uses the single
+shared password. It has only been tested offline. It has never been run against a real identity
+provider, and whether yours sends the claims it needs cannot be checked offline.
 
-### 7.1 What changes in the main path
+### 7.1 What changes
 
-| Where | Change with team sign-in |
-| --- | --- |
-| Prerequisites | An OIDC identity provider with MFA (7.2). Lambda headroom for 3 more reserved executions (2 for investigation, 1 for chat) |
-| 3.2 `init` | Add `--identity`, so `runtime.json` starts from `examples/identity.example.json` |
-| 3.3 `automation.json` | `initial_access` may list first user grants (7.6) |
-| 3.3 `runtime.json` | Add the `identity` block, and review the `security` block (7.3) |
-| 3.4 `dry-run` | The plan adds `identity-foundation`, `identity-secret`, `identity-foundation-bound`, `chat-runtime` and `initial-access` |
-| 3.6 `apply` | Step 2 also creates the identity table and signing secret, labels the signing version for this release and adds the session-issuer role. Step 3 also creates the dedicated chat release. After candidate verification the tool writes `ui-connection.json` (with the staging issuer role) and applies your `initial_access` grants |
-| 3.7 A | The stop says "Candidate ready: configure OIDC, log in with MFA and export the private staging ticket; resume with --allow-model-invocation --access-ticket-file". You sign in once and save a staging ticket (7.9) |
-| 4 The UI | Sign-in is OIDC. The launcher drops `APP_PASSWORD` |
+- People sign in through your identity provider, with the multi-factor sign-in it enforces.
+- A `team.toml` file lists who may use which instances, as a viewer or an investigator.
+- Chat runs in the UI process with the UI role's credentials, as in default mode. Kira checks each
+  person's instance list in code. IAM does not. One AWS role serves everyone, so anyone who can run
+  code in the UI process or read its environment holds that role.
+- Team mode needs `RUNTIME_TARGET=standalone`. With `agentcore` the UI reports "Team mode needs
+  RUNTIME_TARGET=standalone: chat runs in the UI process."
+- The sign-in check runs before anything else is shown. A person who is signed in but not allowed
+  sees one message and a Sign out button.
 
-The tool follows `runtime.json`. If you add or remove the `identity` block, the release changes.
-Use a new work directory and a new `release_id`.
-
-### 7.2 What you need
-
-- An OIDC identity provider with MFA, and an administrator who can register an app in it.
-- A way to find each person's immutable `sub` (7.5).
-- Headroom for the extra reserved concurrency (7.1).
-
-### 7.3 Settings in `runtime.json`
-
-Start from `examples/identity.example.json` (`init --identity` copies it). It adds two blocks to the
-default settings:
-
-| Group | Settings and rules |
-| --- | --- |
-| `identity` | `issuer`: an `https` URL with no query, fragment or user info, on port 443. `audience`: 1 to 256 characters. Exactly these two keys |
-| `security` | Allowances counted per UTC hour, for one user and for everyone: `login_user` and `chat_user` (1 to 100), `login_global` and `chat_global` (1 to 1000), `tokens_user` (up to 1,000,000), `tokens_global` (up to 10,000,000). Also `audit_days` (1 to 90, how long audit records are kept) and `chat_limits` (same fields as `runtime_limits`, charged per chat request). A user value cannot exceed its global value, and `chat_limits.tokens_reserved` cannot exceed `tokens_user`. Keep the whole block, and review the numbers rather than adopting the examples. `security` is allowed only together with `identity` |
-
-### 7.4 Register the app with your IdP
+### 7.2 Register the app with your identity provider
 
 - Register an OIDC web application. Note its issuer, client ID, client secret and discovery URL
   (`.../.well-known/openid-configuration`).
 - Register the exact callback `https://YOUR_UI_HOST/oauth2callback`. For a local staging pilot,
   use the loopback address you open in the browser, only if your provider allows it. Hosted use
-  needs your HTTPS hostname (Appendix B).
-- Enforce MFA. The signed ID token must carry `iss`, a stable `sub`, `aud`, an integer `exp`, an
-  integer `auth_time`, and an `amr` list that contains `mfa`. Kira rejects a login older than eight
-  hours. Idle sessions end after 15 minutes. A provider that cannot emit these claims needs
-  its own tested adapter. Do not remove the checks.
-- Put the issuer and audience into `runtime.json` (`identity`). `audience` must equal the token's
-  `aud` value, which is the client ID for most providers.
+  needs your HTTPS hostname (7.6).
+- Enforce MFA. The signed ID token must carry `iss`, a stable `sub`, an `auth_time` timestamp (or
+  `iat`, if your provider sends no `auth_time`) and, unless you set `require_mfa = false` (7.4),
+  an `amr` list that contains `mfa`. Kira refuses a sign-in older than `session_hours`.
+- Note the issuer. It goes into `team.toml` (7.4) and must equal the token's `iss` value.
 
-### 7.5 Write the UI secrets and get each user's subject
+### 7.3 Write the sign-in settings
 
 Create `.streamlit/secrets.toml` on the UI machine. Replace the placeholders and fill both empty
 secrets privately. An empty secret is not usable:
@@ -547,127 +516,94 @@ cookie_secret = ""
 client_id = "YOUR_OIDC_CLIENT_ID"
 client_secret = ""
 server_metadata_url = "https://YOUR_IDENTITY_HOST/.well-known/openid-configuration"
-client_kwargs = { scope = "openid", prompt = "login", max_age = 28800 }
+client_kwargs = { scope = "openid", prompt = "login" }
 ```
 
+`prompt = "login"` forces a fresh sign-in. Do not rely on `max_age`: the sign-in library ignores
+it.
+
 Run `chmod 600 .streamlit/secrets.toml`. Make the cookie secret a long random value, different
-from the client secret. These two are also separate from the signing and log-cursor secrets that
-AWS generates. Never put any of them in the JSON files or in Git. Parameters differ by provider,
-so check them against
+from the client secret. These two are also separate from the log-cursor secret that AWS generates.
+Never put any of them in the JSON files, `team.toml` or Git. Parameters differ by provider, so
+check them against
 [Streamlit's OIDC guide](https://docs.streamlit.io/develop/concepts/connections/authentication).
 Do not turn on token exposure, and never add identity headers at a proxy.
 
-Then ask your provider's admin tools for each person's immutable `sub`. Do not type an email
-address.
+### 7.4 Write team.toml
 
-### 7.6 Create the first grants
+Keep it outside the repository, or under a path that Git ignores (the repository ignores
+`/team.toml`). It holds no secrets.
 
-Put each first user in `initial_access` in `automation.json`, as exactly `subject`, `enabled`,
-`role` (`viewer` or `investigator`) and `instance_ids` (a unique, non-empty subset of your
-inventory). Subjects must be unique. During `apply`, the tool reviews each grant with the same
-plan-and-apply procedure as the manual commands. A grant that already matches is left alone. A
-grant is tied to one release. A new release needs a reviewed rebinding, which ends that user's old
-sessions.
+```toml
+issuer = "https://login.example.invalid"   # must equal the token's iss claim
+require_mfa = true                          # needs "mfa" in the token's amr claim
+session_hours = 8                           # longest sign-in age, from auth_time (or iat)
 
-```json
-{
-  "version": 1,
-  "spec": "deployment.json",
-  "runtime_config": "runtime.json",
-  "profile": "customer-deployment",
-  "wheelhouse": "../../.build/wheels",
-  "initial_access": [
-    {"subject": "replace-with-provider-immutable-subject", "enabled": true,
-     "role": "investigator", "instance_ids": ["i-0123456789abcdef0"]}
-  ]
-}
+[limits]
+chat_per_user_per_hour = 20
+
+[[users]]
+sub = "OIDC_SUBJECT"        # the immutable subject, never an email address
+role = "investigator"       # "viewer" reads reports only; "investigator" may also chat
+instances = ["i-0123456789abcdef0"]   # instance IDs from your deployment
 ```
 
-The staging canary needs an `investigator` grant. If `initial_access` is empty, create one by
-hand before you sign in, once `apply` has reached "Candidate ready" (the bundle is then the
-complete candidate). Use a separately authorized access administrator, who needs read and write
-on the identity table limited to `IDENTITY#` keys. `REVIEW_HASH` is the `review_hash` field in
-`.local/customer/bundle/bundle.json`:
+Rules:
+
+- Up to 100 users. Each `sub` appears once. Every instance must be in your deployment's inventory.
+  Unknown keys are refused. An error names the field and never shows the value.
+- `session_hours` is 1 to 24 (default 8) and `chat_per_user_per_hour` is 1 to 1000 (default 20).
+  `require_mfa` defaults to `true`.
+- The sign-in age comes from `auth_time` (or `iat`). The `exp` claim is not checked, because
+  Streamlit never refreshes the token. A claim with the wrong shape is a denial, not an error.
+- If the file is missing or invalid the UI stops and says so. It never opens to everyone.
+- Keep the file private (`chmod 600`). The UI refuses a file that group or others can write or
+  that is over 256 KiB.
+- If your provider does not send the `amr` claim, set `require_mfa = false` and enforce MFA at the
+  provider.
+
+Ask your provider's admin tools for each person's immutable `sub`. Do not type an email address.
+
+### 7.5 Start the UI
+
+Give the UI an AWS profile as in section 4, step 1. Then launch it with the team file:
 
 ```bash
-umask 077
-mkdir -p .local/customer/private
-chmod 700 .local/customer/private
-# Privately create access-request.json with subject, enabled, role and instance_ids.
-python -m infra.identity_ops grant-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --output .local/customer/private/access-plan.json
-# Review the actor, before and after values, role, scope and epoch.
-python -m infra.identity_ops grant-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --grant-plan .local/customer/private/access-plan.json --output .local/customer/private/access-result.json
+python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-ui --team-file /path/to/team.toml
 ```
 
-### 7.7 The human step: "Candidate ready" with a ticket
+Only `--team-file` turns team mode on: the launcher ignores a `KIRA_TEAM_FILE` that you exported
+in your shell. The path must be a regular file, not a symlink, and not writable by group or
+others. The launcher removes `APP_PASSWORD`, so the shared password never works in this mode. It
+binds the UI to `127.0.0.1`, reads no `.env`, and copies no AWS credentials.
 
-This replaces step A in 3.7. `apply` stops with "Candidate ready" (exit 2). The backend candidate
-is built and verified. Now you must:
+### 7.6 Host it
 
-1. Register your IdP and write `.streamlit/secrets.toml` (7.4 and 7.5).
-2. Make sure your user has an `investigator` grant (7.6).
-3. Configure the UI AWS profile and launch the UI (7.8 and 7.9).
-4. Sign in, save the staging ticket, then run `apply` again with
-   `--allow-model-invocation --access-ticket-file .local/customer/private/canary.ticket`.
-   This **spends money**: one bounded model request through the staging chat function that
-   must use both the log and metric tools. Before it, a coverage check must pass.
-   Your servers must already publish the metrics, or it stops with "Required metric unavailable".
-   The ticket file must exist, be mode 600 in a folder with no group or other access, not be a
-   symlink and be 1 to 1024 bytes. You cannot pass the ticket flag on the first `apply`, because
-   the file does not exist yet.
+The launcher binds the UI to `127.0.0.1`, so put a TLS reverse proxy on the same host and serve
+the UI at one fixed HTTPS address. Set `status_base_url` in `runtime.json` to that same HTTPS
+address (3.3), because alert emails link to it. It is part of the release, so changing it later
+needs a new `release_id`. Register the callback for that address with your IdP (7.2), and test
+sign-in again.
 
-A retry needs the same three pieces: `--retry-canary`, `--allow-model-invocation` and a fresh
-ticket (3.7 C).
+- Keep Streamlit on loopback behind your own TLS proxy. Do not expose the raw backend origin.
+- Forward WebSockets. Accept only your exact public hostname and reject other `Host` and `Origin`
+  values.
+- Keep Streamlit's CORS and XSRF protection (`.streamlit/config.toml`) and keep
+  `trustedUserHeaders` empty. Never let a proxy add identity headers. Team mode refuses to run
+  otherwise.
 
-### 7.8 Give the UI an AWS profile
+### 7.7 Remove access, review and limits
 
-The UI process must not use deployment credentials. Before promotion, its profile assumes the
-`staging_issuer_role_arn` from `ui-connection.json`. After the final status in 3.8, it assumes
-`ui_role_arn`. Both roles trust only your `ui_principal_arn`. The launcher checks the account and
-the assumed role and refuses anything else. A standard AWS profile looks like this (adjust to how
-your organization signs in):
-
-```ini
-[profile customer-staging-ui]
-role_arn = ROLE_ARN_FROM_ui-connection.json
-source_profile = A_PROFILE_THAT_ASSUMES_YOUR_UI_PRINCIPAL_ROLE
-```
-
-Signing in with OIDC never grants AWS permissions.
-
-### 7.9 First launch and the staging ticket
-
-```bash
-python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-staging-ui --staging-ticket-file .local/customer/private/canary.ticket
-```
-
-The private folder is the one made in 7.6 (mode 700). Create it first if you skipped that.
-
-The launcher binds the UI to `127.0.0.1`, reads no `.env`, and copies no AWS credentials. It
-drops `APP_PASSWORD`, so a shared password never works in this mode. Open the address it prints
-(Streamlit's default is `http://127.0.0.1:8501`) and sign in with MFA. In the
-**Operator staging canary** section, click **Save staging canary session**. This works only for an
-`investigator`, in `staging`, on a loopback address, in a folder that only you can access. It
-writes the ticket with mode 600. Then stop the UI and run the paid `apply` from 7.7.
-
-The ticket is a short-lived bearer credential. Never commit, upload or paste it into logs or
-URLs. Export it right before you resume. Delete it afterwards with `rm .local/customer/private/canary.ticket`.
-If you see "Access is expired, revoked, or unavailable", check that your grant exists for this
-release and that the issuer and audience match.
-
-### 7.10 After the last status, and other environments
-
-After the last row in 3.8, launch the UI again with a profile that assumes the generated
-operational role (`ui_role_arn` in `ui-connection.json`, set up as in 7.8), and without the
-ticket option:
-
-```bash
-python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-ui
-```
-
-For `production` or `development` with team sign-in, the tool also writes `ui-connection.json`
-(with only the staging issuer role) and applies your grants before it stops with the `WAITING`
-message described in 3.8.
+- **Remove a person:** delete their entry. The file is re-read when it changes, so it applies on
+  their next request. An in-flight request finishes. There is no remote logout. Also disable them
+  at the identity provider.
+- **Audit:** each chat request, report view and refused sign-in prints one JSON line to the UI's
+  standard output: time, subject, role, action, outcome, token counts, and the instance for report
+  views. It never contains prompt, log or error text. Keep that output in your platform's log
+  service. The outcomes are listed in [OPERATE.md](OPERATE.md#team-access-and-secret-rotation).
+- **Limits:** the hourly limit is counted per person inside one UI process. It is shared across
+  that person's browser sessions, it resets on restart, and several processes would each count
+  separately. Run one process.
 
 ## 8. Optional: use a model API instead of Bedrock
 
@@ -708,7 +644,7 @@ secret yourself, and Kira never writes it.
   ([evaluations/diagnostics/README.md](../evaluations/diagnostics/README.md)). After `apply`
   finishes, `ui-connection.json` holds the exact `MODEL_API` value.
 - **Network.** Kira's Lambda functions have public internet egress (this project puts none in a
-  VPC), so the API host must be reachable from them. In default mode chat runs in the UI process,
+  VPC), so the API host must be reachable from them. Chat runs in the UI process,
   so the machine that runs the UI must reach the API host too, and the UI role can read the key
   version.
 
@@ -784,7 +720,7 @@ to read the key.
   version of your secret as `model_secret` in `bindings.json`. It never reads the key value. The
   functions read the key at run time, using that exact version.
 - **IAM.** The roles that call the model get `secretsmanager:GetSecretValue` on that secret, limited
-  to that one version. They get no Bedrock permissions. In default mode the UI role is one of them.
+  to that one version. They get no Bedrock permissions. The UI role is one of them.
 - **Setting.** Each function receives a `MODEL_API` setting with the protocol, base URL, secret ARN
   and secret version. It never holds the key.
 
@@ -821,10 +757,9 @@ API (section 8) is rejected with it.
   management, and `iam:PassRole` with `iam:PassedToService` set to
   `bedrock-agentcore.amazonaws.com`. `check` screens these.
 - **ARM64 build.** `apply` builds an ARM64 host package. The manual command is in Appendix A.
-- **Default mode.** `apply` creates one AgentCore runtime and endpoint (`agentcore-runtime`,
-  `agentcore-endpoint`). The UI calls that endpoint directly with the UI role.
-- **Team sign-in.** `apply` also creates a separate chat runtime and endpoint
-  (`agentcore-chat-runtime`, `agentcore-chat-endpoint`).
+- **The runtime.** `apply` creates one AgentCore runtime and endpoint (`agentcore-runtime`,
+  `agentcore-endpoint`). The UI calls that endpoint directly with the UI role. Team mode does not
+  work with it (section 7).
 - **The host.** It speaks the AgentCore HTTP `/ping` and `/invocations` contract and binds
   `0.0.0.0:8080` only in AgentCore hosting mode. Never expose it as a public API. Code ships as a
   versioned S3 ZIP on Python 3.12. AWS patches the language runtime, and you update the bundled
@@ -843,8 +778,8 @@ not been run against real AWS. Pick one path per release. If you start by hand, 
 | Automation | Manual | Notes |
 | --- | --- | --- |
 | `deployment.json` | `deployment.json` | Same schema |
-| `runtime.json` | `runtime.json` (older docs call it `durable.json`) | Same schema. Start from `examples/durable.example.json` (default), or from `examples/identity.example.json` for team sign-in. The `identity` block is what turns team sign-in on |
-| `automation.json` | none | Profile, wheel path and first grants are automation only |
+| `runtime.json` | `runtime.json` (older docs call it `durable.json`) | Same schema. Start from `examples/durable.example.json` |
+| `automation.json` | none | Profile and wheel path are automation only |
 | `bindings.json`, written from `state.json` | `bindings.json`, written by you | JSON object of collected outputs. Never invent a value |
 | `bundle/`, `build/...` | Any folders you pass | The commands below use the same layout |
 | `ui-connection.json` | `.env` | See below |
@@ -886,27 +821,24 @@ adds a stack policy and termination protection to an immutable stage. Stage comm
 
 **Stage order.** Re-render after each binding, and use the new review hash. Stages marked
 "release" are create-only, retained and sealed: never update one, publish a new `release_id`.
-The others are updateable foundations. Rows that mention team sign-in, a model API or `agentcore`
-apply only if you chose that option.
+The others are updateable foundations. Rows that mention a model API or `agentcore` apply only if
+you chose that option.
 
 | Step | Stage or command | Save the result as binding |
 | --- | --- | --- |
-| 1 | `foundation-tools`, `foundation-monitor`, `durable-foundation` (render with empty bindings). Team sign-in adds `identity-foundation` and `identity-secret` | after `durable-foundation`, `collect` as `foundation` |
-| 2 | `cursor-version` (read-only). Team sign-in adds `identity-version` (read-only). A model API adds `model-secret-version` (read-only, before step 7) | `secret`, and `identity`, `model_secret` |
-| 3 | Team sign-in only: re-render, then run the cycle on `identity-foundation` again (adds `SessionIssuerRole`) | none |
-| 4 | Team sign-in only: `infra.identity_ops pin-secret-version` | none. It labels the signing version and refuses to move a label |
-| 5 | `upload --artifact-kind tools --build-dir ...` | `tool_artifacts` |
-| 6 | `owned-tools` (release), `collect`, then `seal-runtime` | `tools` |
-| 7 | `upload --artifact-kind pipeline` (and `host` for agentcore, `observation` for observers) | `artifacts`, `host_artifact`, `observation_artifacts` |
-| 8 | agentcore only: `agentcore-runtime`, then `agentcore-endpoint` (release stages, each collected and sealed). Team sign-in adds the same pair as `agentcore-chat-runtime` and `agentcore-chat-endpoint` | `agentcore_candidate` (remove `RuntimeArn`, keep `RuntimeId` and `RuntimeVersion`), `agentcore`, and with team sign-in `agentcore_chat_candidate`, `agentcore_chat` |
-| 9 | `durable-runtime` (release). Team sign-in adds `chat-runtime` (release) | `versions`, and `chat_version` |
-| 10 | Observers only: `observation-foundation`, `observation-runtime` (release), then `seed-health` | `observation_versions` |
-| 11 | `verify-candidate`. Optional reads: `verify-runtime`, `verify-observations` | none |
-| 12 | Team sign-in only: first grants (7.6), then the UI and ticket (7.9) | none |
-| 13 | `canary --allow-model-invocation`. Team sign-in adds `--access-ticket-file ...` | `--output canary.json` |
-| 14 | `retirement-plan --receipt canary.json`. If it names alarms or subscriptions, review them, run `retire --receipt canary.json --retirement-plan FILE`, then get a new, empty plan | none |
-| 15 | `routing` with `execute ... --receipt canary.json --retirement-plan FILE` (receipt under one hour old), then `observations` | none |
-| 16 | `verify-routing`, `verify-observation-routing`, `collect --stage routing`. Team sign-in adds `collect --stage identity-foundation` | `UiRoleArn`, and `SessionIssuerRoleArn` |
+| 1 | `foundation-tools`, `foundation-monitor`, `durable-foundation` (render with empty bindings) | after `durable-foundation`, `collect` as `foundation` |
+| 2 | `cursor-version` (read-only). A model API adds `model-secret-version` (read-only, before step 5) | `secret`, and `model_secret` |
+| 3 | `upload --artifact-kind tools --build-dir ...` | `tool_artifacts` |
+| 4 | `owned-tools` (release), `collect`, then `seal-runtime` | `tools` |
+| 5 | `upload --artifact-kind pipeline` (and `host` for agentcore, `observation` for observers) | `artifacts`, `host_artifact`, `observation_artifacts` |
+| 6 | agentcore only: `agentcore-runtime`, then `agentcore-endpoint` (release stages, each collected and sealed) | `agentcore_candidate` (remove `RuntimeArn`, keep `RuntimeId` and `RuntimeVersion`), `agentcore` |
+| 7 | `durable-runtime` (release) | `versions` |
+| 8 | Observers only: `observation-foundation`, `observation-runtime` (release), then `seed-health` | `observation_versions` |
+| 9 | `verify-candidate`. Optional reads: `verify-runtime`, `verify-observations` | none |
+| 10 | `canary --allow-model-invocation` | `--output canary.json` |
+| 11 | `retirement-plan --receipt canary.json`. If it names alarms or subscriptions, review them, run `retire --receipt canary.json --retirement-plan FILE`, then get a new, empty plan | none |
+| 12 | `routing` with `execute ... --receipt canary.json --retirement-plan FILE` (receipt under one hour old), then `observations` | none |
+| 13 | `verify-routing`, `verify-observation-routing`, `collect --stage routing` | `UiRoleArn` |
 
 Each binding is exactly the JSON that its command wrote to `--output`. `seed-health` writes
 health metrics and may probe approved endpoints, but it runs no model and activates no schedule.
@@ -931,16 +863,13 @@ queue receipt. A new recipient voids an attestation, so repeat it at least every
 **UI settings by hand.** Copy the JSON in `Outputs.RuntimeConnection.Value` of
 `.local/customer/bundle/routing.json` into `.env` as `NAME=value` lines (see `.env.example`). Add
 `MONITOR_REGION`, `INCIDENT_TABLE` (`foundation.TableName`) and `REPORT_BUCKET`
-(`foundation.EvidenceBucket`). Do not set `KIRA_IDENTITY_HEADER`, `KIRA_ACCESS_POLICY_FILE` or
-`KIRA_SESSION_SIGNING_KEY` (the launcher removes them).
+(`foundation.EvidenceBucket`).
 
-- Default mode: set `APP_PASSWORD` (at least 12 characters). The generated connection has no
-  `KIRA_AUTH_MODE`.
-- Team sign-in: the generated connection sets `KIRA_AUTH_MODE=oidc`. Do not set `APP_PASSWORD`
-  (the launcher removes it). For the canary only, set `KIRA_STAGING_TICKET_FILE` to an absolute path
-  in a private folder.
+- Default mode: set `APP_PASSWORD` (at least 12 characters).
+- Team mode: set `KIRA_TEAM_FILE` to the absolute path of your `team.toml` (section 7). Do not set
+  `APP_PASSWORD`: team mode does not use it.
 
-Run `chmod 600 .env` (and `.streamlit/secrets.toml` with team sign-in), then
+Run `chmod 600 .env` (and `.streamlit/secrets.toml` with team mode), then
 `streamlit run app.py --server.address 127.0.0.1`. Real environment variables win over
 `.env`. Restart after any change.
 
@@ -949,15 +878,15 @@ Run `chmod 600 .env` (and `.streamlit/secrets.toml` with team sign-in), then
 **Hosting the UI for other people.** The tool does not create a UI host. The launcher is for one
 person on loopback. For shared use you own the hosting.
 
-- Without team sign-in the only protection is one shared password, and anyone who knows it has the
+- Without team mode the only protection is one shared password, and anyone who knows it has the
   UI role's read scope (section 4). Do not host that for others, except behind your own SSO or
-  VPN proxy. Prefer team sign-in (section 7).
+  VPN proxy. Prefer team mode (section 7).
 - Keep Streamlit on loopback behind your own TLS proxy. Do not expose the raw backend origin.
 - Forward WebSockets. Accept only your exact public hostname and reject other `Host` and `Origin`
   values.
 - Keep Streamlit's CORS and XSRF protection (`.streamlit/config.toml`) and keep
   `trustedUserHeaders` empty. Never let a proxy add identity headers.
-- With team sign-in, register the final callback with your IdP and test sign-in again. Alert links
+- With team mode, register the final callback with your IdP and test sign-in again. Alert links
   must resolve through `status_base_url` to this UI, behind sign-in.
 - A browser login or token never authorizes direct Lambda, tool or S3 access. Give users the URL
   and sign-in steps only after approval, and never share deployment credentials, passwords or

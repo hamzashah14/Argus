@@ -17,8 +17,8 @@ fixtures and of the prompt (`agent-instruction.txt`).
   silence alone, a claim that leans on another instance's evidence, a citation to a value that is not in the evidence,
   and confidence the evidence does not support.
 
-Other tests in `tests/` cover the surrounding controls, such as forged tool scope, quota races, redaction and
-revocation. The case tests are in `tests/test_security_controls.py`.
+Other tests in `tests/` cover the surrounding controls, such as forged tool scope, redaction and
+erasure. The case tests are in `tests/test_security_controls.py`.
 
 ## Run the offline evaluation
 

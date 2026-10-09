@@ -44,11 +44,11 @@ You make each choice when you deploy. The defaults need the least setup.
 
 | Choice | Default | Option |
 | --- | --- | --- |
-| Who signs in | **Local single-user mode.** One shared password protects the web UI. | **OIDC module.** Sign-in through your identity provider with MFA, per-person grants, revocation, audit and quotas. |
+| Who signs in | **Local single-user mode.** One shared password protects the web UI. | **Team mode.** Several people share one UI. Each signs in through your identity provider with MFA and sees only the instances on their entry in a `team.toml` file on the UI host. No AWS resources. |
 | Which model | **Amazon Bedrock.** | **Model API.** An OpenAI-compatible or Anthropic Messages endpoint. Its key lives in AWS Secrets Manager. |
-| Where it runs | **Standalone AWS Lambda.** | **Amazon Bedrock AgentCore.** Bedrock only, so it cannot be combined with a Model API. |
+| Where it runs | **Standalone AWS Lambda.** | **Amazon Bedrock AgentCore.** Bedrock only, so it cannot be combined with a Model API or team mode. |
 
-Pass `--identity` to `init` for the OIDC module. Set `model_provider` in
+Pass `--team-file` to the UI launcher for team mode. Set `model_provider` in
 `deployment.json` for a Model API. The [deployment guide](docs/DEPLOY.md) covers both.
 The Model API option has never run against a live provider, and diagnosis quality
 on non-Claude models is unmeasured.
@@ -111,7 +111,7 @@ development lock installed. Init, fill in the three private files it writes, dry
 apply, then launch the UI:
 
 ```bash
-# Default local single-user mode. Add --identity for the OIDC module.
+# Default local single-user mode. For team mode, see section 7 of the deployment guide.
 python -m infra.automation init --work-dir .local/customer
 python -m infra.automation dry-run --config .local/customer/automation.json --work-dir .local/customer
 python -m infra.automation check --config .local/customer/automation.json --work-dir .local/customer
@@ -124,12 +124,12 @@ python scripts/run_customer_ui.py --connection .local/customer/ui-connection.jso
 
 `dry-run` makes no AWS calls and shows the plan hash. `check` only reads AWS.
 `apply` creates billable resources, stops at steps only you can do (the paid canary,
-confirming inboxes and, with the OIDC module, identity-provider sign-in) and ends with
+and confirming inboxes) and ends with
 investigations paused. The generated files are synthetic examples that `check` and
 `apply` reject until you replace them with real values; keep them private. For a
 Model API, create its key secret in Secrets Manager yourself before `check`. You also
 set up your servers and UI hosting yourself, and your identity provider if you use
-the OIDC module. Full steps: [deployment guide](docs/DEPLOY.md).
+team mode. Full steps: [deployment guide](docs/DEPLOY.md).
 
 ## What does it cost?
 
@@ -154,13 +154,13 @@ AWS resources of its own, and you install the CloudWatch agent on your servers
 yourself ([server setup](docs/SERVERS.md)).
 
 **Can I use it without OIDC/SSO?** Yes, that is the default. The UI then has one shared
-password, and chat runs with the UI's own AWS role and no gateway. The instance
+password, and chat runs with the UI's own AWS role. The instance
 allowlist, pinned tools, runtime limits, release binding and redaction still apply.
-Per-person identity, audit, revocation and a shared spend cap do not exist, and the
+Per-person sign-in, audit, revocation and a shared spend cap do not exist, and the
 20 requests per hour limit is per browser session, so a new session resets it.
 Anyone with the password can use the model and tools the UI role reaches and read
 every incident report. Keep the UI on `127.0.0.1` or behind your own SSO or VPN
-proxy, or enable the OIDC module. Details: [SECURITY.md](SECURITY.md).
+proxy, or use team mode. Details: [SECURITY.md](SECURITY.md).
 
 **What if the model is down?** The initial alert is still sent. The investigation is
 retried within fixed limits, then recorded as degraded ("operator review
@@ -188,7 +188,7 @@ telemetry setup is for Linux EC2) and a Model API with AgentCore.
 ## Documentation
 
 1. [Prerequisites](docs/PREREQUISITES.md): what must exist and be decided before you run the deploy tool.
-2. [Deployment guide](docs/DEPLOY.md): prerequisites, costs, setup, the optional identity module and Model API.
+2. [Deployment guide](docs/DEPLOY.md): prerequisites, costs, setup, optional team mode and Model API.
 3. [Server setup](docs/SERVERS.md): CloudWatch agent, heartbeat and Nginx on your hosts.
 4. [Operations](docs/OPERATE.md): incidents, replay, recipients, rotation, erasure, restore.
 5. [Architecture](docs/ARCHITECTURE.md): components, workflows and a glossary.

@@ -36,19 +36,19 @@ optional add-on of three Lambda functions that probe your services and send test
 - [ ] **Three private JSON files** drafted under `.local/` with real values (6.1).
 - [ ] **People and budget booked:** AWS administrator, mailbox owners, a budget owner with a budget
   alarm in AWS Budgets, and an approver for the paid canary (2.5, 7).
-- [ ] **Only if chosen:** OIDC identity provider, Model API account, or AgentCore (section 8).
+- [ ] **Only if chosen:** team mode (an OIDC identity provider), Model API account, or AgentCore (section 8).
 - [ ] **Checks pass:** `dry-run` succeeds offline and `check` exits 0 (section 9).
 
 ## 1. Decisions to make first
 
-Each choice has a default. The three defaults together are the shortest path. A Model API cannot be
-combined with AgentCore.
+Each choice has a default. The three defaults together are the shortest path. A Model API and team mode
+cannot be combined with AgentCore.
 
 **Who signs in.** Default: local single-user mode, with the UI on your machine behind one shared
-password. Option: team sign-in with OIDC (your identity provider, MFA, per-person grants). It is on if,
-and only if, `runtime.json` has an `identity` block. Adding or removing the block later changes the
-release, so you need a new work directory and `release_id`. How:
-[DEPLOY.md section 7](DEPLOY.md#7-optional-team-sign-in-with-oidc).
+password. Option: team mode (your identity provider with MFA, and a `team.toml` allowlist of people
+and instances on the UI host). It is on if, and only if, the UI host sets `KIRA_TEAM_FILE`. It needs
+no AWS resources and works only with `standalone`. How:
+[DEPLOY.md section 7](DEPLOY.md#7-optional-team-mode).
 
 **Which model.** Default: Amazon Bedrock in your account. Option: a Model API (an OpenAI-compatible or
 Anthropic Messages endpoint). Redacted log and metric excerpts then leave your AWS account, and the
@@ -80,25 +80,24 @@ functions add `RELEASE_ID`. Buckets add the account ID and region. Names must st
 | --- | --- | --- |
 | CloudFormation | One stack per stage. You never write a template | Required |
 | IAM | Roles under the path `/PROJECT/ENVIRONMENT/` (3.5) | Required |
-| S3 | Private versioned buckets: tools (Bedrock region), monitor and reports (monitor region), audit (team sign-in only) | Required |
+| S3 | Private versioned buckets: tools (Bedrock region), monitor and reports (monitor region) | Required |
 | KMS | One key for stored reports | Required |
-| DynamoDB | The incident table, with a stream. A second, identity table with team sign-in | Required |
+| DynamoDB | The incident table, with a stream | Required |
 | SQS | Work, ingress, initial and report queues, each with a dead-letter queue, plus stream and delivery dead-letter queues | Required |
 | SNS | Alarms, reports and incident-fallback topics. Observers add two | Required |
-| Lambda | Two tool functions (Bedrock region), six pipeline functions (monitor region). Team sign-in adds a chat function, observers add three | Required |
+| Lambda | Two tool functions (Bedrock region), six pipeline functions (monitor region). Observers add three | Required |
 | EventBridge | A rule for EC2 stop and terminate events, and a one-minute sweep schedule. Observers add schedules | Required |
 | CloudWatch and Logs | Alarms per instance and per dead-letter queue, log groups, metric filters. A dashboard with observers only | Required |
-| Secrets Manager | `PROJECT-ENVIRONMENT/log-cursor` (generated). `.../session-signing` (team sign-in). `.../model-api-key` is yours | Required, plus optional |
+| Secrets Manager | `PROJECT-ENVIRONMENT/log-cursor` (generated). `.../model-api-key` is yours | Required, plus optional |
 | Bedrock | Model calls: `bedrock:InvokeModel` and `bedrock:CountTokens` on your `model_arns` | Required unless Model API |
 | Bedrock AgentCore | A runtime and endpoint per release | Optional |
-| CloudTrail | A trail for evidence access (team sign-in only) | Optional |
 | EC2 | Nothing is created. Kira only reads your instances and their state events | Existing |
 
 ### 2.3 Quotas and limits to check
 
 | Limit | What Kira needs | How to check |
 | --- | --- | --- |
-| Lambda concurrent executions (monitor region) | `check` fails if `initial_reserved_concurrency` is greater than `UnreservedConcurrentExecutions` minus 100. Team sign-in adds 3 (2 for investigation, 1 for chat). The example value is 2, so you need at least 102 unreserved, or 105 with team sign-in. A resume does not count Kira's own earlier reservations twice | Service Quotas, or `aws lambda get-account-settings --region MONITOR_REGION`, field `AccountLimit.UnreservedConcurrentExecutions` |
+| Lambda concurrent executions (monitor region) | `check` fails if `initial_reserved_concurrency` is greater than `UnreservedConcurrentExecutions` minus 100. The example value is 2, so you need at least 102 unreserved. A resume does not count Kira's own earlier reservations twice | Service Quotas, or `aws lambda get-account-settings --region MONITOR_REGION`, field `AccountLimit.UnreservedConcurrentExecutions` |
 | Bedrock model quotas (Bedrock region) | `check` does not read them. One investigation can reserve up to `tokens_reserved` tokens (example 32000, limit 100000) over up to `model_steps` calls (limit 16) | Service Quotas. Only the paid canary proves it |
 | Model API provider | Its own rate limits, quota and billing. An AWS budget does not see them | The provider |
 | CloudWatch Logs Insights | No limit is documented here. A run is bounded by `log_queries` (limit 48) and `window_minutes` (limit 30), but nothing caps the bytes scanned | Not verified |
@@ -132,10 +131,10 @@ cap, and nothing shuts down when a budget is crossed.
 | --- | --- |
 | The monitored EC2 fleet | Existing Linux instances. Kira never installs software on them |
 | CloudWatch agent, heartbeat, Nginx logging, readiness routes | Section 4 |
-| The three IAM roles, the instance role for the agent, your AWS profiles | Section 3. Kira never grants itself permissions |
+| The three IAM roles, the instance role for the agent, your AWS profiles | Section 3. Kira never gives itself permissions |
 | Two mailboxes | A primary and a different fallback address |
 | HTTPS hosting for the UI and the status URL | The launcher serves the UI on `127.0.0.1` only. Shared hosting is yours |
-| Identity provider, Model API account and key secret | Only with those options (section 8) |
+| Identity provider (team mode), Model API account and key secret | Only with those options (section 8) |
 | AWS Budgets alarm, and an external monitor | If the whole account or region fails, Kira's alerts fail with it |
 
 ## 3. IAM roles and identities
@@ -146,7 +145,7 @@ cap, and nothing shuts down when a budget is crossed.
 | --- | --- | --- | --- |
 | `ci_principal_arn` | Operator | The role you run `check` and `apply` as. Your credentials must be an assumed-role session of exactly this role | Yours: whatever lets you sign in (SSO or an assumed role) |
 | `deployment_role_arn` | CloudFormation execution | CloudFormation assumes it to create the resources | An `Allow` for `sts:AssumeRole` whose `Principal.Service` is the single string `cloudformation.amazonaws.com` |
-| `ui_principal_arn` | UI workload | The identity the UI runs as. Kira's generated UI role (and, with team sign-in, its session-issuer role) trusts only this role | Yours: it must let the person or workload that runs the UI assume it. `check` only confirms the role exists |
+| `ui_principal_arn` | UI workload | The identity the UI runs as. Kira's generated UI role trusts only this role | Yours: it must let the person or workload that runs the UI assume it. `check` only confirms the role exists |
 
 - All three must be explicit, different roles in `account_id`.
 - Each ARN must match what IAM returns, path included. Otherwise: "Configured IAM role is absent or has
@@ -168,8 +167,7 @@ joined by a hyphen.
 - **S3** `PutObject`, `GetObjectVersion` on `releases/RELEASE_ID/*` in the tools bucket (Bedrock region) and the monitor bucket (monitor region).
 - **Lambda** `InvokeFunction` on `function:PROJECT-ENVIRONMENT-*:*`, for the canary.
 - **Secrets Manager** `DescribeSecret`, `UpdateSecretVersionStage` on `secret:PROJECT-ENVIRONMENT/*`.
-- **Reads in the monitor region.** IAM: `GetRole`, `ListRolePolicies`, `GetRolePolicy`, `ListAttachedRolePolicies`. Lambda: `GetFunction`, `GetFunctionConfiguration`, `GetFunctionConcurrency`, `GetAccountSettings`, `ListEventSourceMappings`. DynamoDB: `DescribeTable`, `DescribeTimeToLive`, `DescribeContinuousBackups`. SNS: `ListSubscriptionsByTopic`, `GetSubscriptionAttributes`, `GetTopicAttributes`. SQS: `GetQueueAttributes`. Logs: `DescribeLogGroups`, `TestMetricFilter`. CloudWatch: `ListMetrics`, `DescribeAlarms`. EventBridge: `DescribeRule`, `ListTargetsByRule`. EC2: `DescribeInstances`, `DescribeRegions`. CloudTrail: `GetTrail`, `GetTrailStatus`, `GetEventSelectors`. S3: `GetBucketVersioning`, `GetBucketLocation`. KMS: `DescribeKey`, `GetKeyPolicy`. If the Bedrock region differs, the Lambda, IAM, Logs and S3 reads repeat there.
-- **Team sign-in with first grants:** DynamoDB `GetItem`, `PutItem` on the identity table, limited by `dynamodb:LeadingKeys` to each grant's `IDENTITY#` key.
+- **Reads in the monitor region.** IAM: `GetRole`, `ListRolePolicies`, `GetRolePolicy`, `ListAttachedRolePolicies`. Lambda: `GetFunction`, `GetFunctionConfiguration`, `GetFunctionConcurrency`, `GetAccountSettings`, `ListEventSourceMappings`. DynamoDB: `DescribeTable`, `DescribeTimeToLive`, `DescribeContinuousBackups`. SNS: `ListSubscriptionsByTopic`, `GetSubscriptionAttributes`, `GetTopicAttributes`. SQS: `GetQueueAttributes`. Logs: `DescribeLogGroups`, `TestMetricFilter`. CloudWatch: `ListMetrics`, `DescribeAlarms`. EventBridge: `DescribeRule`, `ListTargetsByRule`. EC2: `DescribeInstances`, `DescribeRegions`. S3: `GetBucketVersioning`, `GetBucketLocation`. KMS: `DescribeKey`, `GetKeyPolicy`. If the Bedrock region differs, the Lambda, IAM, Logs and S3 reads repeat there.
 - **Calls `check` makes itself, outside the screen:** `iam:GetRole` on the three configured roles, `iam:SimulatePrincipalPolicy` for the operator and execution roles, and `bedrock:GetFoundationModel` or `bedrock:GetInferenceProfile` (Bedrock only).
 
 </details>
@@ -185,8 +183,7 @@ joined by a hyphen.
 - **Secrets Manager:** `CreateSecret`, `DescribeSecret`, `GetRandomPassword`, `TagResource`. **IAM** on `role/PROJECT/ENVIRONMENT/*`: `CreateRole`, `GetRole`, `PutRolePolicy`, `TagRole`.
 - **KMS:** `CreateKey`, `CreateAlias`, `PutKeyPolicy`, `EnableKeyRotation`, `DescribeKey`, `TagResource`.
 - **`iam:PassRole`** on `role/PROJECT/ENVIRONMENT/*`, with `iam:PassedToService` set to `lambda.amazonaws.com`.
-- **Scope.** S3, SNS, SQS, DynamoDB, Lambda, EventBridge and CloudTrail are screened on names starting `PROJECT-ENVIRONMENT-`. Secrets Manager is screened on names starting `PROJECT-ENVIRONMENT/`. Logs uses any log group. CloudWatch and KMS use `*`, and so do `GetRandomPassword` and the event source mapping actions. In a second region only the S3, Lambda, Logs, Secrets Manager and IAM groups are screened.
-- **Team sign-in only, CloudTrail:** `CreateTrail`, `StartLogging`, `AddTags`, `PutEventSelectors`, `GetTrailStatus`.
+- **Scope.** S3, SNS, SQS, DynamoDB, Lambda and EventBridge are screened on names starting `PROJECT-ENVIRONMENT-`. Secrets Manager is screened on names starting `PROJECT-ENVIRONMENT/`. Logs uses any log group. CloudWatch and KMS use `*`, and so do `GetRandomPassword` and the event source mapping actions. In a second region only the S3, Lambda, Logs, Secrets Manager and IAM groups are screened.
 - **AgentCore only, Bedrock region, resource `*`:** `bedrock-agentcore:CreateAgentRuntime`, `GetAgentRuntime`, `CreateAgentRuntimeEndpoint`, `GetAgentRuntimeEndpoint`, `TagResource`, plus `iam:PassRole` with `iam:PassedToService` set to `bedrock-agentcore.amazonaws.com`.
 
 </details>
@@ -242,7 +239,6 @@ CloudFormation generates the names.
 | Tool roles (2) | `owned-tools` | Lambda | Read-only CloudWatch Logs and metrics queries, log-cursor secret |
 | Pipeline roles (6) | `durable-runtime` | Lambda | Ledger, queues, topics, evidence and key, model access, tool calls |
 | UI role | `routing` | `ui_principal_arn` | Call the model and tools (or AgentCore) and read incident reports |
-| Chat gateway and session-issuer roles | `chat-runtime`, `identity-foundation` | Lambda, `ui_principal_arn` | Team sign-in only |
 | Observer roles (3) | `observation-runtime` | Lambda | Probes, canaries, receipts. Observers only |
 | AgentCore execution roles | `agentcore-runtime` | `bedrock-agentcore.amazonaws.com` | Host the runtime. AgentCore only |
 
@@ -307,7 +303,7 @@ appear after a test request. The coverage check inside the canary enforces all o
 | AWS CLI | Optional. The tool uses boto3 from the lock. The CLI helps you sign in, confirm your account, check quotas and create the Model API secret. No version is pinned |
 | Network | HTTPS to the AWS endpoints of the services in 2.2, in both regions, and to a package index for the two `pip` commands. A UI machine also needs the Model API host, if you use one |
 | Working directory | Under `.local/` in the checkout, such as `.local/customer`. `init` creates it with mode 700 and the files with mode 600 |
-| Browser | For the UI (Streamlit's default is `http://127.0.0.1:8501`) and, with team sign-in, your identity provider |
+| Browser | For the UI (Streamlit's default is `http://127.0.0.1:8501`) and, with team mode, your identity provider |
 | Time and disk | Disk is not documented. `apply` waits up to 900 seconds by default and you resume it several times. The canary receipt is valid for one hour, so plan one sitting in which you can confirm the emails |
 
 ## 6. Configuration you must prepare
@@ -319,7 +315,7 @@ appear after a test request. The coverage check inside the canary enforces all o
 `automation.json` resolve against that file. Keep real values out of Git. The rules are explained in
 [DEPLOY.md 3.3](DEPLOY.md#33-fill-in-the-three-files).
 
-**`automation.json`.** Exactly these six keys, all required.
+**`automation.json`.** Exactly these five keys, all required.
 
 | Key | Type and rules |
 | --- | --- |
@@ -327,7 +323,6 @@ appear after a test request. The coverage check inside the canary enforces all o
 | `spec`, `runtime_config` | Paths to `deployment.json` and `runtime.json` |
 | `profile` | AWS profile name (letters, digits, `_ . @ -`, up to 128), or `null` for the standard credential chain |
 | `wheelhouse` | Path to the verified wheels. `init` writes the absolute path of `.build/wheels` |
-| `initial_access` | `[]` in default mode. With team sign-in, up to 100 grants: `subject`, `enabled`, `role`, `instance_ids` |
 
 **`deployment.json`.** Unknown keys are rejected.
 
@@ -378,7 +373,6 @@ can be at most 2500 bytes.
 | `investigation_paused` | yes | Boolean. Must be `true` for the first deployment |
 | `runtime_target` | yes | `standalone` or `agentcore` |
 | `runtime_limits` | yes | Set all eight, as in the example. Each is at least 1 and at most: `tokens_reserved` 100000, `model_steps` 16, `tool_calls` 16, `log_queries` 48, `output_tokens` 4096 (below `tokens_reserved`), `window_minutes` 30, `context_bytes` 64000, `tool_bytes` 20000 |
-| `identity`, `security` | team sign-in | `identity` has exactly `issuer` and `audience`. `security` is allowed only with `identity`. See [DEPLOY.md section 7](DEPLOY.md#7-optional-team-sign-in-with-oidc) |
 
 ### 6.2 Environment variables
 
@@ -387,26 +381,27 @@ end of a staging run, and the launcher passes it on.
 
 | Variable | Needed by | Set by hand? |
 | --- | --- | --- |
-| `APP_PASSWORD` | Default mode | **Yes.** Export it in the shell that starts the launcher (6.4). Never with team sign-in. The launcher does not read `.env` |
+| `APP_PASSWORD` | Default mode | **Yes.** Export it in the shell that starts the launcher (6.4). Never with team mode. The launcher does not read `.env` |
+| `KIRA_TEAM_FILE` | Team mode | **Through the launcher:** pass `--team-file PATH`. The launcher ignores a value exported in your shell. Set it yourself only if you start `streamlit run app.py` by hand ([DEPLOY.md Appendix A](DEPLOY.md#appendix-a-manual-commands)) |
 | `KIRA_LOCAL_TOOLS` | Local tools mode | **Yes, hand-set, development only.** Path to the one-file tool config (section 8). Needs `ENVIRONMENT=development`. Never on a deployed UI |
 | `ENVIRONMENT`, `RUNTIME_TARGET`, `BEDROCK_REGION`, `BEDROCK_MODEL_ID`, `EXPECTED_ACCOUNT_ID`, `ALLOWED_INSTANCE_IDS`, `RUNTIME_LIMITS`, `RUNTIME_RELEASE`, `KIRA_DIAGNOSTIC_POLICY`, `EXECUTION_PURPOSE`, `OBS_NAMESPACE` (observers) | A deployed UI | **Never.** Generated. Do not invent a `RUNTIME_RELEASE` |
 | `MONITOR_REGION`, `INCIDENT_TABLE`, `REPORT_BUCKET` | A deployed UI | **Never.** Added by `apply` |
 | `LOGS_TOOL_ARN`, `METRICS_TOOL_ARN` | `standalone` | **Never.** Generated. Absent with `agentcore` |
 | `AGENTCORE_RUNTIME_ARN`, `AGENTCORE_ENDPOINT` | `agentcore` | **Never.** Generated |
 | `MODEL_API` | Model API | **Never.** Generated JSON with the protocol, base URL, secret ARN and secret version. It never holds the key |
-| `KIRA_AUTH_MODE` (`oidc`), `KIRA_WORK_POLICY`, `CHAT_FUNCTION_ARN`, `KIRA_SESSION_TABLE`, `KIRA_ACCESS_POLICY_JSON`, `KIRA_SESSION_KEY_ARN`, `KIRA_SESSION_KEY_VERSION` | Team sign-in | **Never.** Generated. In default mode the UI rejects `CHAT_FUNCTION_ARN` and `KIRA_SESSION_TABLE` |
-| `KIRA_STAGING_TICKET_FILE`, `AWS_PROFILE`, `AWS_EC2_METADATA_DISABLED`, `PYTHON_DOTENV_DISABLED` | The launcher | **Never.** The launcher sets them (the ticket from `--staging-ticket-file`) |
-| `KIRA_IDENTITY_HEADER`, `KIRA_ACCESS_POLICY_FILE`, `KIRA_SESSION_SIGNING_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Nothing | **Never.** The launcher removes them |
+| `AWS_PROFILE`, `AWS_EC2_METADATA_DISABLED`, `PYTHON_DOTENV_DISABLED` | The launcher | **Never.** The launcher sets them |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN` | Nothing | **Never.** The launcher removes them |
 
 **Local preview only.** The README preview needs no AWS account. Copy `.env.example` to `.env`, keep
 `ENVIRONMENT=development` and set `APP_PASSWORD`. The UI then shows a setup checklist and chat stays
 off. That `.env` is not for a deployed backend.
 
-### 6.3 `.streamlit/secrets.toml` (team sign-in only)
+### 6.3 `.streamlit/secrets.toml` (team mode only)
 
 Create it on the UI machine and run `chmod 600 .streamlit/secrets.toml`. Git ignores it. Fill the two
 empty secrets privately. Make the cookie secret long, random and different from the client secret.
-Check the keys against Streamlit's OIDC guide for your provider.
+Check the keys against Streamlit's OIDC guide for your provider. `prompt = "login"` forces a fresh
+sign-in. Do not rely on `max_age`: the sign-in library ignores it.
 
 ```toml
 [auth]
@@ -415,7 +410,7 @@ cookie_secret = ""
 client_id = "YOUR_OIDC_CLIENT_ID"
 client_secret = ""
 server_metadata_url = "https://YOUR_IDENTITY_HOST/.well-known/openid-configuration"
-client_kwargs = { scope = "openid", prompt = "login", max_age = 28800 }
+client_kwargs = { scope = "openid", prompt = "login" }
 ```
 
 ### 6.4 `APP_PASSWORD` (default mode)
@@ -438,23 +433,23 @@ client_kwargs = { scope = "openid", prompt = "login", max_age = 28800 }
 | Budget owner | Sets the budget alarm and approves the pilot budget | Before `apply` |
 | Approver of the paid canary | Authorizes `--allow-model-invocation`, one bounded model request | At the "Candidate ready" stop |
 | Owners for incident response, security and data | Approve retention, model and query limits | Before `dry-run` |
-| Identity provider administrator | Registers the app, enforces MFA, finds each user's `sub` | Before `apply` (team sign-in) |
+| Identity provider administrator | Registers the app, enforces MFA, finds each user's `sub` | Before the team UI starts (team mode) |
 | Data owner and provider account holder | Approve sending excerpts to the provider. Hold the account and key | Before `check` (Model API) |
 
 ## 8. Prerequisites for the optional modules
 
-**Team sign-in with OIDC** ([DEPLOY.md section 7](DEPLOY.md#7-optional-team-sign-in-with-oidc)).
+**Team mode** ([DEPLOY.md section 7](DEPLOY.md#7-optional-team-mode)). It needs no AWS resources and works only
+with `standalone`.
 
-- An OIDC web app with MFA. The ID token must carry `iss`, `sub`, `aud`, an integer `exp`, an integer
-  `auth_time` and an `amr` list containing `mfa`. Logins older than eight hours are refused and idle
-  sessions end after 15 minutes. A provider that cannot emit these needs its own tested adapter.
+- An OIDC web app with MFA. The ID token must carry `iss`, `sub`, an `auth_time` (or `iat`) and, unless you set
+  `require_mfa = false`, an `amr` list containing `mfa`. Sign-ins older than `session_hours` are refused. Whether
+  your provider sends these claims cannot be checked offline.
 - The exact callback `https://YOUR_UI_HOST/oauth2callback`, plus the client ID, client secret,
   discovery URL and cookie secret in `.streamlit/secrets.toml` (6.3). A local staging pilot may use the
-  loopback address if your provider allows it. Shared use needs your own HTTPS host and TLS proxy.
-- `identity.issuer`: an `https` URL on port 443 with no query, fragment or user info.
-  `identity.audience`: 1 to 256 characters, equal to the token's `aud` (usually the client ID).
-- Each first user's immutable `sub` (never an email), a role (`viewer` or `investigator`) and a subset
-  of your instances. The staging canary needs an `investigator`. Lambda headroom for 3 more (2.3).
+  loopback address if your provider allows it.
+- A `team.toml` file on the UI host: the issuer, and for each person the immutable `sub` (never an email), a role
+  (`viewer` or `investigator`) and a subset of your instances.
+- For shared use, your own TLS reverse proxy on the UI host, serving one fixed HTTPS address.
 
 **Model API** ([DEPLOY.md section 8](DEPLOY.md#8-optional-use-a-model-api-instead-of-bedrock)).
 
@@ -477,8 +472,8 @@ client_kwargs = { scope = "openid", prompt = "login", max_age = 28800 }
 - AgentCore available in your Bedrock region. `check` does not test this. A Bedrock model only.
 - The extra execution-role permissions in 3.2.
 - `apply` builds the ARM64 host package on your machine from the same hash-locked wheels, with Python
-  3.12. No ARM64 machine is needed. The runtime name (`PROJECT_ENVIRONMENT_RELEASE_agentcore`, plus
-  `_chat` with team sign-in) must be at most 48 characters, so keep `project` and `release_id` short.
+  3.12. No ARM64 machine is needed. The runtime name (`PROJECT_ENVIRONMENT_RELEASE_agentcore`) must be at
+  most 48 characters, so keep `project` and `release_id` short.
 - It has never booted on real AWS.
 
 **Local tools mode, no deployment** ([README](../README.md#try-it-against-your-own-cloudwatch-no-deployment)).
@@ -503,7 +498,7 @@ credentials. It cannot run incident investigations. It needs:
 - Servers whose logs are in Kira's layout, `<log_prefix>/<instance-id>/<name>` ([SERVERS.md](SERVERS.md)).
   Other log groups, such as `/aws/lambda/...`, are not reachable. EC2 metrics and the standard `CWAgent`
   memory, swap and disk metrics work with an empty catalog.
-- In `.env`: `ENVIRONMENT=development`, `RUNTIME_TARGET=standalone`, no `KIRA_AUTH_MODE=oidc`,
+- In `.env`: `ENVIRONMENT=development`, `RUNTIME_TARGET=standalone`, no `KIRA_TEAM_FILE`,
   `APP_PASSWORD`, `BEDROCK_REGION`, `BEDROCK_MODEL_ID`, `EXPECTED_ACCOUNT_ID` and `RUNTIME_LIMITS`. Leave
   `LOGS_TOOL_ARN`, `METRICS_TOOL_ARN`, `RUNTIME_RELEASE` and `LOG_CURSOR_SECRET_ARN` unset. Set
   `ALLOWED_INSTANCE_IDS` only if it lists the same instances as the file.
@@ -520,10 +515,10 @@ python -m infra.automation check --config .local/customer/automation.json --work
 ```
 
 1. **`dry-run`, offline.** It makes no AWS call. It catches schema and rule errors: roles that are not
-   distinct or not in the account, model ARN rules, runtime limits, `initial_access` without
-   `identity`, `model_api` with `agentcore`, `investigation_paused` set to `false`, a bad status URL
-   or email. It prints the plan hash and writes `plan.json` and the agent files. For the exact message
-   behind a generic "Deployment failed (ValueError)", see
+   distinct or not in the account, model ARN rules, runtime limits, a removed team sign-in setting
+   (`identity`, `security` or `initial_access`), `model_api` with `agentcore`, `investigation_paused` set to
+   `false`, a bad status URL or email. It prints the plan hash and writes `plan.json` and the agent files.
+   For the exact message behind a generic "Deployment failed (ValueError)", see
    [DEPLOY.md section 5](DEPLOY.md#5-troubleshooting).
 2. **`check`, read-only AWS.** It exits 0, or 1 with a message or a blocker count. It never writes to
    AWS. It reads the following:

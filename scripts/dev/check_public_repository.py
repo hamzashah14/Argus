@@ -15,7 +15,6 @@ PRIVATE_ROOTS = {
     "PRODUCT_ROADMAP_TRACKER.md",
     "config.env",
     ".streamlit/secrets.toml",
-    "config/access-policy.json",
     "docs/PROJECT_EVOLUTION_AND_ONBOARDING.md",
 }
 PRIVATE_PREFIXES = ("docs/implementation/", ".local/", ".build/", ".aws/", ".venv/")

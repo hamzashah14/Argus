@@ -9,8 +9,8 @@ target, sign-in mode, owners and budget. Run on staging with an approved, bounde
 the release. The paid canary is staging only, and going to production is a separate reviewed procedure of your own.
 Record UTC times, receipts and safe causes. Keep raw logs, cloud responses and contacts private. Qualify each runtime
 target you offer (standalone or AgentCore) and each model provider (Bedrock or a Model API) separately. Linux collector
-checks do not prove Windows telemetry. Sections marked "only with the OIDC module" or "only with a Model API" apply
-only if you enabled that option.
+checks do not prove Windows telemetry. Sections marked "team mode only" or "only with a Model API" apply only if you
+enabled that option.
 
 ## Telemetry
 
@@ -64,15 +64,25 @@ only if you enabled that option.
   using the UI role.
   How: launch the UI with `run_customer_ui.py` and `APP_PASSWORD` exported, ask about one listed instance, and check the
   logs and the provider or Bedrock usage.
-- [ ] **Sign-in (only with the OIDC module).** Native OIDC with MFA works, including logout and fresh sign-in.
-  Wrong-audience, expired and unregistered users are rejected. A viewer cannot act as an investigator, and
-  cross-instance requests are denied.
-  How: test one user per role plus one unregistered user, and check the access audit records.
-- [ ] **Revocation and fail-closed (only with the OIDC module).** After `enabled: false` the user's next action is
-  denied and old-release tickets fail. Storage or secret outages deny access. The UI, issuer and runtime roles cannot
-  write grants, scan the grants table, read foreign secret versions or reach tools and evidence directly.
-  How: revoke a test user ([OPERATE.md](OPERATE.md#access-review-grants-revocation-and-secret-rotation)) and retry.
-  Assume each role and call the forbidden AWS APIs directly.
+- [ ] **Allowlist and claims (team mode only).** A listed person who signed in with MFA gets in. An unlisted person
+  sees only the not-listed message. A wrong issuer, an old sign-in and a missing or non-`mfa` `amr` claim are each
+  refused. A viewer cannot chat. An instance outside the person's list is refused for chat and for `?incident=ID`.
+  How: sign in as one investigator, one viewer and one unlisted user. To provoke the other refusals, put a wrong
+  `issuer` in `team.toml`, wait past `session_hours`, or sign in without MFA at the provider. Check the message and
+  the audit line each time.
+- [ ] **Revocation and fail-closed (team mode only).** Removing a person from `team.toml` stops their next request,
+  with no restart. A missing or invalid file stops the UI, and it never opens to everyone. Team mode shows its error
+  and nothing else when `trustedUserHeaders` is set or XSRF protection is off.
+  How: remove a signed-in test user and reload ([OPERATE.md](OPERATE.md#team-access-and-secret-rotation)). Break the
+  file on staging and reload. Set `trustedUserHeaders` or turn XSRF protection off, restart, and open the UI.
+- [ ] **The audit line (team mode only).** Each chat request, report view and refused sign-in writes one JSON line on
+  your platform's log, with no prompt or log text.
+  How: ask a question that contains a unique marker word, then check that the log lines show `sub`, `role`, `action`,
+  `outcome` and token counts, and that the marker appears in none of them.
+- [ ] **The hourly limit (team mode only).** The per-person limit holds in one UI process and resets when it restarts.
+  How: set `chat_per_user_per_hour` to 2 on staging and send two requests. That browser session then stops
+  accepting questions. Sign in as the same person in a second browser session and ask one more: it is refused and the
+  log shows `RATE_LIMITED`. Restart the UI and confirm the person can chat again.
 - [ ] **Edge (team-hosted UI only, either mode).** Host and Origin checks, direct-origin bypass, XSRF, WebSocket,
   cookies, header impersonation and unauthenticated public paths behave as intended.
   How: probe the public hostname and the raw backend origin from outside.
@@ -81,11 +91,9 @@ only if you enabled that option.
 
 - [ ] **Investigation works and fails safely.** One paid canary returns a final answer from successful logs and metrics
   calls. Model denial or outage, tool error, no data, deadline and report failure each leave distinct logs, metrics and
-  a durable terminal or degraded status. One incident traces end to end with no raw secrets in logs, and CloudTrail
-  and audit records actually arrive.
-  How: run `verify-candidate`, then the paid canary ([DEPLOY.md](DEPLOY.md)). With the OIDC module the canary goes
-  through the chat gateway with a staging ticket. Otherwise it calls the candidate investigation function. Inject each
-  fault on staging and trace by `incident_id` and `fence`.
+  a durable terminal or degraded status. One incident traces end to end with no raw secrets in logs.
+  How: run `verify-candidate`, then the paid canary ([DEPLOY.md](DEPLOY.md)). It calls the candidate investigation
+  function. Inject each fault on staging and trace by `incident_id` and `fence`.
 
 ## Model API (only with a Model API)
 
@@ -117,9 +125,9 @@ The maintainers have never run the Model API option against a live provider. Pro
 ## Load and quota
 
 - [ ] **Limits hold under load.** Chat and alert load, queue capacity, deadlines and hard worker termination meet your
-  targets. With the OIDC module, so do the per-user and shared allowances. In the default mode there is no shared chat
-  cap and chat shares capacity with incident work, so confirm that mix is acceptable. Every accepted event ends in the
-  ledger as active, completed, degraded or a terminal failure.
+  targets. There is no shared chat cap (team mode adds only a per-person hourly limit), and chat shares capacity with
+  incident work, so confirm that mix is acceptable. Every accepted event ends in the ledger as active, completed,
+  degraded or a terminal failure.
   How: send a burst at your expected peak, then compare ledger counts with accepted events.
 
 ## Recovery drill
@@ -128,7 +136,7 @@ The maintainers have never run the Model API option against a live provider. Pro
   stay denied after erasure, and no event or replay comes back.
   How: follow [Back up and restore](OPERATE.md#back-up-and-restore) and
   [erasure](OPERATE.md#retention-and-evidence-erasure) on staging.
-- [ ] **Rollback and maintenance.** Rolling back and forward again keeps event accounting, epochs and pinned policies.
+- [ ] **Rollback and maintenance.** Rolling back and forward again keeps event accounting and pinned policies.
   Maintenance entry and exit suppress only planned checks, and the canary and receipt work after exit.
   How: follow [rollback](OPERATE.md#roll-back-and-retire-old-releases) and
   [maintenance](OPERATE.md#maintenance-pausing-and-spend).

@@ -10,7 +10,7 @@ privately ([SECURITY.md](SECURITY.md)), never in public issues.
 | --- | --- |
 | `app.py`, `.streamlit/`, `.env.example` | Streamlit web UI and its settings |
 | `assets/` | Kira logos: square mark (favicon, collapsed sidebar), white wordmark for the dark UI, black wordmark for light pages |
-| `kira/` | Shared Python runtime: orchestration, tools transport, redaction, identity module, model providers |
+| `kira/` | Shared Python runtime: orchestration, tools transport, redaction, team mode, model providers |
 | `lambda/` | Lambda handlers: read-only tools, incident handlers, observers |
 | `kira_agentcore.py` | AgentCore entry point (Bedrock only) |
 | `schemas/`, `config/`, `agent-instruction.txt` | Tool contracts, default metric catalog and the model prompt. They ship inside the Lambda packages at these paths |
@@ -39,7 +39,6 @@ python scripts/dev/validate_schemas.py
 python scripts/dev/validate_infrastructure.py
 python scripts/dev/validate_durable.py          # also lints the model API renders
 python scripts/dev/validate_observations.py
-python scripts/dev/validate_identity.py
 python scripts/dev/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
 python scripts/dev/check_public_repository.py
 python scripts/dev/check_secrets.py
@@ -74,8 +73,8 @@ Model API tests (`tests/test_model_api.py`) follow the same rule. Pass a fake HT
 opener and a fake Secrets Manager client to `ModelAPI`, use `api.example.com` URLs and an
 obviously fake credential, and never contact a real provider. Cover each failure kind,
 the no-redirect and no-retry rules, and the token-accounting paths that must stop the run.
-Identity is optional, so test both the default local mode and the OIDC module when you
-change sign-in, chat or deployment automation.
+Team mode is optional, so test both the default local mode and team mode when you
+change sign-in or chat.
 
 ## Documentation and private data
 

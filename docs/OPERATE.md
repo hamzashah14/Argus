@@ -9,9 +9,9 @@ staging first.
 Run every command here from the repository root with the virtual environment active
 (`source .venv/bin/activate`).
 
-Kira runs in local single-user mode by default. Parts marked "only with the OIDC module" need the optional identity
-module (an `identity` block in `runtime.json`) and do not exist in the default mode. Replay, alert recipients,
-erasure, retention, pausing and restore apply to every deployment.
+Kira runs in local single-user mode by default. Parts marked "team mode only" apply when the UI host sets
+`KIRA_TEAM_FILE` ([DEPLOY.md](DEPLOY.md#7-optional-team-mode)). Replay, alert recipients, erasure, retention,
+pausing and restore apply to every deployment.
 
 ## Conventions
 
@@ -152,8 +152,7 @@ nothing was published.
 The primary address is `notification_email` in `deployment.json`. The fallback is `fallback_email` in `runtime.json`.
 It must differ from the primary and serves both fallback topics. The subscriptions live in updateable stacks. If
 observers are deployed, their create-only runtime also holds both addresses, so the change needs a new `release_id`
-and observer runtime ([DEPLOY.md](DEPLOY.md#appendix-a-manual-commands)). With the OIDC module, a new release also
-means rebinding grants.
+and observer runtime ([DEPLOY.md](DEPLOY.md#appendix-a-manual-commands)).
 
 1. Put the new addresses in your private settings, confirm you own the mailboxes, then re-render and review the bundle.
 2. List stale subscriptions owned by Kira's stacks (routing, durable foundation, observation foundation). Review every
@@ -175,73 +174,48 @@ means rebinding grants.
 5. Check the old recipients get nothing new. A rollback must never bring a departed recipient back. Subscriptions
    created outside these stacks need a separate inventory and review.
 
-## Access review, grants, revocation and secret rotation
+## Team access and secret rotation
 
-Grants, revocation, access review and the signing and OIDC secrets exist only with the OIDC module. In the default
-mode there are no grants: whoever has the shared UI password can use the UI, so rotate it as described below. Cursor
-secret, workload credential and Model API key rotation apply to every deployment.
+In the default mode there is no per-person access: whoever has the shared UI password can use the UI, so rotate it
+as described below. Cursor secret, workload credential and Model API key rotation apply to every deployment.
 
-**Review access (only with the OIDC module).** This lists every grant (pseudonymous actor, role, scope, `enabled`,
-`epoch`, `current_release`), reading up to 10,000 rows and changing nothing. It cannot know who still works for you,
-so compare it with your roster. Suggested cadence, for your owner to approve: monthly, and at once after a departure, incident or provider
-change. Rehearse secret rotation quarterly.
+**Change who has access (team mode only).** Edit `team.toml` on the UI host. It applies on the person's next
+request, with no restart. A request already running finishes. Disable them at the identity provider too, because
+there is no remote logout. Take each `sub` from your identity provider's admin tools, never a typed email. A missing
+or invalid file stops the UI, and it never opens to everyone. Review the list monthly, and at once after a departure,
+incident or provider change. Rehearse secret rotation quarterly.
 
-```bash
-python -m infra.security_ops access-review --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/private/access-review.json
-```
+**Read the audit line (team mode only).** Each chat request, report view and refused sign-in writes one JSON object
+to the UI's standard output. It has `ts`, `event` (always `kira.audit`), `sub`, `role`, `instance`, `action` and
+`outcome`, plus `instance_count` and `tokens` (`input` and `output` counts only) when they apply. It never contains
+prompt, log or exception text.
 
-**Grants and revocation (only with the OIDC module).** A grant lets one actor use listed instances as `viewer` or
-`investigator`. Create the request file privately with exactly `subject`, `enabled`, `role` and `instance_ids` (a
-unique, nonempty subset of your inventory). Take `subject` from your identity provider's admin tools, never a typed
-email. To revoke, send the same request with `"enabled": false`.
+- `action` is `chat`, `report` (it names the instance) or `sign_in`.
+- `outcome` is `OK`, `RATE_LIMITED`, or `DENIED_ROLE` (a viewer forced a submit and was refused on the server). A
+  refused sign-in is `DENIED_NOT_LISTED`, `DENIED_ISSUER`, `DENIED_EXPIRED`, `DENIED_MFA` or `DENIED_CLAIMS`. A chat
+  that does not finish is `ERROR` or `PARTIAL`.
+- A refused sign-in is written once per browser session and reason, and a report view once per incident in a browser
+  session. A person who is not on the list and reloads in new sessions writes one line per session, and the rate is
+  not capped. Put the log under your platform's normal log retention and alerting. The audit trail is only as
+  durable as the platform that keeps standard output.
+- The hourly chat limit is counted per person (`sub`) in memory in one UI process, across that person's browser
+  sessions. It resets when the UI restarts, and a second process counts separately.
 
-```bash
-python -m infra.identity_ops grant-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --output .local/customer/private/access-plan.json
-python -m infra.identity_ops grant-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --grant-plan .local/customer/private/access-plan.json --output .local/customer/private/access-result.json
-```
+**Rotate secrets.** Record the approved source, bundle, key versions and rollback labels privately. Pause new
+interactive work and let accepted requests finish.
 
-- Review the plan's before and after values. Every change adds one to `epoch`. Apply recomputes the plan and refuses
-  if it differs from the file you reviewed. The write is conditional on every authorization field, so a concurrent
-  writer causes a failure, never an overwrite.
-- Never delete and recreate a grant: that resets the epoch and can revive old sessions. Keep disabled grants.
-- If an apply response is lost, run `grant-plan` again (read-only) and inspect before deciding. Never blindly retry.
-- Existing sessions fail at their next action, but a request AWS already accepted may finish. Also revoke the user at
-  your identity provider and any workload sessions, then test an old ticket and a direct IAM call.
-- A grant binds to one release. A new release needs a reviewed rebinding, which invalidates that actor's old-release
-  sessions. `current_release: false` in the access review marks grants not yet rebound. Plan cutovers in a window.
-- Run these as a separately scoped administrator. It needs GetItem and PutItem on the grants table limited to
-  `IDENTITY#*` keys plus read-only describes, Scan for access review, and `UpdateSecretVersionStage` on the exact
-  secret for key pinning. UI and runtime roles never get these.
-
-**Rotate secrets.** Record the approved source, bundle, grants, epochs, key versions and rollback labels privately.
-Pause new interactive work and let accepted requests finish.
-
-1. *Signing secret (only with the OIDC module).* Create a new version in Secrets Manager with admin credentials.
-   Collect its metadata, bind it in a new reviewed release and pin that release's label. Rebuild, seal and verify the
-   candidate ([DEPLOY.md](DEPLOY.md#appendix-a-manual-commands)). Never retarget an existing label or rely on
-   `AWSCURRENT`.
-
-   ```bash
-   python -m infra.durable_ops identity-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/signing-version.json
-   python -m infra.identity_ops pin-secret-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/key-pin.json
-   ```
-
-   Then rebind the users you keep with the grant commands and require fresh sign-in. Check that old tickets fail,
-   current grants work and disabled actors stay disabled. The key caches for up to a minute, but epoch and release
-   are checked on every action.
-2. *OIDC client and cookie secrets (only with the OIDC module).* These are independent of the signing key. Rotate
-   them with your identity provider and in `.streamlit/secrets.toml`, restart the UI, clear browser sessions and
-   require fresh MFA. Never use them as a signing key.
-3. *Log cursor secret.* `durable_ops cursor-version` (same arguments) collects the new version. It changes the
-   immutable tool binding, so old pagination cursors fail. Rebuild the tools, cut a new release, rebind grants (OIDC
-   module) and restart discovery.
-4. *Workload credentials.* Use SSO or assumed roles, never long-lived keys. Rotate a leaked credential at its source,
-   review CloudTrail privately, and replace pinned releases if grants or configuration changed. Test allowed and
+1. *OIDC client and cookie secrets (team mode only).* Rotate them with your identity provider and in
+   `.streamlit/secrets.toml`, restart the UI, clear browser sessions and require fresh MFA.
+2. *Log cursor secret.* `durable_ops cursor-version` (same arguments) collects the new version. It changes the
+   immutable tool binding, so old pagination cursors fail. Rebuild the tools, cut a new release and restart
+   discovery.
+3. *Workload credentials.* Use SSO or assumed roles, never long-lived keys. Rotate a leaked credential at its source,
+   review your account's audit logs privately, and replace pinned releases if configuration changed. Test allowed and
    denied calls from each role before resuming.
-5. *Shared UI password (default mode).* Export a new `APP_PASSWORD` (12 or more characters) in the shell that launches
+4. *Shared UI password (default mode).* Export a new `APP_PASSWORD` (12 or more characters) in the shell that launches
    the UI, then restart the UI process. Sessions held by the old process end. The launcher does not read `.env`. The
    password has no per-person audit or lockout, so also rotate it whenever anyone who knew it leaves.
-6. *Model API key.* This needs a new release. See [Rotating the Model API key](#rotating-the-model-api-key).
+5. *Model API key.* This needs a new release. See [Rotating the Model API key](#rotating-the-model-api-key).
 
 ## Rotating the Model API key
 
@@ -267,8 +241,7 @@ and you create and fill it yourself. Kira's automation only reads its metadata.
    canary, which proves that the new key, model and protocol work, and promote through the reviewed routing change
    ([DEPLOY.md](DEPLOY.md#appendix-a-manual-commands)). The canary is staging only. Treat production cutover as a
    separate reviewed procedure.
-4. With the OIDC module, rebind grants to the new release.
-5. After the new release works, revoke the old key at the provider. Remove the old secret version only after you retire
+4. After the new release works, revoke the old key at the provider. Remove the old secret version only after you retire
    the old release. A rollback to the old release needs that version and a key that still works. If you rotate because
    the key leaked, revoke it at the provider first and accept that model work fails until the new release is live.
    Pause investigation meanwhile.
@@ -288,16 +261,15 @@ Before relying on a provider, complete the Model API items in [ACCEPTANCE.md](AC
 | Data | Where and how long |
 |---|---|
 | Incident evidence and reports | Private versioned KMS bucket. Lifecycle and incident TTL follow `retention_days` in `runtime.json` (7 to 365). |
-| Access audit records (only with the OIDC module) | `security.audit_days` in `runtime.json` (default 30, maximum 90). Pseudonymous actor, action, outcome. |
+| Team audit lines (team mode only) | One JSON line per event on the UI's standard output. Kept as long as your platform's log service keeps them. Subject, role, action, outcome and token counts, never prompt or log text. |
 | Raw logs and provider data | Stay in your systems. CloudWatch Logs follow `log_retention_days` in `deployment.json`. |
 | Excerpts and questions sent to a Model API provider | Held by that provider under its own terms. Kira cannot erase them. |
 | Erasure tombstones | 35 days live. Keep your own private purge registry through the longest backup or export window. |
 
 TTL and lifecycle cleanup are asynchronous, though live reads still deny expired records. Deleting live data does not
-delete backups, point-in-time recovery (PITR) history, exports, provider or model retention, old logs, audit records
-or email copies. Shared KMS keys do not erase backups individually. CloudTrail and system logs may name AWS
-principals, so classify that data yourself. A configured trail is not proof of receipt, so verify real records and
-digests after known reads and writes.
+delete backups, point-in-time recovery (PITR) history, exports, provider or model retention, old logs, the UI's
+audit lines or email copies. Shared KMS keys do not erase backups individually. System logs may name AWS
+principals, so classify that data yourself.
 
 **Erase an incident.** This is a security-owner decision for a terminal, quiescent incident only. Finish or suppress
 pending delivery first. Never erase running or retryable work. Wait at least 15 minutes past its recorded deadline or
@@ -336,8 +308,8 @@ Declare an owner, UTC start and end, and a resume deadline first.
 - **Ending maintenance.** Release the reviewed change. Check collector freshness, subscriptions, an initial alert and
   a fallback receipt, and invoke the canary once if the next slot is far off. Reconcile pending work within existing
   budgets before resuming model investigation.
-- **Spend spike.** Pause model work first. Stop manual chat: in the default mode there is no shared chat cap, so stop
-  the UI process. With the OIDC module, disable grants instead. Limit heavy Logs Insights or dashboard refreshes. Keep
+- **Spend spike.** Pause model work first. Stop manual chat: there is no shared chat cap, so stop the UI process (in
+  team mode you can instead remove people from `team.toml`). Limit heavy Logs Insights or dashboard refreshes. Keep
   capture and notifications. To stop observation work too, set `observability.enabled: false` in `deployment.json`
   with an external temporary monitor and a re-enable deadline. That stops new health alarms, observer schedules and
   receipt mapping, but not stored resources or their recurring costs. Never destroy queues, keys or rollback artifacts
@@ -345,16 +317,14 @@ Declare an owner, UTC start and end, and a resume deadline first.
 
 ## Back up and restore
 
-A restored table can bring back erased evidence and, with the OIDC module, revoked grants and old epochs. Nothing in the
-repository automates a restore, so follow this order.
+A restored table can bring back erased evidence. Nothing in the repository automates a restore, so follow this
+order.
 
 1. Restore into isolated resources with no UI, model, notification or stream permission. Never attach a restored
    table to serving roles or workers at once. Record the restore time, PITR or export point and object history.
-2. Compare your purge registry and (with the OIDC module) disabled users with the restored rows. Erase prohibited
-   evidence again from reviewed manifests and keep the tombstones. Check recovery links, checkpoints and notifications.
-3. Only with the OIDC module: use a new signing version and release binding. Re-grant the users you want, with higher
-   epochs, after review. A restored old grant then fails the release binding even if its epoch rolled back.
-4. Check report denial, no event or replay resurrection, IAM and recipient decisions. Get security-owner approval and
+2. Compare your purge registry with the restored rows. Erase prohibited evidence again from reviewed manifests and
+   keep the tombstones. Check recovery links, checkpoints and notifications.
+3. Check report denial, no event or replay resurrection, IAM and recipient decisions. Get security-owner approval and
    a second operator's attestation before attaching a serving role or enabling workers. Then retire superseded
    backups under your retention and legal policy.
 
@@ -367,9 +337,8 @@ release. Roll back by promoting a previously qualified, compatible release throu
 - Pause investigation first. Account for active leases and incidents accepted under the old release.
 - An incident keeps the policy and release it first ran under. Finish it there or leave a terminal operator-review
   outcome. Never reset its counters, give it new model settings or send one attempt to both runtime targets.
-- With the OIDC module, rollback needs a new reviewed access decision and epoch. Never restore old enabled grants or
-  revive disabled users. In every mode, review old recipients and endpoints, retire obsolete caller permissions, record
-  the denials and have a second operator attest.
+- Review old recipients and endpoints, retire obsolete caller permissions, record the denials and have a second
+  operator attest.
 - A release pins its model provider and, for a Model API, one key version. Rolling back to it needs that version to
   exist and its key to still work at the provider.
 - Do not delete the ledger, queues, KMS keys or evidence to undo code. `retirement-plan` and `retire` are promotion
@@ -388,6 +357,9 @@ release. Roll back by promoting a previously qualified, compatible release throu
   the request, and the provider might still bill it. An OpenAI-compatible reservation is a local estimate, not an upper
   bound, and the run stops only after the call that exceeded it. Redacted excerpts leave your AWS account, and
   redaction is best effort. Diagnosis quality on non-Claude models is unmeasured.
-- Revocation (OIDC module) does not cancel a call AWS already accepted, and upstream cancellation of AgentCore calls is
-  unproven.
+- Removing a person from `team.toml` does not cancel a request already running, and upstream cancellation of
+  AgentCore calls is unproven.
+- Team mode: one AWS role serves every person, and Kira's code, not IAM, enforces each person's instance list. There
+  is no remote logout. The hourly limit is per UI process and resets on restart. It has not been run against a real
+  identity provider.
   If the whole AWS account or region fails, Kira's alerts fail with it, so keep an external monitor and contact route.

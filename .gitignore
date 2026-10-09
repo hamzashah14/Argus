@@ -11,9 +11,9 @@ docs/implementation/evidence/private/
 .pytest_cache/
 .ruff_cache/
 
-# Individual identity secrets and customer access policy.
+# Sign-in secrets and the team access list.
 .streamlit/secrets.toml
-config/access-policy.json
+/team.toml
 
 # Private cloud configuration and credentials.
 .env.*
