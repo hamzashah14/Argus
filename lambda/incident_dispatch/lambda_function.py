@@ -1,6 +1,6 @@
 """DynamoDB stream: send durable intents to isolated queues."""
 
-from kira import pipeline
+from argus import pipeline
 
 
 def lambda_handler(event, context):

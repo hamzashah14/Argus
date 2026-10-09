@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-from kira import execution
-from kira.runtime import Limits, RuntimeStop
+from argus import execution
+from argus.runtime import Limits, RuntimeStop
 
 IID = "i-0123456789abcdef0"
 RELEASE = "a" * 64

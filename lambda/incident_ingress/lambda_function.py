@@ -1,6 +1,6 @@
 """SQS ingress: commit the source event and first intents atomically."""
 
-from kira import pipeline
+from argus import pipeline
 
 
 def lambda_handler(event, context):

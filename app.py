@@ -1,4 +1,4 @@
-"""Customer-operated Kira web client. Run with: streamlit run app.py."""
+"""Customer-operated Argus web client. Run with: streamlit run app.py."""
 
 import hmac
 import os
@@ -9,27 +9,29 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from kira import chat, team
-from kira import status as incident_status
-from kira.config import AppConfig
+from argus import chat, team
+from argus import status as incident_status
+from argus.config import AppConfig
 
 load_dotenv()
 settings = AppConfig.from_env()
 TEAM_FILE = settings.team_file
 ASSETS = Path(__file__).resolve().parent / "assets"
 st.set_page_config(
-    page_title="Kira · Infrastructure investigations", page_icon=str(ASSETS / "kira-mark.png"), layout="wide"
+    page_title="Argus · Infrastructure investigations",
+    page_icon=str(ASSETS / "argus-mark.png"),
+    layout="wide",
 )
 # White wordmark for the dark theme; the square mark shows when the sidebar is collapsed.
-st.logo(str(ASSETS / "kira-logo-white.png"), size="large", icon_image=str(ASSETS / "kira-mark.png"))
+st.logo(str(ASSETS / "argus-logo-white.png"), size="large", icon_image=str(ASSETS / "argus-mark.png"))
 st.markdown(
     """<style>
 .block-container { max-width: 1120px; padding-top: 4.5rem; padding-bottom: 5rem; }
 [data-testid="stSidebar"] { border-right: 1px solid #243140; }
 [data-testid="stChatMessage"] { border: 1px solid #243140; border-radius: 14px; }
-.kira-label { color: #5eead4; font-size: .73rem; font-weight: 700; letter-spacing: .18em; margin-bottom: .6rem; }
-.kira-title { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.12; font-weight: 650; letter-spacing: -.04em; margin-bottom: .8rem; }
-.kira-subtitle { color: #9fafc2; line-height: 1.6; max-width: 670px; margin-bottom: 1.7rem; }
+.argus-label { color: #5eead4; font-size: .73rem; font-weight: 700; letter-spacing: .18em; margin-bottom: .6rem; }
+.argus-title { font-size: clamp(2rem, 4vw, 3.3rem); line-height: 1.12; font-weight: 650; letter-spacing: -.04em; margin-bottom: .8rem; }
+.argus-subtitle { color: #9fafc2; line-height: 1.6; max-width: 670px; margin-bottom: 1.7rem; }
 </style>""",
     unsafe_allow_html=True,
 )
@@ -89,6 +91,14 @@ if any(os.getenv(name) for name in ("KIRA_AUTH_MODE", "CHAT_FUNCTION_ARN", "KIRA
     st.error(
         "This connection comes from the removed identity module, so per-person access is no longer "
         "enforced. Re-run apply with the new settings and start the UI with --team-file (docs/DEPLOY.md section 7)."
+    )
+    st.stop()
+
+if renamed := sorted(name for name in os.environ if name.startswith("KIRA_")):
+    # Renamed from Kira. An old KIRA_TEAM_FILE is ignored now, which would silently start the shared-password mode.
+    st.error(
+        f"{', '.join(renamed)} must be renamed: the project is now called Argus, so every KIRA_ setting is "
+        "now ARGUS_ (for example KIRA_TEAM_FILE is ARGUS_TEAM_FILE). Nothing started."
     )
     st.stop()
 
@@ -153,10 +163,10 @@ with st.sidebar:
         "Investigations read the cloud resources allowed by your deployment. Review recommendations before making changes."
     )
 
-st.markdown('<div class="kira-label">INFRASTRUCTURE INTELLIGENCE</div>', unsafe_allow_html=True)
-st.markdown('<div class="kira-title">Investigate with context.</div>', unsafe_allow_html=True)
+st.markdown('<div class="argus-label">INFRASTRUCTURE INTELLIGENCE</div>', unsafe_allow_html=True)
+st.markdown('<div class="argus-title">Investigate with context.</div>', unsafe_allow_html=True)
 st.markdown(
-    '<div class="kira-subtitle">Connect an incident, its logs and its metrics. Kira helps you work from evidence toward an explanation—inside your own cloud.</div>',
+    '<div class="argus-subtitle">Connect an incident, its logs and its metrics. Argus helps you work from evidence toward an explanation—inside your own cloud.</div>',
     unsafe_allow_html=True,
 )
 
@@ -233,7 +243,7 @@ if problems:
                     "BEDROCK_MODEL_ID=",
                     "EXPECTED_ACCOUNT_ID=",
                     "RUNTIME_LIMITS=",
-                    "KIRA_LOCAL_TOOLS=",
+                    "ARGUS_LOCAL_TOOLS=",
                 ]
             )
         else:
@@ -245,7 +255,7 @@ if problems:
                 "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
                 if settings.runtime_target == "agentcore"
                 else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN=\n"
-                "# Development only: KIRA_LOCAL_TOOLS=<local tools file> replaces RUNTIME_RELEASE and the tool ARNs."
+                "# Development only: ARGUS_LOCAL_TOOLS=<local tools file> replaces RUNTIME_RELEASE and the tool ARNs."
             )
         st.code(connection_example, language="bash")
         st.caption(

@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from kira.metrics import validate_catalog  # noqa: E402 — runnable from outside the repository
+from argus.metrics import validate_catalog  # noqa: E402 — runnable from outside the repository
 
 FUNCTIONS = ("fetch_logs", "fetch_metrics")
 PIPELINE_FUNCTIONS = (
@@ -49,7 +49,7 @@ def build(
     output.mkdir(parents=True, exist_ok=True)
     # An isolated download destination excludes stale, extra wheels. pip verifies
     # hashes even when reading wheels from a caller-provided offline wheelhouse.
-    with tempfile.TemporaryDirectory(prefix="kira-wheels-") as temp:
+    with tempfile.TemporaryDirectory(prefix="argus-wheels-") as temp:
         command = [
             sys.executable,
             "-m",
@@ -84,7 +84,7 @@ def build(
                     if name.startswith("/") or ".." in Path(name).parts or name in entries:
                         raise ValueError("Invalid or conflicting wheel entry")
                     entries[name] = archive.read(name)
-        for path in sorted((ROOT / "kira").glob("*.py")):
+        for path in sorted((ROOT / "argus").glob("*.py")):
             entries[str(path.relative_to(ROOT))] = path.read_bytes()
         entries["config/metric-catalog.json"] = catalog
         scope = json.loads(log_scope_path.read_text()) if log_scope_path else []
@@ -102,7 +102,7 @@ def build(
             "agent-instruction.txt",
             "schemas/fetch_logs.json",
             "schemas/fetch_metrics.json",
-            "kira_agentcore.py",
+            "argus_agentcore.py",
         ):
             entries[filename] = (ROOT / filename).read_bytes()
         manifest = {
@@ -130,7 +130,7 @@ def build(
                 "source_files": {
                     name: digest(data)
                     for name, data in files.items()
-                    if name.startswith("kira/")
+                    if name.startswith("argus/")
                     or name
                     in {
                         "lambda_function.py",
@@ -140,7 +140,7 @@ def build(
                         "agent-instruction.txt",
                         "schemas/fetch_logs.json",
                         "schemas/fetch_metrics.json",
-                        "kira_agentcore.py",
+                        "argus_agentcore.py",
                     }
                 },
             }

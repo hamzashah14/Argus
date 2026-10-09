@@ -51,7 +51,7 @@ def load_config(path, spec):
         or not 2 <= value["initial_reserved_concurrency"] <= 1000
     ):
         raise ValueError("Invalid durable URL, fallback recipient or retention")
-    from kira.runtime import Limits
+    from argus.runtime import Limits
 
     if value["runtime_target"] not in {"standalone", "agentcore"} or not isinstance(
         value["runtime_limits"], dict
@@ -74,11 +74,11 @@ def checked_build(path, *, expected_functions=PIPELINE_FUNCTIONS, architecture="
     if manifest["lock_sha256"] != expected_lock:
         raise VerificationError("Pipeline dependency lock changed")
     for name, data in manifest["functions"].items():
-        required = {str(p.relative_to(ROOT)) for p in (ROOT / "kira").glob("*.py")} | {
+        required = {str(p.relative_to(ROOT)) for p in (ROOT / "argus").glob("*.py")} | {
             "agent-instruction.txt",
             "schemas/fetch_logs.json",
             "schemas/fetch_metrics.json",
-            "kira_agentcore.py",
+            "argus_agentcore.py",
             "lambda_function.py",
         }
         if not required <= set(data["source_files"]):
@@ -94,10 +94,10 @@ def checked_build(path, *, expected_functions=PIPELINE_FUNCTIONS, architecture="
             for filename, expected in data["source_files"].items():
                 if hashlib.sha256(archive.read(filename)).hexdigest() != expected:
                     raise VerificationError("Pipeline package source mismatch")
-                if filename.startswith(("kira/", "schemas/")) or filename in {
+                if filename.startswith(("argus/", "schemas/")) or filename in {
                     "lambda_function.py",
                     "agent-instruction.txt",
-                    "kira_agentcore.py",
+                    "argus_agentcore.py",
                 }:
                     source = ROOT / (
                         f"lambda/{name}/lambda_function.py" if filename == "lambda_function.py" else filename

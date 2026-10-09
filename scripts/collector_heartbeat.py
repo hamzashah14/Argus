@@ -15,7 +15,7 @@ def main():
     if not re.fullmatch(r"i-[0-9a-f]{17}", args.instance_id):
         raise ValueError("Declare a valid inventory instance")
     record = {
-        "type": "kira.collector-heartbeat",
+        "type": "argus.collector-heartbeat",
         "instance_id": args.instance_id,
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
     }

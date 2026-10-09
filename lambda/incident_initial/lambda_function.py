@@ -1,6 +1,6 @@
 """Publish an independent minimal initial alert."""
 
-from kira import pipeline
+from argus import pipeline
 
 
 def lambda_handler(event, context):

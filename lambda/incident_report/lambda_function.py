@@ -1,6 +1,6 @@
 """Publish a follow-up reference without exposing private report content."""
 
-from kira import pipeline
+from argus import pipeline
 
 
 def lambda_handler(event, context):

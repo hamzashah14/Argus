@@ -7,7 +7,7 @@ import sys
 
 import pytest
 
-from kira import team
+from argus import team
 from tests.helpers import ROOT
 
 IID = "i-0123456789abcdef0"
@@ -356,7 +356,7 @@ def test_audit_line_is_one_json_object_without_content(capsys):
         "outcome",
         "tokens",
     }
-    assert data["event"] == "kira.audit" and data["sub"] == "user-1" and data["instance"] is None
+    assert data["event"] == "argus.audit" and data["sub"] == "user-1" and data["instance"] is None
     assert "\n" not in line
 
 
@@ -388,7 +388,7 @@ def test_audit_filters_tokens_to_valid_keys_and_types(capsys):
 
 def test_module_needs_only_the_standard_library():
     code = (
-        "import sys; sys.path.insert(0, sys.argv[1]); import kira.team;"
+        "import sys; sys.path.insert(0, sys.argv[1]); import argus.team;"
         "assert 'streamlit' not in sys.modules and 'boto3' not in sys.modules"
     )
     result = subprocess.run([sys.executable, "-S", "-c", code, str(ROOT)], capture_output=True, text=True)

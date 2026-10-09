@@ -9,18 +9,18 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 
-from kira import pipeline
-from kira.incident import InvalidEvent, normalize_sns
-from kira.ledger import Ledger
-from kira.status import load as load_status
+from argus import pipeline
+from argus.incident import InvalidEvent, normalize_sns
+from argus.ledger import Ledger
+from argus.status import load as load_status
 
 ACCOUNT = "123456789012"
 REGION = "eu-central-1"
 IID = "i-0123456789abcdef0"
-TOPIC = f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-alarms"
+TOPIC = f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-alarms"
 ALARM = {
-    "AlarmName": f"kira-staging-{IID}-status",
-    "AlarmArn": f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:kira-staging-{IID}-status",
+    "AlarmName": f"argus-staging-{IID}-status",
+    "AlarmArn": f"arn:aws:cloudwatch:{REGION}:{ACCOUNT}:alarm:argus-staging-{IID}-status",
     "StateChangeTime": "2026-10-05T10:00:00Z",
     "NewStateValue": "ALARM",
     "Trigger": {"Dimensions": [{"name": "InstanceId", "value": IID}]},
@@ -32,7 +32,7 @@ def envelope(value=ALARM, topic=TOPIC):
 
 
 def normalize(raw):
-    return normalize_sns(raw, TOPIC, ACCOUNT, REGION, {IID}, "kira-staging-")
+    return normalize_sns(raw, TOPIC, ACCOUNT, REGION, {IID}, "argus-staging-")
 
 
 def failure(code):
@@ -759,7 +759,7 @@ def test_ingress_queue_delay_does_not_reset_incident_deadline(monkeypatch):
         "ALARMS_TOPIC_ARN": TOPIC,
         "EXPECTED_ACCOUNT_ID": ACCOUNT,
         "MONITOR_REGION": REGION,
-        "ALARM_NAME_PREFIX": "kira-staging-",
+        "ALARM_NAME_PREFIX": "argus-staging-",
         "INCIDENT_RETENTION_DAYS": "30",
     }
     for key, value in values.items():

@@ -47,7 +47,9 @@ def template(spec, region, description):
     return {
         "AWSTemplateFormatVersion": "2010-09-09",
         "Description": description,
-        "Metadata": {"Kira": {**tags(spec), "ExpectedAccount": spec["account_id"], "ExpectedRegion": region}},
+        "Metadata": {
+            "Argus": {**tags(spec), "ExpectedAccount": spec["account_id"], "ExpectedRegion": region}
+        },
         "Resources": {},
         "Outputs": {},
     }
@@ -93,7 +95,7 @@ def bucket_name(spec, purpose):
 
 def foundation(spec, purpose):
     region = spec["bedrock_region"] if purpose == "tools" else spec["monitor_region"]
-    t = template(spec, region, f"Kira {purpose} foundation; retained private artifacts and telemetry")
+    t = template(spec, region, f"Argus {purpose} foundation; retained private artifacts and telemetry")
     r = t["Resources"]
     r["Artifacts"] = resource(
         "S3::Bucket",
@@ -312,7 +314,7 @@ def add_function(t, spec, logical, function, artifact, env, region, policies, ti
 
 def tools_release(spec, artifacts, secret):
     region = spec["bedrock_region"]
-    t = template(spec, region, "Kira create-only tools for code-owned orchestration")
+    t = template(spec, region, "Argus create-only tools for code-owned orchestration")
     common = {
         "MONITOR_REGION": spec["monitor_region"],
         "ENVIRONMENT": spec["environment"],
@@ -375,7 +377,7 @@ def service_routing(spec):
     t = template(
         spec,
         spec["monitor_region"],
-        "Kira active routing; apply only after candidate and coverage verification",
+        "Argus active routing; apply only after candidate and coverage verification",
     )
     r = t["Resources"]
     # Endpoint-specific logical IDs make retirement explicit. Reconciliation removes the old recipient first.

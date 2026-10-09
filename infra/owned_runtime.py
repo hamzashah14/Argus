@@ -5,11 +5,11 @@ import json
 import re
 from dataclasses import asdict
 
+from argus.agentcore import validate_target
+from argus.runtime import Limits
 from infra.spec import ROOT, digest, name, prefix, tags
 from infra.templates import att, resource, role, statement, tagged, template
 from infra.verify import VerificationError
-from kira.agentcore import validate_target
-from kira.runtime import Limits
 
 
 def model_api(spec):
@@ -96,8 +96,8 @@ def fingerprint(spec, config, bindings):
                     "agent-instruction.txt",
                     "schemas/fetch_logs.json",
                     "schemas/fetch_metrics.json",
-                    "kira/diagnosis.py",
-                    "kira/safety.py",
+                    "argus/diagnosis.py",
+                    "argus/safety.py",
                 )
             },
         }
@@ -122,7 +122,7 @@ def environment(spec, config, bindings):
     env = {
         "ENVIRONMENT": spec["environment"],
         "EXECUTION_PURPOSE": "both",
-        "KIRA_DIAGNOSTIC_POLICY": "diagnosis-v1",
+        "ARGUS_DIAGNOSTIC_POLICY": "diagnosis-v1",
         "RUNTIME_TARGET": config["runtime_target"],
         "BEDROCK_REGION": spec["bedrock_region"],
         "BEDROCK_MODEL_ID": spec["model_id"],
@@ -239,7 +239,7 @@ def agentcore_release(spec, config, bindings, artifact, version=None):
                         }
                     },
                     "Runtime": "PYTHON_3_12",
-                    "EntryPoint": ["kira_agentcore.py"],
+                    "EntryPoint": ["argus_agentcore.py"],
                 }
             },
             "EnvironmentVariables": env,
@@ -264,7 +264,7 @@ def agentcore_endpoint(spec, runtime_id, version):
     t = template(spec, spec["bedrock_region"], "Create-only AgentCore endpoint pinned to a candidate version")
     endpoint = "release_" + spec["release_id"].replace("-", "_")
     # Pre-create groups before either endpoint can emit application logs. The
-    # DEFAULT endpoint is not used by Kira, but exists for every AWS runtime.
+    # DEFAULT endpoint is not used by Argus, but exists for every AWS runtime.
     for logical, qualifier in (("RuntimeLogs", endpoint), ("DefaultLogs", "DEFAULT")):
         t["Resources"][logical] = resource(
             "Logs::LogGroup",

@@ -3,7 +3,7 @@ import stat
 
 import pytest
 
-from kira import local_tools
+from argus import local_tools
 from scripts import make_local_tools
 from tests.helpers import ROOT
 
@@ -20,10 +20,10 @@ def test_generated_file_loads_with_the_spec_derived_scope(tmp_path):
     out = tmp_path / "local-tools.json"
     assert generate(out) == 0
     config = local_tools.load(str(out))
-    assert config.log_prefix == "/kira/staging" and config.monitor_region == "eu-central-1"
+    assert config.log_prefix == "/argus/staging" and config.monitor_region == "eu-central-1"
     assert config.instances == [IID]
     assert config.log_groups == [
-        f"/kira/staging/{IID}/{name}" for name in ("application", "nginx-access", "nginx-error")
+        f"/argus/staging/{IID}/{name}" for name in ("application", "nginx-access", "nginx-error")
     ]
     assert len(config.metric_catalog) == 6 and json.loads(out.read_text())["version"] == 1
 

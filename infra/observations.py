@@ -5,6 +5,8 @@ import json
 import re
 import time
 
+from argus.ledger import item
+from argus.observability import recipient_fingerprint
 from infra import durable, observation_templates, owned_ops
 from infra.spec import fallback_recipients, log_groups, metric_catalog, name, recipients
 from infra.verify import (
@@ -14,8 +16,6 @@ from infra.verify import (
     awaiting_confirmation,
     verify_function,
 )
-from kira.ledger import item
-from kira.observability import recipient_fingerprint
 from scripts.build_lambdas import OBSERVATION_FUNCTIONS, build
 
 
@@ -213,7 +213,7 @@ def verify_registration(bundle, factory):
             "reports",
             "sqs",
             observation_templates.queue_arn(spec, "observation-receipts"),
-            {"kira_canary": ["true"]},
+            {"argus_canary": ["true"]},
             observation_templates.queue_arn(spec, "observation-dead"),
         ),
         *[("reports", "email", address, {}, None) for address in recipients(spec)],

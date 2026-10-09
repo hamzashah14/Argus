@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from kira import chat, execution, local_tools
-from kira.config import AppConfig
-from kira.runtime import LambdaTools, Limits, RuntimeStop
+from argus import chat, execution, local_tools
+from argus.config import AppConfig
+from argus.runtime import LambdaTools, Limits, RuntimeStop
 from tests.helpers import LOCAL_A, LOCAL_B, write_local_tools
 
 RELEASE = "a" * 64
@@ -16,7 +16,7 @@ RELEASE = "a" * 64
 @pytest.fixture
 def local_env(tmp_path, monkeypatch):
     path = write_local_tools(tmp_path)
-    monkeypatch.setenv("KIRA_LOCAL_TOOLS", path)
+    monkeypatch.setenv("ARGUS_LOCAL_TOOLS", path)
     for key, value in {
         "ENVIRONMENT": "development",
         "BEDROCK_REGION": "eu-central-1",

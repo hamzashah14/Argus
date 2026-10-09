@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from kira.time import parse_utc
+from argus.time import parse_utc
 from tests.helpers import load_lambda
 
 logs = load_lambda("fetch_logs")

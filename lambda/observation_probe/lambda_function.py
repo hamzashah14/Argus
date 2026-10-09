@@ -1,6 +1,6 @@
 """Customer-owned observation observation entrypoint."""
 
-from kira.observability import observer
+from argus.observability import observer
 
 
 def lambda_handler(event, context):

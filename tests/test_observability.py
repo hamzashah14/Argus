@@ -10,23 +10,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from argus import observability, probes, telemetry
+from argus.incident import InvalidEvent, normalize_sns
+from argus.ledger import Ledger
+from argus.nginx import access_evidence
+from argus.observation_config import validate
 from infra import observation_templates, observations
 from infra.spec import ROOT, alarm_descriptors, cwagent, load, metric_catalog, name
 from infra.verify import PendingConfirmation, VerificationError
-from kira import observability, probes, telemetry
-from kira.incident import InvalidEvent, normalize_sns
-from kira.ledger import Ledger
-from kira.nginx import access_evidence
-from kira.observation_config import validate
 
 SPEC = load(ROOT / "examples/observability.example.json")
 CONFIG = SPEC["observability"]
 IID = SPEC["instances"][0]["id"]
 ACCOUNT = SPEC["account_id"]
 REGION = SPEC["monitor_region"]
-TOPIC = f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-alarms"
-CANARY = f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-canary"
-REPORTS = f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-reports"
+TOPIC = f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-alarms"
+CANARY = f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-canary"
+REPORTS = f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-reports"
 ROUTE = CONFIG["services"][0]["routes"][0]
 
 
@@ -39,12 +39,12 @@ def environment(monkeypatch):
         "INCIDENT_TABLE": "synthetic",
         "CANARY_TOPIC_ARN": CANARY,
         "ALARMS_TOPIC_ARN": TOPIC,
-        "ALARM_NAME_PREFIX": "kira-staging-",
+        "ALARM_NAME_PREFIX": "argus-staging-",
         "REPORTS_TOPIC_ARN": REPORTS,
         "PRIMARY_EMAIL": SPEC["notification_email"],
-        "FALLBACK_TOPIC_ARN": f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-observation-fallback",
+        "FALLBACK_TOPIC_ARN": f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-observation-fallback",
         "FALLBACK_EMAIL": "fallback@example.invalid",
-        "LOG_GROUP_PREFIX": "/kira/staging",
+        "LOG_GROUP_PREFIX": "/argus/staging",
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
@@ -143,7 +143,7 @@ def test_business_traffic_never_substitutes_for_collector_log_heartbeat(environm
         "builtins.open", side_effect=lambda *a, **k: BytesIO(json.dumps(metric_catalog(SPEC)).encode())
     ):
         assert observability.check_freshness(service, CONFIG, cw, logs, now) is False
-    beat = {"type": "kira.collector-heartbeat", "instance_id": IID, "timestamp": now.isoformat()}
+    beat = {"type": "argus.collector-heartbeat", "instance_id": IID, "timestamp": now.isoformat()}
     logs.get_log_events.return_value = {
         "events": [{"timestamp": int(now.timestamp() * 1000), "message": json.dumps(beat)}]
     }
@@ -178,14 +178,14 @@ def test_access_counts_and_diagnostic_events_have_distinct_alarm_descriptors():
         cwagent(SPEC, SPEC["instances"][0])["logs"]["logs_collected"]["files"]["collect_list"][-1][
             "file_path"
         ]
-        == "/var/log/kira-collector-heartbeat.log"
+        == "/var/log/argus-collector-heartbeat.log"
     )
 
 
 def test_canary_isolated_topic_scope_and_no_model_work_intent(environment):
     payload = observability.canary_payload(172800, CONFIG)
     envelope = json.dumps({"Type": "Notification", "TopicArn": CANARY, "Message": json.dumps(payload)})
-    source = normalize_sns(envelope, TOPIC, ACCOUNT, REGION, {IID}, "kira-staging-", canary_topic=CANARY)
+    source = normalize_sns(envelope, TOPIC, ACCOUNT, REGION, {IID}, "argus-staging-", canary_topic=CANARY)
     client, table = MagicMock(), MagicMock()
     assert Ledger("synthetic", client, table).accept(source, 30) == "ACCEPTED"
     records = client.transact_write_items.call_args.kwargs["TransactItems"]
@@ -193,7 +193,7 @@ def test_canary_isolated_topic_scope_and_no_model_work_intent(environment):
     assert "INTENT#INITIAL#1" in keys and not any("WORK" in sk for sk in keys)
     assert records[1]["Put"]["Item"]["status"]["S"] == "CANARY"
     with pytest.raises(InvalidEvent):
-        normalize_sns(envelope, TOPIC, ACCOUNT, REGION, {IID}, "kira-staging-")
+        normalize_sns(envelope, TOPIC, ACCOUNT, REGION, {IID}, "argus-staging-")
     payload["slot"] += 1
     with pytest.raises(InvalidEvent):
         normalize_sns(
@@ -202,7 +202,7 @@ def test_canary_isolated_topic_scope_and_no_model_work_intent(environment):
             ACCOUNT,
             REGION,
             {IID},
-            "kira-staging-",
+            "argus-staging-",
             canary_topic=CANARY,
         )
 
@@ -237,9 +237,9 @@ def test_recipient_receipt_is_conditional_and_never_reads_notification_body(envi
         "MessageId": "sns-message",
         "Message": "private body ignored",
         "MessageAttributes": {
-            "kira_incident": {"Value": iid},
-            "kira_canary": {"Value": "true"},
-            "kira_notification": {"Value": iid + "-initial"},
+            "argus_incident": {"Value": iid},
+            "argus_canary": {"Value": "true"},
+            "argus_notification": {"Value": iid + "-initial"},
         },
     }
     with patch.object(observability, "store", return_value=ledger):
@@ -322,7 +322,7 @@ def test_disabled_observers_access_no_cloud(environment, monkeypatch):
 
 
 def test_structured_metrics_do_not_include_incident_ids_in_dimensions_or_payloads(monkeypatch, capsys):
-    monkeypatch.setenv("OBS_NAMESPACE", "kira/staging/Pipeline")
+    monkeypatch.setenv("OBS_NAMESPACE", "argus/staging/Pipeline")
     telemetry.emit("work", "COMPLETE", incident_id="a" * 32, fence=2, metrics={"ReportPersisted": 1})
     event = json.loads(capsys.readouterr().out)
     assert event["_aws"]["CloudWatchMetrics"][0]["Dimensions"] == [["Component"]]
@@ -397,7 +397,7 @@ def test_templates_preserve_cost_pause_and_independent_route():
     assert active["ReceiptMapping"]["Properties"]["Enabled"] is False
     assert active["ObserverHeartbeat"]["Properties"]["TreatMissingData"] == "breaching"
     assert active["ObserverFailure"]["Properties"]["AlarmActions"] == [
-        f"arn:aws:sns:{REGION}:{ACCOUNT}:kira-staging-observation-fallback",
+        f"arn:aws:sns:{REGION}:{ACCOUNT}:argus-staging-observation-fallback",
         REPORTS,
     ]
     assert "bedrock:InvokeModel" not in json.dumps(stages["observation-runtime"])
@@ -424,7 +424,7 @@ def test_binding_rejects_mutable_or_other_release_observer_before_aws():
 
 
 def test_correlation_resets_between_requests_and_survives_nested_context(capsys):
-    from kira.telemetry import correlate, emit
+    from argus.telemetry import correlate, emit
 
     with correlate("a" * 32, 7):
         emit("tool", "COMPLETE", metrics={"ToolFailure": 0})
@@ -507,7 +507,7 @@ def test_registration_requires_each_independent_component(drift):
         (
             "reports",
             observation_templates.queue_arn(SPEC, "observation-receipts"),
-            {"kira_canary": ["true"]},
+            {"argus_canary": ["true"]},
             observation_templates.queue_arn(SPEC, "observation-dead"),
         ),
         ("observation-fallback", config["fallback_email"], {}, None),

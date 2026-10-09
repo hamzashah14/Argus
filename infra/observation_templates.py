@@ -141,7 +141,7 @@ def foundation(spec, outputs, config):
             "Protocol": "sqs",
             "Endpoint": att("Receipts"),
             "RawMessageDelivery": False,
-            "FilterPolicy": {"kira_canary": ["true"]},
+            "FilterPolicy": {"argus_canary": ["true"]},
             "RedrivePolicy": {"deadLetterTargetArn": att("Dead")},
         },
         depends=["ReceiptPolicy", "DeadPolicy"],
@@ -287,7 +287,7 @@ def active(spec, outputs, versions, pipeline_versions, *, runtime_target="standa
     if runtime_target == "agentcore":
         if not agentcore:
             raise ValueError("AgentCore observation requires explicit runtime and endpoint bindings")
-        from kira.agentcore import validate_target
+        from argus.agentcore import validate_target
 
         validate_target(
             agentcore["RuntimeArn"], agentcore["EndpointName"], spec["bedrock_region"], spec["account_id"]

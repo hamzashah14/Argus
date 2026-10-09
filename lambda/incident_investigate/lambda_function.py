@@ -2,7 +2,7 @@
 
 import os
 
-from kira import agentcore, execution, pipeline
+from argus import agentcore, execution, pipeline
 
 
 def lambda_handler(event, context):

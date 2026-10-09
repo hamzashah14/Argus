@@ -5,10 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from argus import observability
 from infra import durable, reconcile
 from infra.spec import digest, fallback_recipients, load, recipients
 from infra.verify import VerificationError
-from kira import observability
 from scripts.dev import validate_durable, validate_observations
 from tests.helpers import ROOT
 
@@ -233,13 +233,13 @@ def test_routing_verification_needs_every_recipient_registered(tmp_path):
     from tests.test_deployment_automation import confirmed_subscriptions, routing_clients
 
     spec = listed(tmp_path, A, B)
-    ingress = "arn:aws:sqs:eu-central-1:123456789012:kira-staging-ingress"
+    ingress = "arn:aws:sqs:eu-central-1:123456789012:argus-staging-ingress"
     both = confirmed_subscriptions({**spec, "notification_email": A}, ingress) + [
         {
             "TopicArn": topic_arn(spec, "reports"),
             "Protocol": "email",
             "Endpoint": B,
-            "SubscriptionArn": "arn:aws:sns:eu-central-1:123456789012:kira-staging-reports:second",
+            "SubscriptionArn": "arn:aws:sns:eu-central-1:123456789012:argus-staging-reports:second",
         }
     ]
     assert routing_health(spec, routing_clients(spec, both), ingress)["status"] == "PASS"

@@ -222,7 +222,7 @@ def execution_policy(spec, agentcore):
 
 
 def ui_principal_policy(spec):
-    """The UI principal may assume only the role Kira generates for the UI."""
+    """The UI principal may assume only the role Argus generates for the UI."""
     return [
         allow(
             ["sts:AssumeRole"],
@@ -232,7 +232,7 @@ def ui_principal_policy(spec):
 
 
 def instance_policy(spec):
-    """The managed CloudWatch agent policy plus a deny, so only Kira's stack creates log groups."""
+    """The managed CloudWatch agent policy plus a deny, so only Argus's stack creates log groups."""
     return [
         {
             "Effect": "Deny",
@@ -258,7 +258,7 @@ def render(spec, *, operator_trust=None, ui_trust=None, agentcore=False, instanc
     an IAM policy lets call sts:AssumeRole. Pass explicit ARNs to narrow it."""
     root = f"arn:aws:iam::{spec['account_id']}:root"
     tags = [
-        {"Key": "ManagedBy", "Value": "kira-iam-bootstrap"},
+        {"Key": "ManagedBy", "Value": "argus-iam-bootstrap"},
         {"Key": "Project", "Value": spec["project"]},
         {"Key": "Environment", "Value": spec["environment"]},
     ]
@@ -286,7 +286,7 @@ def render(spec, *, operator_trust=None, ui_trust=None, agentcore=False, instanc
             spec["ci_principal_arn"],
             trust(operator_trust or [root]),
             operator_policy(spec),
-            "kira-operator",
+            "argus-operator",
         ),
         "ExecutionRole": role(
             spec["deployment_role_arn"],
@@ -301,13 +301,13 @@ def render(spec, *, operator_trust=None, ui_trust=None, agentcore=False, instanc
                 ],
             },
             execution_policy(spec, agentcore),
-            "kira-cloudformation-execution",
+            "argus-cloudformation-execution",
         ),
         "UiPrincipalRole": role(
             spec["ui_principal_arn"],
             trust(ui_trust or [root]),
             ui_principal_policy(spec),
-            "kira-ui-principal",
+            "argus-ui-principal",
         ),
     }
     outputs = {
@@ -342,7 +342,7 @@ def render(spec, *, operator_trust=None, ui_trust=None, agentcore=False, instanc
                 "ManagedPolicyArns": ["arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"],
                 "Policies": [
                     {
-                        "PolicyName": "kira-no-log-group-creation",
+                        "PolicyName": "argus-no-log-group-creation",
                         "PolicyDocument": {"Version": "2012-10-17", "Statement": instance_policy(spec)},
                     }
                 ],
@@ -359,7 +359,7 @@ def render(spec, *, operator_trust=None, ui_trust=None, agentcore=False, instanc
         }
     return {
         "AWSTemplateFormatVersion": "2010-09-09",
-        "Description": f"Kira IAM roles for {prefix(spec)}. Deploy once as an AWS administrator.",
+        "Description": f"Argus IAM roles for {prefix(spec)}. Deploy once as an AWS administrator.",
         "Resources": resources,
         "Outputs": outputs,
     }

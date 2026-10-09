@@ -2,7 +2,7 @@
 
 from dataclasses import asdict
 
-from kira.runtime import Limits
+from argus.runtime import Limits
 
 DEFAULT = {
     "chat_limits": asdict(
