@@ -106,6 +106,56 @@ def stage_order(spec, config):
     )
 
 
+def next_release_id(current):
+    """The next release name: bump a trailing number (example001 to example002) or append -2."""
+    match = re.fullmatch(r"(.*?)([0-9]+)", current)
+    value = match[1] + str(int(match[2]) + 1).zfill(len(match[2])) if match else current + "-2"
+    if len(value) > 16:
+        raise VerificationError(
+            "Choose the new release ID yourself with --release-id (at most 16 characters)"
+        )
+    return value
+
+
+def refresh(source, directory, release_id=None):
+    """Start the next release from an earlier one: the same settings, a new release ID, an empty journal.
+
+    Copies only the three settings files. The old plan, journal, outputs and connection file stay behind,
+    because a new release is planned, checked and applied from scratch."""
+    source = Path(source).resolve()
+    old = json.loads((source / "automation.json").read_text())
+    if set(old) != {"version", "spec", "runtime_config", "profile", "wheelhouse"} or old["version"] != 1:
+        raise VerificationError("Automation configuration has unknown or missing fields")
+    if source == Path(directory).resolve():
+        raise VerificationError("Use a new work directory for the new release")
+    spec = json.loads((source / old["spec"]).read_text())
+    runtime = json.loads((source / old["runtime_config"]).read_text())
+    new_id = release_id or next_release_id(spec["release_id"])
+    if new_id == spec["release_id"]:
+        raise VerificationError("The new release needs a release ID that differs from the old one")
+    names = ("deployment.json", "runtime.json", "automation.json")
+    if any((directory / name).exists() for name in names):
+        raise VerificationError("Refresh never overwrites existing customer files")
+    try:
+        private_json(directory / "deployment.json", {**spec, "release_id": new_id})
+        private_json(directory / "runtime.json", runtime)
+        private_json(
+            directory / "automation.json",
+            {
+                **old,
+                "spec": "deployment.json",
+                "runtime_config": "runtime.json",
+                "wheelhouse": str((source / old["wheelhouse"]).resolve()),
+            },
+        )
+        load(directory / "deployment.json")
+    except (ValueError, OSError):
+        for name in names:
+            (directory / name).unlink(missing_ok=True)
+        raise VerificationError("The new release ID or the copied settings are not valid") from None
+    return spec["release_id"], new_id
+
+
 def plan(path):
     path = Path(path).resolve()
     value = json.loads(path.read_text())
@@ -690,8 +740,12 @@ def deploy(planned, directory, driver, *, allow_model=False, retry_canary=False)
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["init", "dry-run", "check", "apply", "status"])
+    parser.add_argument("command", choices=["init", "refresh", "dry-run", "check", "apply", "status"])
     parser.add_argument("--config", type=Path)
+    parser.add_argument(
+        "--from-dir", type=Path, help="refresh: the work directory of the release to start from"
+    )
+    parser.add_argument("--release-id", help="refresh: the new release ID (default: the old one, counted up)")
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--plan-hash")
     parser.add_argument(
@@ -734,6 +788,16 @@ def main():
                 )
                 print(
                     "Created private templates. Fill deployment.json/runtime.json/automation.json; see docs/DEPLOY.md. Reference inputs cannot deploy AWS."
+                )
+                return 0
+            if args.command == "refresh":
+                if not args.from_dir:
+                    raise VerificationError("--from-dir is required")
+                old_id, new_id = refresh(args.from_dir, directory, args.release_id)
+                print(
+                    f"Created release {new_id} (from {old_id}) in {directory}. Edit deployment.json there for what "
+                    "changed, for example the instances, then run dry-run, check and apply with this work directory. "
+                    "Nothing from the old run's plan, journal or outputs was copied."
                 )
                 return 0
             if args.command == "status":

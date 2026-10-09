@@ -378,7 +378,7 @@ release. Roll back by promoting a previously qualified, compatible release throu
   a hard dollar limit. Token reservations are never refunded, and observed usage is a lower bound if a response is lost.
 - Each runtime target you offer needs its own qualification. Linux collector checks do not prove Windows telemetry.
   Private-only endpoints and automatic fleet discovery are unsupported. A scaled fleet needs an inventory refresh
-  and a new release.
+  and a new release ([DEPLOY.md](DEPLOY.md#39-watch-more-servers-or-change-anything-else-later)).
 - Model API: never run against a live provider. A call that takes longer than 24 seconds fails and is not retried in
   the request, and the provider might still bill it. An OpenAI-compatible reservation is a local estimate, not an upper
   bound, and the run stops only after the call that exceeded it. Redacted excerpts leave your AWS account, and

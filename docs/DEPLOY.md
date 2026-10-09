@@ -384,7 +384,7 @@ them with the commands in Appendix A. Production environments stop as described 
 `status --work-dir .local/customer` prints the status, the next action and the plan hash. It makes
 no AWS call. If you change a setting or the commit after `apply` started, the old journal no longer
 applies: "Configuration/source changed; create a new deployment work directory". Use a new work
-directory and a new `release_id`.
+directory and a new `release_id`; `refresh` (3.9) does both.
 
 **What finished means.** Only `environment: staging` can reach the last row. It means the backend
 exists and is registered. The initial deployment always keeps `investigation_paused` true. It does
@@ -405,6 +405,30 @@ and a reviewed routing change. Appendix A lists the manual commands. They have n
 real AWS.
 
 After the last row, open the UI (section 4).
+
+### 3.9 Watch more servers, or change anything else, later
+
+The server list is part of the release, so any change to it, such as adding or removing a server, a log
+group or a service, is a new release. It is not an edit in place. Start it from the finished one:
+
+```bash
+python -m infra.automation refresh --from-dir .local/customer --work-dir .local/customer-r2
+```
+
+This copies `deployment.json`, `runtime.json` and `automation.json` into the new folder with the release
+ID counted up (`example001` becomes `example002`; pass `--release-id NAME` to choose). It copies nothing
+from the old run: not its plan, its journal, its outputs or `ui-connection.json`. It never overwrites, and the
+old folder is not touched. Then:
+
+1. Edit `.local/customer-r2/deployment.json`: add the instances, their `log_groups` and any alarms.
+2. Install the CloudWatch agent on each new server with the file `dry-run` writes (see [SERVERS.md](SERVERS.md)).
+3. Run `dry-run`, `check` and `apply` with the new folder, as in 3.4 to 3.6.
+4. With team mode, add the new instance IDs to `team.toml`. A listed instance must be in the deployed list.
+5. When the new release works, retire the old one ([OPERATE.md](OPERATE.md#roll-back-and-retire-old-releases)).
+
+A separate project or team in the same AWS account uses a different `project` or `environment` in its own
+work directory. That gives it its own resources, but the account's Lambda concurrency is shared, so each
+deployment's `initial_reserved_concurrency` must fit what is left. This has not been tried on real AWS.
 
 ## 4. Open the UI on your own machine
 
