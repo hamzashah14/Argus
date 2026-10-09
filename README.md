@@ -98,9 +98,10 @@ its own process with your AWS credentials. You skip the tool Lambdas and `infra.
 4. Run `streamlit run app.py --server.address 127.0.0.1` and sign in. "Connection details"
    shows "Local tools (this machine's AWS credentials)".
 
-**Limits.** The tools read only log groups named `<log_prefix>/<instance-id>/<suffix>`, the
-layout of the agent file in [SERVERS.md](docs/SERVERS.md). Other groups, such as `/aws/lambda/...`,
-are out of reach. The UI process holds your read credentials, so Kira's checks run in code and
+**Limits.** The tools read log groups named `<log_prefix>/<instance-id>/<suffix>`, the
+layout of the agent file in [SERVERS.md](docs/SERVERS.md), and the groups you list under
+`existing_log_groups` ([SERVERS.md](docs/SERVERS.md#use-log-groups-that-already-exist)). Any other
+group, such as `/aws/lambda/...`, is out of reach. The UI process holds your read credentials, so Kira's checks run in code and
 IAM does not back them up. Keep the UI on `127.0.0.1`. Use the deployed tools for anything
 shared or production. This mode has never run against real AWS either.
 

@@ -10,10 +10,12 @@ import json
 from infra.spec import (
     alarm_descriptors,
     digest,
+    existing_log_groups,
     log_groups,
     log_prefix,
     name,
     prefix,
+    readable_log_groups,
     recipients,
     tags,
     topic_arn,
@@ -323,10 +325,15 @@ def tools_release(spec, artifacts, secret):
         **common,
         "LOG_CURSOR_SECRET_ARN": secret["arn"],
         "LOG_CURSOR_SECRET_VERSION": secret["version_id"],
+        **(
+            {"EXISTING_LOG_GROUPS_FILE": "config/existing-log-groups.json"}
+            if existing_log_groups(spec)
+            else {}
+        ),
     }
     logs_arns = [
         f"arn:aws:logs:{spec['monitor_region']}:{spec['account_id']}:log-group:{group}:*"
-        for group in log_groups(spec)
+        for group in readable_log_groups(spec)
     ]
     region_condition = {"StringEquals": {"aws:RequestedRegion": spec["monitor_region"]}}
     add_function(

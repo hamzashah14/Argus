@@ -70,14 +70,14 @@ def parse_instance_id(raw):
     return raw
 
 
-def parse_log_group(raw):
+def parse_log_group(raw, existing=()):
     if not raw:
         return None
     raw = str(raw).strip()
-    if not LOG_GROUP_RE.match(raw) or not raw.startswith(LOG_GROUP_PREFIX + "/"):
+    if not LOG_GROUP_RE.match(raw) or not (raw.startswith(LOG_GROUP_PREFIX + "/") or raw in existing):
         raise BadInput(
-            f"log_group_name must be a log group under {LOG_GROUP_PREFIX}/. "
-            "Call fetch_logs with only instance_id to list the valid ones."
+            f"log_group_name must be a log group under {LOG_GROUP_PREFIX}/ or one of this instance's "
+            "existing log groups. Call fetch_logs with only instance_id to list the valid ones."
         )
     return raw
 
@@ -114,11 +114,12 @@ def build_text_filter(text):
     return f"| filter @message like /(?i)({'|'.join(_escape(a) for a in alts)})/ "
 
 
-def stream_clause(log_group, instance_id):
+def stream_clause(log_group, instance_id, all_streams=False):
     # A group under <prefix>/<instance-id>/ already belongs to that instance, and
     # Docker's awslogs driver names its streams after container IDs, not instance
-    # IDs — filtering on the stream there would silently match nothing.
-    if not instance_id or log_group.startswith(f"{LOG_GROUP_PREFIX}/{instance_id}/"):
+    # IDs — filtering on the stream there would silently match nothing. An existing
+    # group declared with streams "all" belongs to one instance and is read whole.
+    if not instance_id or all_streams or log_group.startswith(f"{LOG_GROUP_PREFIX}/{instance_id}/"):
         return ""
     return f"| filter @logStream = '{instance_id}' "
 
@@ -146,6 +147,8 @@ def discover_log_groups(client, instance_id, continuation=None, event=None):
     allowed_groups = configured_log_scope()
     if allowed_groups is not None:
         names = [group for group in names if group in allowed_groups]
+    if not continuation:
+        names += sorted(configured_existing_groups().get(instance_id, {}))
     token = response.get("nextToken")
     result = {
         "status": "log_groups_found" if names or token else "no_log_groups_found",
@@ -274,22 +277,41 @@ def configured_log_scope():
     if not path:
         return None  # Development only; deployed tools require a packaged scope.
     value = json.loads(Path(path).read_text())
-    if not isinstance(value, list) or not value or any(not isinstance(item, str) for item in value):
+    empty_ok = bool(os.getenv("EXISTING_LOG_GROUPS_FILE"))  # an instance may have only existing groups
+    if (
+        not isinstance(value, list)
+        or (not value and not empty_ok)
+        or any(not isinstance(i, str) for i in value)
+    ):
         raise BadInput("Deployment log scope is invalid.")
     return set(value)
 
 
+def configured_existing_groups():
+    """{instance ID: {existing log group: "instance" or "all"}}; empty unless the deployment declares some."""
+    path = os.getenv("EXISTING_LOG_GROUPS_FILE")
+    if not path:
+        return {}
+    value = json.loads(Path(path).read_text())
+    if not isinstance(value, dict) or any(
+        not isinstance(groups, dict) or not set(groups.values()) <= {"instance", "all"}
+        for groups in value.values()
+    ):
+        raise BadInput("Deployment existing log groups are invalid.")
+    return value
+
+
 def search(params, deadline, event=None):
     instance_id = parse_instance_id(params.get("instance_id"))
-    log_group = parse_log_group(params.get("log_group_name"))
+    existing = configured_existing_groups().get(instance_id, {})
+    log_group = parse_log_group(params.get("log_group_name"), existing)
     scope = configured_log_scope()
     if scope is not None:
         if instance_id not in os.getenv("ALLOWED_INSTANCE_IDS", "").split(","):
             raise BadInput("Instance is outside the deployment inventory.")
-        if log_group and (
-            log_group not in scope or not log_group.startswith(f"{LOG_GROUP_PREFIX}/{instance_id}/")
-        ):
-            raise BadInput("Log group is outside this instance's authorized inventory.")
+        if log_group and log_group not in existing:
+            if log_group not in scope or not log_group.startswith(f"{LOG_GROUP_PREFIX}/{instance_id}/"):
+                raise BadInput("Log group is outside this instance's authorized inventory.")
 
     if not log_group:
         if not instance_id:
@@ -308,7 +330,7 @@ def search(params, deadline, event=None):
     limit = _int_param(params, "lines", DEFAULT_LINES, 1, MAX_LINES)
     anchor = parse_time(params.get("time_string"))
     now = datetime.now(timezone.utc)
-    stream = stream_clause(log_group, instance_id)
+    stream = stream_clause(log_group, instance_id, existing.get(log_group) == "all")
     where = stream + text_clause
 
     if anchor:

@@ -270,8 +270,8 @@ is missing.
 | Readiness routes (observers only) | Public HTTPS on port 443, with a path. No credentials, query or redirect. Private VPC-only endpoints are not supported |
 | Time and network | Synchronized clocks (UTC), a rotated heartbeat file, and a path from the agent to CloudWatch in the monitor region (not verified here; see AWS's agent documentation) |
 
-**Log group creation.** Kira's stack creates the log groups, and the tool never adopts a resource that
-already exists. Not verified: an agent that starts before `apply` and is allowed to create log groups
+**Log group creation.** Kira's stack creates the groups in `log_groups`, and the tool never adopts a resource that
+already exists. Groups in `existing_log_groups` are only read, never created or adopted. Not verified: an agent that starts before `apply` and is allowed to create log groups
 could create them first and block the stack. To be safe, withhold that permission from the instance
 role, or start the agent after the foundation stages finish.
 
@@ -344,7 +344,8 @@ appear after a test request. The coverage check inside the canary enforces all o
 | `ui_principal_arn`, `ci_principal_arn`, `deployment_role_arn` | yes | Role ARNs in `account_id`, all different | `aws iam get-role --role-name NAME`: copy `Arn`, path included |
 | `instances` | yes | 1 to 10 unique objects with the six fields below | EC2 console |
 | `instances[].id` | yes | `i-` plus 8 or 17 lowercase hex digits | EC2 console |
-| `instances[].log_groups` | yes | 1 to 8 unique names of 1 to 40 letters, digits, `_` or `-` | Your choice. The agent writes the same names |
+| `instances[].log_groups` | yes | 0 to 8 unique names of 1 to 40 letters, digits, `_` or `-`. May be empty if `existing_log_groups` is set | Your choice. Kira creates these groups and the agent writes the same names |
+| `instances[].existing_log_groups` | no | Up to 8 objects. `name`: 1 to 512 letters, digits, `_`, `.`, `/`, `#` or `-`, a group that already exists in the monitor region, not under Kira's own log prefix. `streams` (optional): `instance` (default) or `all` | `aws logs describe-log-groups`. Kira reads these groups and never creates or changes them. See [SERVERS.md](SERVERS.md#use-log-groups-that-already-exist) |
 | `instances[].disk_path` | yes | Absolute path of letters, digits, `/`, `_`, `-` | The mount point to alarm on |
 | `instances[].resource_alarms`, `nginx_alarm` | yes | Boolean each | Your choice |
 | `instances[].process_exe` | yes | `null`, or 1 to 40 characters of letters, digits, `_`, `.`, `-` | The executable name to count |
@@ -490,14 +491,17 @@ credentials. It cannot run incident investigations. It needs:
   Model API, `MODEL_API` in `.env` and `secretsmanager:GetSecretValue` on the key secret you created.
   The configuration check accepts `MODEL_API` in this mode, but no test runs it end to end.
   `BEDROCK_REGION` and `BEDROCK_MODEL_ID` stay required either way.
-- The one-file config named by `KIRA_LOCAL_TOOLS`. All keys are required and unknown keys are rejected:
-  `version` (1), `monitor_region`, `log_prefix`, `instances` (1 to 100), `log_groups` (1 to 1000, each
+- The one-file config named by `KIRA_LOCAL_TOOLS`. These keys are required and unknown keys are rejected:
+  `version` (1), `monitor_region`, `log_prefix`, `instances` (1 to 100), `log_groups` (up to 1000, each
   under `<log_prefix>/<listed instance>/`) and `metric_catalog` (may be empty; each entry belongs to a
-  listed instance). Write it by hand from `examples/local-tools.example.json`, or run
+  listed instance). The optional `existing_log_groups` maps a listed instance to its existing groups,
+  `{"i-...": {"/myapp/prod/web": "instance"}}`, where the value is `instance` or `all` as in
+  [SERVERS.md](SERVERS.md#use-log-groups-that-already-exist). `log_groups` may be empty only when it is set. Write it by hand from `examples/local-tools.example.json`, or run
   `python scripts/make_local_tools.py --spec deployment.json --out .local/local-tools.json`. That makes
   no AWS call, refuses to overwrite without `--force` and writes mode 600.
-- Servers whose logs are in Kira's layout, `<log_prefix>/<instance-id>/<name>` ([SERVERS.md](SERVERS.md)).
-  Other log groups, such as `/aws/lambda/...`, are not reachable. EC2 metrics and the standard `CWAgent`
+- Servers whose logs are in Kira's layout, `<log_prefix>/<instance-id>/<name>` ([SERVERS.md](SERVERS.md)),
+  or in groups you list under `existing_log_groups`. Any other group, such as `/aws/lambda/...`, is not
+  reachable. EC2 metrics and the standard `CWAgent`
   memory, swap and disk metrics work with an empty catalog.
 - In `.env`: `ENVIRONMENT=development`, `RUNTIME_TARGET=standalone`, no `KIRA_TEAM_FILE`,
   `APP_PASSWORD`, `BEDROCK_REGION`, `BEDROCK_MODEL_ID`, `EXPECTED_ACCOUNT_ID` and `RUNTIME_LIMITS`. Leave

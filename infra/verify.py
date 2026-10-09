@@ -6,7 +6,15 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
-from infra.spec import alarm_descriptors, digest, log_groups, name, recipients, topic_arn
+from infra.spec import (
+    alarm_descriptors,
+    digest,
+    existing_log_groups,
+    log_groups,
+    name,
+    recipients,
+    topic_arn,
+)
 
 
 class VerificationError(RuntimeError):
@@ -126,6 +134,10 @@ def coverage(spec, clients):
             found = logs.describe_log_groups(logGroupNamePrefix=group)["logGroups"]
             if not any(g["logGroupName"] == group for g in found):
                 raise VerificationError("Required evidence log group is absent")
+    for group in sorted({g for groups in existing_log_groups(spec).values() for g in groups}):
+        found = logs.describe_log_groups(logGroupNamePrefix=group)["logGroups"]
+        if not any(g["logGroupName"] == group for g in found):
+            raise VerificationError("Existing log group not found")
     return {
         "spec_hash": digest(spec),
         "checked_at": datetime.now(timezone.utc).isoformat(),

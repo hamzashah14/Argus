@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from infra import release
-from infra.spec import load, log_groups, metric_catalog
+from infra.spec import existing_log_groups, load, log_groups, metric_catalog
 from infra.verify import VerificationError
 
 
@@ -67,12 +67,16 @@ def main():
         args.output.mkdir(parents=True, exist_ok=True)
         release.write_json(args.output / "metric-catalog.json", metric_catalog(spec))
         release.write_json(args.output / "log-scope.json", log_groups(spec))
+        existing = existing_log_groups(spec)
+        if existing:
+            release.write_json(args.output / "existing-log-groups.json", existing)
         build(
             FUNCTIONS,
             args.output,
             args.output / "metric-catalog.json",
             args.wheelhouse,
             args.output / "log-scope.json",
+            existing_path=args.output / "existing-log-groups.json" if existing else None,
         )
         return 0
     except (VerificationError, ValueError, KeyError, OSError) as exc:

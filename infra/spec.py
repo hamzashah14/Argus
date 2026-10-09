@@ -25,6 +25,22 @@ def load(path):
         raise ValueError("Duplicate instance IDs")
     if value["reserved_concurrency"] == 0 and not value["maintenance_mode"]:
         raise ValueError("Zero concurrency requires maintenance mode")
+    owned, modes = log_prefix(value) + "/", {}
+    for item in value["instances"]:
+        groups = item.get("existing_log_groups", [])
+        names = [group["name"] for group in groups]
+        if not item["log_groups"] and not names:
+            raise ValueError("Every instance needs log_groups or existing_log_groups")
+        if len(set(names)) != len(names) or any(
+            name.startswith(owned) or name.endswith("/") for name in names
+        ):
+            raise ValueError(
+                "Invalid existing_log_groups: unique names outside Kira's own log prefix required"
+            )
+        for group in groups:
+            modes.setdefault(group["name"], []).append(group.get("streams", "instance"))
+    if any("all" in seen and len(seen) > 1 for seen in modes.values()):
+        raise ValueError("An existing log group read with streams=all can belong to one instance only")
     account = value["account_id"]
     for field in ("ui_principal_arn", "ci_principal_arn", "deployment_role_arn"):
         if f":{account}:role/" not in value[field]:
@@ -242,6 +258,22 @@ def log_groups(spec):
             for suffix in set(item["log_groups"])
             | ({"nginx-access", "nginx-error"} if item["nginx_alarm"] else set())
         }
+    )
+
+
+def existing_log_groups(spec):
+    """{instance ID: {group: "instance" or "all"}} for groups Kira reads and never creates."""
+    return {
+        item["id"]: {g["name"]: g.get("streams", "instance") for g in item["existing_log_groups"]}
+        for item in spec["instances"]
+        if item.get("existing_log_groups")
+    }
+
+
+def readable_log_groups(spec):
+    """Every group the log tool may query: the ones Kira creates plus the existing ones."""
+    return sorted(
+        set(log_groups(spec)) | {g for groups in existing_log_groups(spec).values() for g in groups}
     )
 
 

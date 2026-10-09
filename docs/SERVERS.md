@@ -20,13 +20,16 @@ Everything below is derived from the instance entries in `deployment.json`.
 | --- | --- |
 | `id` | An EC2 instance that is not terminated. The generated log stream name is the instance ID |
 | `log_groups` (names such as `application`) | A log group `/PROJECT/ENVIRONMENT/INSTANCE_ID/NAME`. If `log_segment` is set, it comes before the instance ID |
+| `existing_log_groups` (optional) | Log groups that already exist in the monitor region. Kira only reads them (see below) |
 | `nginx_alarm: true` | Log groups `.../nginx-access` and `.../nginx-error`, plus the Nginx metrics below |
 | `resource_alarms: true` | CPU, memory and disk metrics for alarms |
 | `disk_path` | The disk metric with this `path` dimension (for example `/`) |
 | `process_exe` | A process-count metric for this executable (for example `nginx`) |
 | `observability` (optional) | The heartbeat file, shipped to a dedicated heartbeat log group |
 
-Log retention is `log_retention_days`. Kira creates the log groups. Your agent writes into them.
+Log retention is `log_retention_days`. Kira creates the groups named in `log_groups` and your agent
+writes into them. Groups you list in `existing_log_groups` are yours: Kira never creates, tags or
+changes them.
 
 ## Step 1: install the CloudWatch agent
 
@@ -50,6 +53,40 @@ The generated configuration publishes, every 60 seconds, to the `CWAgent` namesp
 It does not collect your application logs. Add a `collect_list` entry for each name in
 `log_groups`, using the group name from the table above and the instance ID as the stream name.
 Check that file permissions let the agent read each file.
+
+## Use log groups that already exist
+
+If your application already writes to CloudWatch (a Docker `awslogs` group, an application group
+from another tool, a group your own agent file fills), list it instead of moving the logs. Add
+`existing_log_groups` to the instance in `deployment.json`:
+
+```json
+"existing_log_groups": [
+  {"name": "/myapp/prod/web"},
+  {"name": "/myapp/prod/worker", "streams": "all"}
+]
+```
+
+- **Names.** Use the exact group name, up to 8 per instance, in the monitor region and the same
+  account. Wildcards and prefixes are not supported. A name under Kira's own log prefix is
+  rejected. `log_groups` may then be empty, but an instance needs at least one group of either kind.
+- **Read only.** Kira's stack does not create, tag, set retention on or delete these groups. The
+  log tool gets read access to each one, and nothing else changes.
+- **`streams`.** The default, `instance`, reads only streams named after the instance ID. That is
+  the CloudWatch agent default (`log_stream_name` of `{instance_id}`), so one group can serve
+  many instances and each one sees only its own lines. If the streams have other names (Docker
+  uses container IDs), set `streams` to `all`. The group is then read whole, so it may belong to
+  one instance only. The same group under `all` for two instances is rejected, because one
+  instance could then read the other's logs.
+- **Check.** The coverage check stops with "Existing log group not found" if a group is missing.
+- **Not covered.** Nginx metric filters and the heartbeat stay on Kira's own groups. Groups in
+  another account or region are not supported. Not verified: whether a KMS-encrypted group
+  needs extra key permissions for the log tool role. Test one before you rely on it.
+
+Chat finds these groups the same way as the others: asking for an instance's log groups lists
+the existing ones after Kira's own, and a search is accepted only for the instance that lists
+the group. To use the groups in the local chat mode, `scripts/make_local_tools.py` copies them
+into the local tools file.
 
 ## Step 2: Nginx logging (if `nginx_alarm` is true)
 
@@ -106,7 +143,8 @@ VPC-only endpoints are not supported. Do not expose a private service just to sa
 ## Check that telemetry is flowing
 
 1. In the CloudWatch console, open each log group. Each instance should have a stream named after
-   it with recent events, and a one-line-per-minute heartbeat stream.
+   it with recent events, and a one-line-per-minute heartbeat stream. For an existing group with
+   `streams` set to `instance`, look for a stream named after the instance.
 2. Open the `CWAgent` metrics. For each instance you should see `mem_used_percent`
    (`InstanceId`), `disk_used_percent` (`InstanceId` and `path`) and
    `procstat_lookup_pid_count` (`InstanceId`, `exe` and `pid_finder`). Kira needs these exact

@@ -6,7 +6,7 @@ import zipfile
 from datetime import datetime, timezone
 
 from infra import templates
-from infra.spec import ROOT, digest, log_groups, metric_catalog
+from infra.spec import ROOT, digest, existing_log_groups, log_groups, metric_catalog
 from infra.verify import VerificationError
 
 SEALED_POLICY = {"Statement": [{"Effect": "Deny", "Action": "Update:*", "Principal": "*", "Resource": "*"}]}
@@ -48,6 +48,11 @@ def checked_build(directory, spec):
                 raise VerificationError("Packaged metric catalog differs from deployment inventory")
             if json.loads(archive.read("config/log-scope.json")) != log_groups(spec):
                 raise VerificationError("Packaged log scope differs from deployment inventory")
+            existing = existing_log_groups(spec)
+            if ("config/existing-log-groups.json" in archive.namelist()) != bool(existing) or (
+                existing and json.loads(archive.read("config/existing-log-groups.json")) != existing
+            ):
+                raise VerificationError("Packaged existing log groups differ from deployment inventory")
             for filename, expected in item["source_files"].items():
                 if hashlib.sha256(archive.read(filename)).hexdigest() != expected:
                     raise VerificationError("Packaged source differs from build manifest")

@@ -16,7 +16,7 @@ import re
 import secrets
 import tempfile
 import threading
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -26,6 +26,7 @@ from kira.metrics import validate_catalog
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS = ("fetch_logs", "fetch_metrics")
 FIELDS = {"version", "monitor_region", "log_prefix", "instances", "log_groups", "metric_catalog"}
+OPTIONAL = {"existing_log_groups"}
 PREFIX = re.compile(r"/[A-Za-z0-9_-]{1,64}(?:/[A-Za-z0-9_-]{1,64}){0,3}")
 GROUP = re.compile(r"[A-Za-z0-9_\-./#]{1,512}")  # fetch_logs' own pattern and CloudWatch's length limit
 FUNCTION = re.compile(
@@ -44,8 +45,8 @@ def parse(value):
     """Strict validation. Messages name fields only, never submitted values."""
     if not isinstance(value, dict):
         raise ValueError("Local tools file must contain a JSON object.")
-    if value.keys() - FIELDS:
-        raise ValueError(f"Unknown field(s): {', '.join(sorted(value.keys() - FIELDS))}.")
+    if value.keys() - FIELDS - OPTIONAL:
+        raise ValueError(f"Unknown field(s): {', '.join(sorted(value.keys() - FIELDS - OPTIONAL))}.")
     if FIELDS - value.keys():
         raise ValueError(f"Missing field(s): {', '.join(sorted(FIELDS - value.keys()))}.")
     if type(value["version"]) is not int or value["version"] != 1:
@@ -64,9 +65,10 @@ def parse(value):
     ):
         raise ValueError("Invalid instances: 1-100 unique EC2 instance IDs are required.")
     owned = tuple(f"{prefix}/{item}/" for item in instances)
+    existing = _existing(value.get("existing_log_groups", {}), instances, prefix)
     if (
         not isinstance(groups, list)
-        or not 1 <= len(groups) <= MAX_GROUPS
+        or not (1 if not existing else 0) <= len(groups) <= MAX_GROUPS
         or any(not isinstance(g, str) or not GROUP.fullmatch(g) or g.endswith("/") for g in groups)
         or len(set(groups)) != len(groups)
         or any(not g.startswith(owned) for g in groups)
@@ -80,7 +82,33 @@ def parse(value):
         raise ValueError("Invalid metric_catalog: a descriptor belongs to an instance that is not listed.")
     if len(json.dumps(catalog)) > MAX_CATALOG_BYTES:
         raise ValueError("Invalid metric_catalog: too large.")
-    return LocalConfig(region, prefix, list(instances), list(groups), catalog)
+    return LocalConfig(region, prefix, list(instances), list(groups), catalog, existing)
+
+
+def _existing(value, instances, prefix):
+    """{instance: {group: "instance" | "all"}}: groups that already exist, read but never created."""
+    bad = ValueError(
+        "Invalid existing_log_groups: listed instances, valid names outside log_prefix, one reader per streams=all group."
+    )
+    if not isinstance(value, dict) or any(key not in instances for key in value):
+        raise bad
+    seen = {}
+    for groups in value.values():
+        if not isinstance(groups, dict) or not groups or len(groups) > 8:
+            raise bad
+        for name, mode in groups.items():
+            if (
+                not isinstance(name, str)
+                or not GROUP.fullmatch(name)
+                or name.endswith("/")
+                or name.startswith(f"{prefix}/")
+                or mode not in ("instance", "all")
+            ):
+                raise bad
+            seen.setdefault(name, []).append(mode)
+    if any("all" in modes and len(modes) > 1 for modes in seen.values()):
+        raise bad
+    return {key: dict(groups) for key, groups in value.items()}
 
 
 def load(path):
@@ -130,6 +158,7 @@ class LocalConfig:
     instances: list
     log_groups: list
     metric_catalog: list
+    existing: dict = field(default_factory=dict)
 
     @property
     def fingerprint(self):
@@ -198,6 +227,9 @@ class LocalLambdaClient:
         self.env = {
             "ALLOWED_INSTANCE_IDS": ",".join(config.instances),
             "LOG_SCOPE_FILE": self._write("log-scope.json", sorted(config.log_groups)),
+            "EXISTING_LOG_GROUPS_FILE": self._write("existing-log-groups.json", config.existing)
+            if config.existing
+            else "",  # an empty value also hides one set in the host environment
             "METRIC_CATALOG_FILE": self._write("metric-catalog.json", config.metric_catalog),
         }
         self._secret = secrets.token_urlsafe(48)  # discovery cursors; there is no Secrets Manager locally

@@ -17,7 +17,7 @@ from kira import local_tools  # noqa: E402
 
 
 def build(spec):
-    return {
+    value = {
         "version": 1,
         "monitor_region": spec["monitor_region"],
         "log_prefix": deployment.log_prefix(spec),
@@ -25,6 +25,9 @@ def build(spec):
         "log_groups": deployment.log_groups(spec),
         "metric_catalog": deployment.metric_catalog(spec),
     }
+    if deployment.existing_log_groups(spec):
+        value["existing_log_groups"] = deployment.existing_log_groups(spec)
+    return value
 
 
 def write(path, value, force=False):

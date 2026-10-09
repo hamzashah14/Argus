@@ -29,7 +29,15 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def build(functions, output, catalog_path, wheelhouse, log_scope_path=None, architecture="x86_64"):
+def build(
+    functions,
+    output,
+    catalog_path,
+    wheelhouse,
+    log_scope_path=None,
+    architecture="x86_64",
+    existing_path=None,
+):
     if sys.version_info[:2] != (3, 12):
         raise SystemExit("Lambda builds require Python 3.12.")
     if architecture not in {"x86_64", "arm64"}:
@@ -85,6 +93,10 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None, arch
         ):
             raise ValueError("Log scope must be an explicit list of log group names")
         entries["config/log-scope.json"] = json.dumps(sorted(set(scope)), separators=(",", ":")).encode()
+        if existing_path:
+            entries["config/existing-log-groups.json"] = json.dumps(
+                json.loads(existing_path.read_text()), sort_keys=True, separators=(",", ":")
+            ).encode()
         entries["requirements/lambda.lock"] = lock.read_bytes()
         for filename in (
             "agent-instruction.txt",
@@ -124,6 +136,7 @@ def build(functions, output, catalog_path, wheelhouse, log_scope_path=None, arch
                         "lambda_function.py",
                         "config/metric-catalog.json",
                         "config/log-scope.json",
+                        "config/existing-log-groups.json",
                         "agent-instruction.txt",
                         "schemas/fetch_logs.json",
                         "schemas/fetch_metrics.json",

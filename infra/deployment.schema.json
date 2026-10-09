@@ -192,12 +192,36 @@
           },
           "log_groups": {
             "type": "array",
-            "minItems": 1,
+            "minItems": 0,
             "maxItems": 8,
             "uniqueItems": true,
             "items": {
               "type": "string",
               "pattern": "^[A-Za-z0-9_-]{1,40}$"
+            }
+          },
+          "existing_log_groups": {
+            "description": "Log groups that already exist. Kira reads them and never creates or changes them.",
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_./#-]{1,512}$"
+                },
+                "streams": {
+                  "enum": [
+                    "instance",
+                    "all"
+                  ]
+                }
+              }
             }
           },
           "disk_path": {
