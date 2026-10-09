@@ -91,6 +91,30 @@ before it is published.
    receipt and an inbox check exist. To retest, invoke the pinned canary function once under your operator role. It
    never starts model work.
 
+## Repeated and overlapping alarms
+
+One failure often trips several alarms (CPU, nginx errors and the process count) and a flapping alarm can fire again
+and again. Without a guard, every alarm would start its own investigation and send two emails. Kira keeps **one open
+incident per instance**:
+
+- The first alarm for an instance opens an incident, investigates it and starts a window of
+  `incident_cooldown_minutes` (default 15, set in `runtime.json`, 0 turns it off, maximum 120).
+- Any other alarm for that instance inside the window is stored with its original event and counted on the open
+  incident (`suppressed_alarms` on the incident status page). It starts no investigation and sends no email. The
+  window does not extend, so a long outage opens a new incident every 15 minutes at most.
+- If observers are on, the OK transition of a folded alarm still links to the open incident.
+- Never folded: an EC2 `stopped` or `terminated` event always opens its own incident. Only alarms are folded.
+- A true duplicate of a message (SNS or SQS delivering twice) is dropped, as before, and is not counted.
+
+The trade-off is that a different failure on the same instance inside the window is not investigated on its own.
+The investigation looks at the time around the first alarm and runs soon after it, so it does not cover a failure
+that starts later in the window. Check the incident's `suppressed_alarms` count if you suspect a second cause, and ask
+in chat about the instance. Set 0 if you
+would rather have every alarm investigated and pay for it. A planned stop and start of an instance still opens an
+incident for the stop: pause model work first if that matters (see Maintenance below).
+
+The `Suppressed` metric in the Pipeline namespace counts folded alarms. Not tried on real AWS.
+
 ## Check pipeline health
 
 - **Dashboard.** With observations deployed, the CloudWatch dashboard `<project>-<environment>-operations` shows
@@ -376,6 +400,8 @@ release. Roll back by promoting a previously qualified, compatible release throu
 - Not rehearsed on real AWS. Local fakes do not prove IAM, quota, delivery or recovery behavior.
 - Log queries are bounded in count, bytes and time, but CloudWatch Logs Insights has no billed-byte cap, so this is not
   a hard dollar limit. Token reservations are never refunded, and observed usage is a lower bound if a response is lost.
+- Folding repeated alarms (`incident_cooldown_minutes`) is per instance, not per alarm: a second, unrelated failure
+  inside the window shares the first incident. It is local-tested only.
 - Each runtime target you offer needs its own qualification. Linux collector checks do not prove Windows telemetry.
   Private-only endpoints and automatic fleet discovery are unsupported. A scaled fleet needs an inventory refresh
   and a new release ([DEPLOY.md](DEPLOY.md#39-watch-more-servers-or-change-anything-else-later)).

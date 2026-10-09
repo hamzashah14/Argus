@@ -417,6 +417,11 @@ def runtime(spec, config, artifacts, foundation_outputs, *, owned_bindings):
                 **common,
                 "ALARMS_TOPIC_ARN": topic_arn(spec, "alarms"),
                 "ALARM_NAME_PREFIX": prefix(spec) + "-",
+                **(
+                    {"INCIDENT_COOLDOWN_MINUTES": str(config["incident_cooldown_minutes"])}
+                    if "incident_cooldown_minutes" in config
+                    else {}
+                ),
             },
             [table_read, table_write, sqs_receive("Ingress")],
             60,

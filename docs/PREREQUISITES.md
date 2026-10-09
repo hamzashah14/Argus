@@ -372,6 +372,7 @@ can be at most 2500 bytes.
 | `status_base_url` | yes | `https://` host with an optional path of letters, digits, `/`, `_`, `-`. No query, no credentials. Alert emails link to it |
 | `fallback_email` | no | A valid address with no comma. If you omit it, the fallback topics use the same addresses as the reports |
 | `retention_days` | yes | Integer, 7 to 365 |
+| `incident_cooldown_minutes` | no | Whole number, 0 to 120. Default 15 when omitted. Later alarms for an instance with an open incident inside this window are stored and counted, not investigated. 0 turns it off |
 | `initial_reserved_concurrency` | yes | Integer, 2 to 1000 |
 | `investigation_paused` | yes | Boolean. Must be `true` for the first deployment |
 | `runtime_target` | yes | `standalone` or `agentcore` |

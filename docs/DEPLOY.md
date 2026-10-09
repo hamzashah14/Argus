@@ -176,6 +176,7 @@ and configuring agents stays your job.
 | --- | --- |
 | Alerts | `status_base_url`: a fixed `https://` URL. `fallback_email` (optional): one address for the two fallback topics, which carry alarms about Kira's own pipeline. Omit it and those topics use the same addresses as the reports |
 | Retention and capacity | `retention_days`: 7 to 365. `initial_reserved_concurrency`: 2 to 1000 (capacity kept for initial notifications) |
+| Repeated alarms | `incident_cooldown_minutes` (optional): 0 to 120, default 15. One open incident per instance: later alarms inside the window are stored and counted on it, with no new investigation or email. 0 investigates every alarm ([OPERATE.md](OPERATE.md#repeated-and-overlapping-alarms)) |
 | Model pause | `investigation_paused`: must be `true`. The tool rejects `false`: "Initial deployment must keep investigation_paused true; activation is a separate qualified release" |
 | Runtime | `runtime_target`: `standalone` (default) or `agentcore` (section 9) |
 | `runtime_limits` | All eight fields are required. Each is at least 1 and at most: `tokens_reserved` 100000, `model_steps` 16, `tool_calls` 16, `log_queries` 48, `output_tokens` 4096, `window_minutes` 30 (minutes on each side of the incident time), `context_bytes` 64000, `tool_bytes` 20000. `output_tokens` must be below `tokens_reserved`. The example uses 32000, 8, 8, 24, 1024, 15, 48000 and 20000 |

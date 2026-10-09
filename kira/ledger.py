@@ -50,10 +50,27 @@ class Ledger:
     def get(self, pk, sk="META"):
         return self.table.get_item(Key={"PK": pk, "SK": sk}, ConsistentRead=True).get("Item")
 
-    def accept(self, event, retention_days):
+    def accept(self, event, retention_days, cooldown_minutes=0):
+        """Store one source event: ACCEPTED, NON_ACTIONABLE, SUPPRESSED (see cooldown) or DUPLICATE."""
+        for attempt in range(3):
+            try:
+                return self._accept(event, retention_days, cooldown_minutes)
+            except ClientError as exc:
+                if not conditional(exc):
+                    raise
+                if self.get(f"EVENT#{event['event_id']}"):
+                    return "DUPLICATE"
+                if attempt == 2:
+                    raise
+                # Another writer changed the cooldown marker or alarm state after we read it: decide again.
+
+    def _accept(self, event, retention_days, cooldown_minutes):
         event.update(safety.bounded(event))
+        for derived in ("out_of_order", "related_incident_id"):  # decided below, again on every retry
+            event.pop(derived, None)
         eid, iid = event["event_id"], event["incident_id"]
-        expires = int(time.time()) + retention_days * 86400
+        now_epoch = int(time.time())
+        expires = now_epoch + retention_days * 86400
         previous, alarm_pk, recovery = None, None, None
         if event.get("track_recovery"):
             alarm_pk = "ALARM#" + hashlib.sha256(event["native_id"].encode()).hexdigest()
@@ -74,6 +91,15 @@ class Ledger:
                     event["related_incident_id"] = recovery
                 else:
                     recovery = None
+        # One open incident per instance: while it is inside its cooldown, a later alarm is stored and
+        # counted on that incident but starts no investigation and sends no email.
+        marker_pk, parent, new_marker = f"COOLDOWN#{event['instance_id']}", None, False
+        if cooldown_minutes and event["actionable"] and event.get("investigate", True):
+            marker = self.get(marker_pk)
+            if marker and int(marker["until_epoch"]) > now_epoch:
+                parent = marker["incident_id"] if event["kind"] == "alarm" else None
+            else:
+                new_marker = True
         event_row = {
             "PK": f"EVENT#{eid}",
             "SK": "META",
@@ -82,6 +108,7 @@ class Ledger:
             "incident_id": iid,
             "event": event,
             "ttl": expires,
+            **({"suppressed_by": parent} if parent else {}),
         }
         records = [
             {
@@ -92,7 +119,27 @@ class Ledger:
                 }
             }
         ]
-        if event["actionable"]:
+        if parent:
+            records += [
+                {
+                    "ConditionCheck": {
+                        "TableName": self.name,
+                        "Key": item({"PK": marker_pk, "SK": "META"}),
+                        "ConditionExpression": "incident_id=:parent AND until_epoch>:now",
+                        "ExpressionAttributeValues": item({":parent": parent, ":now": now_epoch}),
+                    }
+                },
+                {
+                    "Update": {
+                        "TableName": self.name,
+                        "Key": item({"PK": f"INCIDENT#{parent}", "SK": "META"}),
+                        "UpdateExpression": "ADD suppressed_alarms :one",
+                        "ConditionExpression": "attribute_exists(PK)",
+                        "ExpressionAttributeValues": item({":one": 1}),
+                    }
+                },
+            ]
+        elif event["actionable"]:
             deadline = (
                 int(datetime.fromisoformat(event["received_at"].replace("Z", "+00:00")).timestamp()) + 600
             )
@@ -168,6 +215,26 @@ class Ledger:
                     }
                 }
             )
+            if new_marker:
+                records.append(
+                    {
+                        "Put": {
+                            "TableName": self.name,
+                            "Item": item(
+                                {
+                                    "PK": marker_pk,
+                                    "SK": "META",
+                                    "record_type": "cooldown",
+                                    "incident_id": iid,
+                                    "until_epoch": now_epoch + cooldown_minutes * 60,
+                                    "ttl": expires,
+                                }
+                            ),
+                            "ConditionExpression": "attribute_not_exists(PK) OR until_epoch<=:now",
+                            "ExpressionAttributeValues": item({":now": now_epoch}),
+                        }
+                    }
+                )
         if alarm_pk and not event.get("out_of_order"):
             state = {
                 "PK": alarm_pk,
@@ -178,7 +245,7 @@ class Ledger:
                 "event_id": eid,
                 "state": event["state"],
             }
-            last = iid if event["actionable"] else (previous or {}).get("last_incident_id")
+            last = (parent or iid) if event["actionable"] else (previous or {}).get("last_incident_id")
             if last:
                 state["last_incident_id"] = last
             put = {
@@ -204,12 +271,9 @@ class Ledger:
                         }
                     }
                 )
-        try:
-            self.client.transact_write_items(TransactItems=records)
-        except ClientError as exc:
-            if conditional(exc) and self.get(f"EVENT#{eid}"):
-                return "DUPLICATE"
-            raise
+        self.client.transact_write_items(TransactItems=records)
+        if parent:
+            return "SUPPRESSED"
         return "ACCEPTED" if event["actionable"] else "NON_ACTIONABLE"
 
     @staticmethod

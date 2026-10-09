@@ -81,13 +81,13 @@ def ingest(event, context=None):
             # Poison payload remains in the queue until its redrive DLQ. It is never
             # logged or silently acknowledged as an accepted incident.
             raise
-        result = store.accept(source, retention)
+        result = store.accept(source, retention, int(os.getenv("INCIDENT_COOLDOWN_MINUTES", "15")))
         emit(
             "ingress",
             result,
             incident_id=source["incident_id"],
             metrics={
-                "Duplicate" if result == "DUPLICATE" else "Accepted": 1,
+                {"DUPLICATE": "Duplicate", "SUPPRESSED": "Suppressed"}.get(result, "Accepted"): 1,
                 "QueueDelaySeconds": max(0, time.time() - parse_utc(source["received_at"]).timestamp()),
             },
         )

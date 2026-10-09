@@ -41,6 +41,7 @@ def load(incident_id, *, allowed=None):
             "received_at",
             "status",
             "attempts",
+            "suppressed_alarms",
             "recovered_at",
             "recovery_event_id",
         )

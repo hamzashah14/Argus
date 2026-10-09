@@ -32,7 +32,7 @@ def load_config(path, spec):
     }
     if {"identity", "security"} & set(value):
         raise VerificationError(TEAM_SIGNIN_CHANGED)
-    if set(value) - {"fallback_email"} != expected:
+    if set(value) - {"fallback_email", "incident_cooldown_minutes"} != expected:
         raise ValueError(
             "Durable configuration requires status URL, retention, initial capacity and model pause"
         )
@@ -58,6 +58,9 @@ def load_config(path, spec):
     ):
         raise ValueError("Select standalone or agentcore with explicit runtime limits")
     Limits(**value["runtime_limits"])
+    cooldown = value.get("incident_cooldown_minutes", 15)
+    if type(cooldown) is not int or not 0 <= cooldown <= 120:
+        raise ValueError("incident_cooldown_minutes must be a whole number of minutes from 0 to 120")
     return value
 
 

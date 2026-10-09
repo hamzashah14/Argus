@@ -23,6 +23,7 @@ def correlate(incident_id, fence):
 METRICS = {
     "Accepted",
     "Duplicate",
+    "Suppressed",
     "Failure",
     "QueueDelaySeconds",
     "Attempt",
