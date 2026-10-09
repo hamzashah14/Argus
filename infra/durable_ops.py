@@ -3,6 +3,7 @@
 import argparse
 import base64
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -373,12 +374,35 @@ def retire(bundle, receipt, reviewed):
     )
 
 
+def verify_ui_role(bundle, factory):
+    """Check the actual post-promotion workload role, including trust and extra grants."""
+    spec = bundle["spec"]
+    _, stack = owned_stack(spec, "routing", factory=factory)
+    outputs = {i["OutputKey"]: i["OutputValue"] for i in stack.get("Outputs", [])}
+    arn = outputs.get("UiRoleArn", "")
+    if not re.fullmatch(
+        rf"arn:aws:iam::{spec['account_id']}:role/{re.escape(spec['project'])}/{spec['environment']}/[A-Za-z0-9+=,.@_-]+",
+        arn,
+    ):
+        raise VerificationError("UI workload role ownership drifted")
+    planned = durable_templates.active_routing(
+        spec,
+        bundle["bindings"]["foundation"],
+        bundle["bindings"]["versions"],
+        bundle["config"]["investigation_paused"],
+        config=bundle["config"],
+        owned_bindings=bundle["bindings"],
+    )["Resources"]["UiRole"]["Properties"]
+    client = factory("iam", spec["monitor_region"])
+    if client.get_role(RoleName=arn.rsplit("/", 1)[-1])["Role"].get("Arn") != arn:
+        raise VerificationError("UI workload role ARN differs from routing output")
+    owned_ops.verify_role(client, arn, planned)
+
+
 def verify_routing(bundle):
     spec = bundle["spec"]
     assert_account(clients("sts", spec["monitor_region"]), spec)
     owned_stack(spec, "routing")
-    from infra.identity import verify_ui_role
-
     verify_ui_role(bundle, clients)
     outputs = verify_capture(bundle)
     versions = bundle["bindings"]["versions"]

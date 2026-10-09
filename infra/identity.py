@@ -174,33 +174,6 @@ def permissions(spec, bindings, *, issuer=False, purpose=None):
     ]
 
 
-def verify_ui_role(bundle, factory):
-    """Check the actual post-promotion workload role, including trust and extra grants."""
-    from infra import durable_ops, durable_templates, owned_ops
-
-    spec = bundle["spec"]
-    _, stack = durable_ops.owned_stack(spec, "routing", factory=factory)
-    outputs = {i["OutputKey"]: i["OutputValue"] for i in stack.get("Outputs", [])}
-    arn = outputs.get("UiRoleArn", "")
-    if not re.fullmatch(
-        rf"arn:aws:iam::{spec['account_id']}:role/{re.escape(spec['project'])}/{spec['environment']}/[A-Za-z0-9+=,.@_-]+",
-        arn,
-    ):
-        raise VerificationError("UI workload role ownership drifted")
-    planned = durable_templates.active_routing(
-        spec,
-        bundle["bindings"]["foundation"],
-        bundle["bindings"]["versions"],
-        bundle["config"]["investigation_paused"],
-        config=bundle["config"],
-        owned_bindings=bundle["bindings"],
-    )["Resources"]["UiRole"]["Properties"]
-    client = factory("iam", spec["monitor_region"])
-    if client.get_role(RoleName=arn.rsplit("/", 1)[-1])["Role"].get("Arn") != arn:
-        raise VerificationError("UI workload role ARN differs from routing output")
-    owned_ops.verify_role(client, arn, planned)
-
-
 def verify_foundations(bundle, factory, *, require_label=True):
     """Verify actual storage settings and exact secret ownership without reading key bytes."""
     spec = bundle["spec"]

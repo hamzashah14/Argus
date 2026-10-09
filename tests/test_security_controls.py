@@ -16,14 +16,35 @@ from botocore.exceptions import ClientError
 
 from infra import chat as chat_infra
 from infra import durable_templates, owned_runtime, security_ops
+from infra import identity as identity_infra
 from infra.verify import VerificationError
 from kira import chat_gateway, diagnosis, execution, identity, runtime, safety, work_policy
 from kira.quotas import Quotas
 from scripts.dev import evaluate_diagnostics
-from tests.test_identity import ACTOR, IID, RELEASE
+from tests.test_identity import ACTOR, RELEASE
 from tests.test_identity import setup as identity_fixture
-from tests.test_identity_wiring import BASE, CONFIG, SPEC, bindings
+from tests.test_owned_runtime import BASE, SPEC, bindings
 from tests.test_runtime import answer, drive
+
+IID = "i-0123456789abcdef0"
+# Identity-mode shims for the identity tests that Task 7 deletes together with these lines.
+CONFIG = {**BASE, "identity": {"issuer": "https://identity.example.invalid", "audience": "customer-ui"}}
+SECRET = {
+    "SigningSecretArn": f"arn:aws:secretsmanager:{SPEC['bedrock_region']}:{SPEC['account_id']}:secret:{identity_infra.secret_name(SPEC)}-123abc",
+    "SigningSecretVersion": "a" * 32,
+}
+
+
+def identity_bindings(spec=SPEC, target="standalone"):
+    data = bindings(spec, target)
+    data["identity"] = {
+        **SECRET,
+        "SigningSecretArn": SECRET["SigningSecretArn"].replace(
+            SPEC["bedrock_region"], spec["bedrock_region"]
+        ),
+    }
+    chat_infra.fixture_bindings(spec, data)
+    return data
 
 
 @pytest.fixture
@@ -269,7 +290,7 @@ def test_key_rotation_and_grant_epoch_disable_old_sessions(setup, monkeypatch):
 @pytest.mark.parametrize("target", ["standalone", "agentcore"])
 def test_chat_ui_and_automatic_capacity_and_iam_are_independent(target):
     cfg = {**CONFIG, "runtime_target": target}
-    data = bindings(target=target)
+    data = identity_bindings(target=target)
     artifact = {"bucket": "synthetic", "key": "fixture.zip", "version_id": "synthetic", "sha256": "a" * 64}
     t = chat_infra.runtime(SPEC, cfg, data, artifact)
     assert t["Resources"]["Chat"]["Properties"]["ReservedConcurrentExecutions"] == 1
@@ -650,7 +671,7 @@ def test_notification_replay_and_status_access_refuse_erased_incident(monkeypatc
 def test_access_review_paginates_only_grants_and_requires_human_attestation(monkeypatch):
     from infra.identity_ops import pack
 
-    bundle = {"spec": {**SPEC, "reference_only": False}, "config": CONFIG, "bindings": bindings()}
+    bundle = {"spec": {**SPEC, "reference_only": False}, "config": CONFIG, "bindings": identity_bindings()}
     expected = [
         SPEC["environment"],
         SPEC["account_id"],
@@ -962,7 +983,7 @@ def canary_bundle(config):
     return {
         "spec": SPEC,
         "config": {**config, "runtime_target": "standalone"},
-        "bindings": bindings(),
+        "bindings": identity_bindings(),
         "review_hash": "r" * 64,
     }
 

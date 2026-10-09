@@ -18,6 +18,13 @@ from kira.governance import Erasure
 from kira.ledger import DATABASE_CONFIG
 
 
+def guard(bundle):
+    """Reject synthetic bundles and unverified bindings before any private operation."""
+    if bundle["spec"]["reference_only"]:
+        raise VerificationError("Private operations require a customer bundle, not a synthetic reference")
+    owned_runtime.validate_bindings(bundle["spec"], bundle["config"], bundle["bindings"])
+
+
 def access_review(bundle, factory=clients):
     identity_ops.guard(bundle)  # Grants exist only in the optional identity module.
     spec = bundle["spec"]
@@ -66,7 +73,7 @@ def access_review(bundle, factory=clients):
 
 def recipient_plan(bundle, factory=clients):
     """Inspect only subscriptions owned by this customer's declared CF stacks."""
-    identity_ops.guard(bundle, need_identity=False)
+    guard(bundle)
     spec = bundle["spec"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     desired = {
@@ -108,7 +115,7 @@ def recipient_plan(bundle, factory=clients):
 
 
 def retire_recipients(bundle, reviewed, factory=clients):
-    identity_ops.guard(bundle, need_identity=False)
+    guard(bundle)
     durable_ops.require_reviewed_source(bundle)
     if recipient_plan(bundle, factory) != reviewed:
         raise VerificationError("Recipient diff changed; review again")
@@ -130,7 +137,7 @@ def retire_recipients(bundle, reviewed, factory=clients):
 
 
 def erasure(bundle, factory=clients):
-    identity_ops.guard(bundle, need_identity=False)
+    guard(bundle)
     spec, foundation = bundle["spec"], bundle["bindings"]["foundation"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     table = boto3.resource("dynamodb", region_name=spec["monitor_region"], config=DATABASE_CONFIG).Table(

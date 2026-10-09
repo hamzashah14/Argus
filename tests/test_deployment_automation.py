@@ -1585,7 +1585,7 @@ def test_every_other_subscription_mismatch_still_fails_closed(tmp_path, monkeypa
 def test_routing_verification_waits_only_after_every_other_check_passed(tmp_path, monkeypatch):
     from collections import defaultdict
 
-    from infra import durable_ops, identity
+    from infra import durable_ops
 
     spec = {**configuration(tmp_path)["spec"], "reference_only": False}
     queues = {key: "arn:aws:sqs:eu-central-1:123456789012:q" for key in ("Ingress", "Dispatch", "Work")}
@@ -1603,7 +1603,7 @@ def test_routing_verification_waits_only_after_every_other_check_passed(tmp_path
         "routing_health": Mock(side_effect=PendingConfirmation(["notification_email"])),
     }.items():
         monkeypatch.setattr(durable_ops, name_, value)
-    monkeypatch.setattr(identity, "verify_ui_role", Mock())
+    monkeypatch.setattr(durable_ops, "verify_ui_role", Mock())
     monkeypatch.setattr(
         durable_ops.durable_templates,
         "active_routing",
