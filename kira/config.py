@@ -28,6 +28,7 @@ class AppConfig:
     agentcore_endpoint: str = ""
     chat_arn: str = ""
     model_api: str = ""
+    local_tools: str = ""
 
     @classmethod
     def from_env(cls):
@@ -47,6 +48,7 @@ class AppConfig:
             os.getenv("AGENTCORE_ENDPOINT", ""),
             os.getenv("CHAT_FUNCTION_ARN", ""),
             os.getenv("MODEL_API", ""),
+            os.getenv("KIRA_LOCAL_TOOLS", "").strip(),
         )
 
     def problems(self):
@@ -62,16 +64,20 @@ class AppConfig:
                 r"[0-9]{12}", self.account_id
             ):
                 problems.append("Set the intended Bedrock model and AWS account.")
-            if not re.fullmatch(r"[0-9a-f]{64}", self.runtime_release):
+            if not self.local_tools and not re.fullmatch(r"[0-9a-f]{64}", self.runtime_release):
                 problems.append("Set the verified RUNTIME_RELEASE fingerprint.")
             try:
                 from kira.runtime import Limits
 
                 Limits(**json.loads(self.runtime_limits))
                 ids = self.allowed_ids.split(",")
-                if not ids or len(ids) > 100 or any(not INSTANCE.fullmatch(i) for i in ids):
+                if not self.local_tools and (
+                    not ids or len(ids) > 100 or any(not INSTANCE.fullmatch(i) for i in ids)
+                ):
                     raise ValueError("Invalid inventory")
-                if identity.required():
+                if self.local_tools:
+                    pass  # The inventory and tools come from the local tools file, checked below.
+                elif identity.required():
                     if not re.fullmatch(
                         rf"arn:aws:lambda:{re.escape(os.getenv('MONITOR_REGION', self.region))}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",
                         self.chat_arn,
@@ -90,6 +96,10 @@ class AppConfig:
                     validate_target(self.agentcore_arn, self.agentcore_endpoint, self.region, self.account_id)
             except (ValueError, TypeError):
                 problems.append("Set validated runtime limits, inventory and qualified execution bindings.")
+        if self.local_tools:
+            from kira import local_tools
+
+            problems.extend(local_tools.problems(self))
         # A forgotten KIRA_AUTH_MODE must not silently turn an identity deployment into password-only chat.
         if not identity.required() and (self.chat_arn or os.getenv("KIRA_SESSION_TABLE")):
             problems.append("Set KIRA_AUTH_MODE=oidc, or remove CHAT_FUNCTION_ARN and KIRA_SESSION_TABLE.")

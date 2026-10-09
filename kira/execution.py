@@ -22,7 +22,18 @@ def limits():
     return Limits(**json.loads(required("RUNTIME_LIMITS")))
 
 
-def tools(policy, reserve, instance=None, anchor=None, allowed=None, access_guard=None):
+def tools(policy, reserve, instance=None, anchor=None, allowed=None, access_guard=None, local=None):
+    # Development only: this process runs the tool handlers with the caller's AWS credentials.
+    if local is not None:
+        return local.tools(
+            required("BEDROCK_REGION"),
+            required("EXPECTED_ACCOUNT_ID"),
+            {instance} if instance else (allowed if allowed is not None else set(local.instances)),
+            policy,
+            reserve,
+            anchor,
+            access_guard,
+        )
     return LambdaTools(
         required("BEDROCK_REGION"),
         required("EXPECTED_ACCOUNT_ID"),
@@ -37,11 +48,13 @@ def tools(policy, reserve, instance=None, anchor=None, allowed=None, access_guar
     )
 
 
-def execute(payload, *, store=None, checkpoint=None):
-    """The host derives all authorization and allowances from trusted configuration."""
+def execute(payload, *, store=None, checkpoint=None, local=None):
+    """The host derives all authorization and allowances from trusted configuration.
+
+    `local` (a kira.local_tools.LocalConfig) is passed only by the development chat path, never by hosts."""
     if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != 1:
         raise RuntimeStop("INVALID_EXECUTION_REQUEST")
-    release = required("RUNTIME_RELEASE")
+    release = "local" if local is not None else required("RUNTIME_RELEASE")
     if payload.get("release") != release:
         raise RuntimeStop("RELEASE_MISMATCH")
     policy = limits()
@@ -51,6 +64,14 @@ def execute(payload, *, store=None, checkpoint=None):
         mode not in {"chat", "incident"}
         or (purpose != "both" and purpose != mode)
         or (identity.required() and purpose == "both")
+        or (
+            local is not None
+            and (
+                mode != "chat"
+                or identity.required()
+                or os.getenv("ENVIRONMENT", "development") != "development"
+            )
+        )
     ):
         raise RuntimeStop("PURPOSE_MISMATCH")
     if mode == "incident":
@@ -188,6 +209,7 @@ def execute(payload, *, store=None, checkpoint=None):
                     reserve,
                     allowed=access["instance_ids"] if access else None,
                     access_guard=guard if access else None,
+                    **({"local": local} if local is not None else {}),
                 ),
                 reserve=reserve,
                 limits=policy,

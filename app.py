@@ -100,6 +100,8 @@ with st.sidebar:
         st.caption(f"Region: {settings.region or 'Not configured'}")
         st.caption(f"Runtime: {settings.runtime_target}")
         st.caption(f"Environment: {settings.environment}")
+        if settings.local_tools:
+            st.caption("Local tools · this machine's AWS credentials")
     st.divider()
     st.caption(
         "Investigations read the cloud resources allowed by your deployment. Review recommendations before making changes."
@@ -225,15 +227,28 @@ if problems:
         st.info("Your workspace is ready for configuration. Runtime connectivity has not been checked.")
         for problem in problems:
             st.markdown(f"- {problem}")
-        connection_example = (
-            f"RUNTIME_TARGET={settings.runtime_target}\nBEDROCK_REGION=\nBEDROCK_MODEL_ID=\n"
-            "EXPECTED_ACCOUNT_ID=\nALLOWED_INSTANCE_IDS=\nRUNTIME_LIMITS=\nRUNTIME_RELEASE=\n"
-        )
-        connection_example += (
-            "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
-            if settings.runtime_target == "agentcore"
-            else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN="
-        )
+        if settings.local_tools:
+            connection_example = "\n".join(
+                [
+                    "ENVIRONMENT=development",
+                    "BEDROCK_REGION=",
+                    "BEDROCK_MODEL_ID=",
+                    "EXPECTED_ACCOUNT_ID=",
+                    "RUNTIME_LIMITS=",
+                    "KIRA_LOCAL_TOOLS=",
+                ]
+            )
+        else:
+            connection_example = (
+                f"RUNTIME_TARGET={settings.runtime_target}\nBEDROCK_REGION=\nBEDROCK_MODEL_ID=\n"
+                "EXPECTED_ACCOUNT_ID=\nALLOWED_INSTANCE_IDS=\nRUNTIME_LIMITS=\nRUNTIME_RELEASE=\n"
+            )
+            connection_example += (
+                "AGENTCORE_RUNTIME_ARN=\nAGENTCORE_ENDPOINT="
+                if settings.runtime_target == "agentcore"
+                else "LOGS_TOOL_ARN=\nMETRICS_TOOL_ARN=\n"
+                "# Development only: KIRA_LOCAL_TOOLS=<local tools file> replaces RUNTIME_RELEASE and the tool ARNs."
+            )
         st.code(connection_example, language="bash")
         st.caption(
             "Use your AWS profile, SSO session or workload role. The first investigation verifies that the configured agent can respond."
@@ -251,6 +266,8 @@ with st.expander("Connection details", expanded=False):
             if settings.runtime_target == "agentcore"
             else "Dedicated chat Lambda"
             if identity.required()
+            else "Local tools (this machine's AWS credentials)"
+            if settings.local_tools
             else "Local Python runtime",
             "Environment": settings.environment,
             "Status": st.session_state.connection_state,

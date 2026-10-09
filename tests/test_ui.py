@@ -185,3 +185,29 @@ def test_brand_assets_exist_and_are_transparent_pngs():
     for name in ("kira-mark.png", "kira-logo-white.png", "kira-logo-black.png"):
         with Image.open(ROOT / "assets" / name) as image:
             assert image.format == "PNG" and image.mode == "RGBA"
+
+
+def test_local_tools_mode_enables_chat_without_deployed_bindings(settings, monkeypatch, tmp_path):
+    from tests.helpers import write_local_tools
+
+    for key in ("RUNTIME_RELEASE", "LOGS_TOOL_ARN", "METRICS_TOOL_ARN", "ALLOWED_INSTANCE_IDS"):
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("KIRA_LOCAL_TOOLS", write_local_tools(tmp_path))
+    invoke = Mock(return_value=chat.ChatResult("Local answer", "ok"))
+    monkeypatch.setattr(chat, "invoke", invoke)
+    test = app().run()
+    assert not test.exception and not test.chat_input[0].disabled
+    assert not any(item.value == "Connect your runtime" for item in test.subheader)
+    assert any("Local tools" in item.value for item in test.caption)
+    assert test.expander[0].label == "Connection details"
+    assert "Local tools (this machine's AWS credentials)" in str(test.json[0].value)
+    test.chat_input[0].set_value("Investigate the incident").run()
+    assert not test.exception and any("Local answer" in item.value for item in test.markdown)
+    invoke.assert_called_once()
+
+
+def test_invalid_local_tools_file_keeps_chat_disabled_and_explains_why(settings, monkeypatch, tmp_path):
+    monkeypatch.setenv("KIRA_LOCAL_TOOLS", str(tmp_path / "missing.json"))
+    test = app().run()
+    assert not test.exception and test.chat_input[0].disabled
+    assert any("KIRA_LOCAL_TOOLS" in item.value for item in test.markdown)

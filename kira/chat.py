@@ -49,7 +49,7 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None):
 
         payload = {
             "version": 1,
-            "release": settings.runtime_release,
+            "release": "local" if settings.local_tools else settings.runtime_release,
             "mode": "chat",
             "prompt": prompt.strip(),
             "history": [
@@ -65,7 +65,12 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None):
 
             result = invoke_gateway(payload)
         elif settings.runtime_target == "standalone":
-            result = execution.execute(payload)
+            if settings.local_tools:
+                from kira import local_tools
+
+                result = execution.execute(payload, local=local_tools.load(settings.local_tools))
+            else:
+                result = execution.execute(payload)
         else:
             result = agentcore.invoke(
                 payload,

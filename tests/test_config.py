@@ -134,3 +134,61 @@ def test_agentcore_rejects_model_api(configured, monkeypatch):
     monkeypatch.setenv("RUNTIME_TARGET", "agentcore")
     monkeypatch.setenv("MODEL_API", MODEL_API)
     assert "AgentCore uses a Bedrock model only; remove MODEL_API." in AppConfig.from_env().problems()
+
+
+@pytest.fixture
+def local(configured, monkeypatch, tmp_path):
+    from tests.helpers import write_local_tools
+
+    for key in ("RUNTIME_RELEASE", "LOGS_TOOL_ARN", "METRICS_TOOL_ARN", "ALLOWED_INSTANCE_IDS"):
+        monkeypatch.delenv(key)
+    monkeypatch.setenv("KIRA_LOCAL_TOOLS", write_local_tools(tmp_path))
+    return AppConfig.from_env()
+
+
+def test_local_tools_setting_is_read_from_the_environment(configured, monkeypatch):
+    assert configured.local_tools == ""
+    monkeypatch.setenv("KIRA_LOCAL_TOOLS", "/private/local-tools.json")
+    assert AppConfig.from_env().local_tools == "/private/local-tools.json"
+
+
+def test_local_tools_replace_the_release_fingerprint_and_tool_pins(local):
+    assert local.problems() == []
+
+
+def test_deployed_rules_still_apply_when_local_tools_are_unset(configured, monkeypatch):
+    for key in ("RUNTIME_RELEASE", "LOGS_TOOL_ARN", "METRICS_TOOL_ARN"):
+        monkeypatch.delenv(key)
+    assert any("RUNTIME_RELEASE" in item for item in AppConfig.from_env().problems())
+    assert any("execution bindings" in item for item in AppConfig.from_env().problems())
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("BEDROCK_MODEL_ID", ""),
+        ("EXPECTED_ACCOUNT_ID", "wrong-account"),
+        ("BEDROCK_REGION", ""),
+        ("RUNTIME_LIMITS", '{"tool_calls":999999}'),
+        ("RUNTIME_LIMITS", ""),
+    ],
+)
+def test_local_tools_keep_the_model_account_and_limit_requirements(local, monkeypatch, key, value):
+    monkeypatch.setenv(key, value)
+    assert AppConfig.from_env().problems()
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("ENVIRONMENT", "production"),
+        ("KIRA_AUTH_MODE", "oidc"),
+        ("RUNTIME_TARGET", "agentcore"),
+        ("LOGS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:logs:1"),
+        ("ALLOWED_INSTANCE_IDS", "i-0aaaaaaaaaaaaaaaa"),
+        ("KIRA_LOCAL_TOOLS", "/nonexistent/local-tools.json"),
+    ],
+)
+def test_local_tools_are_rejected_outside_local_development(local, monkeypatch, key, value):
+    monkeypatch.setenv(key, value)
+    assert AppConfig.from_env().problems()

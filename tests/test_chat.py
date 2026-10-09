@@ -94,3 +94,28 @@ def test_unconfigured_runtime_does_not_invoke_aws(monkeypatch):
     result = chat.invoke("Investigate", "session", AppConfig("eu-central-1", ""))
     assert result.code == "NOT_CONFIGURED"
     execute.assert_not_called()
+
+
+def test_deployed_chat_still_calls_execute_with_the_payload_only(monkeypatch):
+    execute = Mock(return_value={"text": "Evidence", "complete": True})
+    monkeypatch.setattr(execution, "execute", execute)
+    assert chat.invoke("investigate", "session", SETTINGS).status == "ok"
+    assert execute.call_args.args[0]["release"] == "a" * 64
+    assert execute.call_args.kwargs == {}
+
+
+def test_local_tools_chat_passes_the_loaded_config_and_the_local_release(monkeypatch, tmp_path):
+    from kira import local_tools
+    from tests.helpers import write_local_tools
+
+    for key in ("KIRA_AUTH_MODE", "ALLOWED_INSTANCE_IDS", "LOG_CURSOR_SECRET_ARN"):
+        monkeypatch.delenv(key, raising=False)
+    path = write_local_tools(tmp_path)
+    local = replace(
+        SETTINGS, runtime_release="", logs_arn="", metrics_arn="", allowed_ids="", local_tools=path
+    )
+    execute = Mock(return_value={"text": "Evidence", "complete": True})
+    monkeypatch.setattr(execution, "execute", execute)
+    assert chat.invoke("investigate", "session", local).status == "ok"
+    assert execute.call_args.args[0]["release"] == "local"
+    assert execute.call_args.kwargs["local"].instances == local_tools.load(path).instances

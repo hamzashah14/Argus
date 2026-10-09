@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "monitor_region": "eu-central-1",
+  "log_prefix": "/kira/staging",
+  "instances": [
+    "i-0123456789abcdef0"
+  ],
+  "log_groups": [
+    "/kira/staging/i-0123456789abcdef0/app",
+    "/kira/staging/i-0123456789abcdef0/error"
+  ],
+  "metric_catalog": [
+    {
+      "id": "web-cpu",
+      "instance_id": "i-0123456789abcdef0",
+      "namespace": "AWS/EC2",
+      "metric_name": "CPUUtilization",
+      "statistic": "Average",
+      "dimensions": {
+        "InstanceId": "i-0123456789abcdef0"
+      }
+    },
+    {
+      "id": "web-disk",
+      "instance_id": "i-0123456789abcdef0",
+      "namespace": "CWAgent",
+      "metric_name": "disk_used_percent",
+      "statistic": "Average",
+      "dimensions": {
+        "InstanceId": "i-0123456789abcdef0",
+        "path": "/"
+      }
+    }
+  ]
+}
