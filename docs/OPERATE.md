@@ -6,6 +6,9 @@ secret and bill. Terms are in the [glossary](ARCHITECTURE.md#glossary). To set u
 code and were tested locally with fakes. The maintainers have not rehearsed them on real AWS, so rehearse them on
 staging first.
 
+Run every command here from the repository root with the virtual environment active
+(`source .venv/bin/activate`).
+
 Kira runs in local single-user mode by default. Parts marked "only with the OIDC module" need the optional identity
 module (an `identity` block in `runtime.json`) and do not exist in the default mode. Replay, alert recipients,
 erasure, retention, pausing and restore apply to every deployment.
@@ -79,7 +82,7 @@ before it is published.
    command needs clean reviewed source:
 
    ```bash
-   .venv/bin/python -m infra.durable_ops attest-email --bundle .local/customer/bundle --review-hash REVIEW_HASH --notification-id RECEIVED_NOTIFICATION_ID --confirm-inbox-delivery --output .local/customer/private/attest.json
+   python -m infra.durable_ops attest-email --bundle .local/customer/bundle --review-hash REVIEW_HASH --notification-id RECEIVED_NOTIFICATION_ID --confirm-inbox-delivery --output .local/customer/private/attest.json
    ```
 
    Never attest from an SNS publish log or an SQS receipt. The primary attestation does not cover the fallback
@@ -135,8 +138,8 @@ unless it matches your file exactly, so anything that changed since you looked f
 only a generic message and exits 1, so re-run the first pass to see why.
 
 ```bash
-.venv/bin/python scripts/replay_incident.py --spec .local/customer/deployment.json --event-id EVENT_ID --output .local/customer/private/replay-review.json
-.venv/bin/python scripts/replay_incident.py --spec .local/customer/deployment.json --event-id EVENT_ID --output .local/customer/private/replay-result.json --apply .local/customer/private/replay-review.json
+python scripts/replay_incident.py --spec .local/customer/deployment.json --event-id EVENT_ID --output .local/customer/private/replay-review.json
+python scripts/replay_incident.py --spec .local/customer/deployment.json --event-id EVENT_ID --output .local/customer/private/replay-result.json --apply .local/customer/private/replay-review.json
 ```
 
 For a notification use `--incident-id INCIDENT_ID --kind INITIAL` (or `REPORT`) instead of `--event-id`. Applying a
@@ -157,8 +160,8 @@ means rebinding grants.
    topic, subscription and old address independently, then apply:
 
    ```bash
-   .venv/bin/python -m infra.security_ops recipients-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/private/recipient-plan.json
-   .venv/bin/python -m infra.security_ops recipients-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --plan .local/customer/private/recipient-plan.json --output .local/customer/private/recipient-result.json
+   python -m infra.security_ops recipients-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/private/recipient-plan.json
+   python -m infra.security_ops recipients-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --plan .local/customer/private/recipient-plan.json --output .local/customer/private/recipient-result.json
    ```
 
    Apply needs clean reviewed source. It rechecks the diff, unsubscribes only reviewed email subscriptions and requires
@@ -184,7 +187,7 @@ so compare it with your roster. Suggested cadence, for your owner to approve: mo
 change. Rehearse secret rotation quarterly.
 
 ```bash
-.venv/bin/python -m infra.security_ops access-review --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/private/access-review.json
+python -m infra.security_ops access-review --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/private/access-review.json
 ```
 
 **Grants and revocation (only with the OIDC module).** A grant lets one actor use listed instances as `viewer` or
@@ -193,8 +196,8 @@ unique, nonempty subset of your inventory). Take `subject` from your identity pr
 email. To revoke, send the same request with `"enabled": false`.
 
 ```bash
-.venv/bin/python -m infra.identity_ops grant-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --output .local/customer/private/access-plan.json
-.venv/bin/python -m infra.identity_ops grant-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --grant-plan .local/customer/private/access-plan.json --output .local/customer/private/access-result.json
+python -m infra.identity_ops grant-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --output .local/customer/private/access-plan.json
+python -m infra.identity_ops grant-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --request .local/customer/private/access-request.json --grant-plan .local/customer/private/access-plan.json --output .local/customer/private/access-result.json
 ```
 
 - Review the plan's before and after values. Every change adds one to `epoch`. Apply recomputes the plan and refuses
@@ -219,8 +222,8 @@ Pause new interactive work and let accepted requests finish.
    `AWSCURRENT`.
 
    ```bash
-   .venv/bin/python -m infra.durable_ops identity-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/signing-version.json
-   .venv/bin/python -m infra.identity_ops pin-secret-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/key-pin.json
+   python -m infra.durable_ops identity-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/signing-version.json
+   python -m infra.identity_ops pin-secret-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/key-pin.json
    ```
 
    Then rebind the users you keep with the grant commands and require fresh sign-in. Check that old tickets fail,
@@ -257,7 +260,7 @@ and you create and fill it yourself. Kira's automation only reads its metadata.
    version holds `AWSCURRENT`, and it never reads the key:
 
    ```bash
-   .venv/bin/python -m infra.durable_ops model-secret-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/model-secret.json
+   python -m infra.durable_ops model-secret-version --bundle .local/customer/bundle --review-hash REVIEW_HASH --output .local/customer/model-secret.json
    ```
 
 3. Re-render, then build, create and seal the new release stacks and run `verify-candidate`. Then run the paid staging
@@ -301,8 +304,8 @@ pending delivery first. Never erase running or retryable work. Wait at least 15 
 lease.
 
 ```bash
-.venv/bin/python -m infra.security_ops erase-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --incident INCIDENT_ID --output .local/customer/private/erasure-plan.json
-.venv/bin/python -m infra.security_ops erase-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --plan .local/customer/private/erasure-plan.json --output .local/customer/private/erasure-result.json
+python -m infra.security_ops erase-plan --bundle .local/customer/bundle --review-hash REVIEW_HASH --incident INCIDENT_ID --output .local/customer/private/erasure-plan.json
+python -m infra.security_ops erase-apply --bundle .local/customer/bundle --review-hash REVIEW_HASH --plan .local/customer/private/erasure-plan.json --output .local/customer/private/erasure-result.json
 ```
 
 Review the incident, row digests, account, bucket, and every object version and delete marker. Apply needs clean

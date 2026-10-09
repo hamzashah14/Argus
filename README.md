@@ -55,10 +55,14 @@ on non-Claude models is unmeasured.
 
 ## Try the UI locally in about 10 minutes
 
-You need Python 3.12. The preview needs no AWS account.
+You need Python 3.12. The preview needs no AWS account. Create a virtual environment and
+activate it. Every command in this README then works as written, as long as your prompt
+shows `(.venv)`. Run the `source` line again in each new terminal.
+
 ```bash
 python3.12 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r requirements/app.lock
+source .venv/bin/activate
+python -m pip install --require-hashes -r requirements/app.lock
 cp .env.example .env    # skip this if you already have a .env, and keep yours
 chmod 600 .env
 ```
@@ -67,7 +71,7 @@ In `.env`, keep `ENVIRONMENT=development` and set `APP_PASSWORD` to a private va
 of at least 12 characters. Then start the UI and open `http://127.0.0.1:8501/`:
 
 ```bash
-.venv/bin/streamlit run app.py --server.address 127.0.0.1
+streamlit run app.py --server.address 127.0.0.1
 ```
 
 Sign in with that password. With no backend settings, the UI shows a "Connect your
@@ -83,14 +87,14 @@ apply, then launch the UI:
 
 ```bash
 # Default local single-user mode. Add --identity for the OIDC module.
-.venv/bin/python -m infra.automation init --work-dir .local/customer
-.venv/bin/python -m infra.automation dry-run --config .local/customer/automation.json --work-dir .local/customer
-.venv/bin/python -m infra.automation check --config .local/customer/automation.json --work-dir .local/customer
-.venv/bin/python -m infra.automation apply --config .local/customer/automation.json --work-dir .local/customer --plan-hash YOUR_PLAN_HASH
-.venv/bin/python -m infra.automation status --work-dir .local/customer
+python -m infra.automation init --work-dir .local/customer
+python -m infra.automation dry-run --config .local/customer/automation.json --work-dir .local/customer
+python -m infra.automation check --config .local/customer/automation.json --work-dir .local/customer
+python -m infra.automation apply --config .local/customer/automation.json --work-dir .local/customer --plan-hash YOUR_PLAN_HASH
+python -m infra.automation status --work-dir .local/customer
 # Default mode only: set the UI password (12+ characters) in this shell. .env is not loaded.
 read -rs APP_PASSWORD; export APP_PASSWORD
-.venv/bin/python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-ui
+python scripts/run_customer_ui.py --connection .local/customer/ui-connection.json --profile customer-ui
 ```
 
 `dry-run` makes no AWS calls and shows the plan hash. `check` only reads AWS.

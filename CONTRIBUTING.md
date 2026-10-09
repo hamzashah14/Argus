@@ -30,18 +30,19 @@ needs AWS access.
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/python -m pip install --require-hashes -r requirements/dev.lock
-.venv/bin/python -m pytest -q
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
-.venv/bin/python scripts/dev/validate_schemas.py
-.venv/bin/python scripts/dev/validate_infrastructure.py
-.venv/bin/python scripts/dev/validate_durable.py          # also lints the model API renders
-.venv/bin/python scripts/dev/validate_observations.py
-.venv/bin/python scripts/dev/validate_identity.py
-.venv/bin/python scripts/dev/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
-.venv/bin/python scripts/dev/check_public_repository.py
-.venv/bin/python scripts/dev/check_secrets.py
+source .venv/bin/activate   # run again in each new terminal; the prompt shows (.venv)
+python -m pip install --require-hashes -r requirements/dev.lock
+python -m pytest -q
+ruff check .
+ruff format --check .
+python scripts/dev/validate_schemas.py
+python scripts/dev/validate_infrastructure.py
+python scripts/dev/validate_durable.py          # also lints the model API renders
+python scripts/dev/validate_observations.py
+python scripts/dev/validate_identity.py
+python scripts/dev/evaluate_diagnostics.py --output .build/diagnostics-evaluation.json
+python scripts/dev/check_public_repository.py
+python scripts/dev/check_secrets.py
 ```
 
 The build check needs hash-verified Lambda wheels. `scripts/dev/verify_build.py` builds
@@ -50,8 +51,8 @@ only its bundled dependencies. Optional targets: `tools`, `pipeline`, `agentcore
 `observation` (default: all four).
 
 ```bash
-.venv/bin/python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
-.venv/bin/python scripts/dev/verify_build.py [tools] [pipeline] [agentcore] [observation]
+python -m pip download --require-hashes --only-binary=:all: --dest .build/wheels -r requirements/lambda.lock
+python scripts/dev/verify_build.py [tools] [pipeline] [agentcore] [observation]
 ```
 
 CI (`.github/workflows/ci.yml`) runs the same checks plus a `pip-audit` dependency
@@ -95,7 +96,7 @@ Review the README, guides, MIT license, dependency licenses and CI first. If you
 working repository has private history, export a fresh snapshot instead of pushing it:
 
 ```bash
-.venv/bin/python scripts/dev/prepare_public_repo.py --output .local/publication
+python scripts/dev/prepare_public_repo.py --output .local/publication
 ```
 
 The script needs committed source with no uncommitted tracked changes. It runs the
