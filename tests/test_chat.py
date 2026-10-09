@@ -190,3 +190,18 @@ def test_a_scope_is_refused_where_the_runtime_cannot_enforce_it(monkeypatch):
     assert result.message == "This deployment cannot restrict chat to a list of instances."
     for call in calls:
         call.assert_not_called()
+
+
+def test_progress_and_usage_travel_with_the_chat_request(monkeypatch):
+    execute = Mock(
+        return_value={"text": "ok", "complete": True, "usage": {"input_tokens": 3, "output_tokens": 4}}
+    )
+    monkeypatch.setattr(execution, "execute", execute)
+
+    def report(step):
+        return None
+
+    result = chat.invoke("question", "session", team_settings(monkeypatch), progress=report)
+    assert execute.call_args.kwargs == {"progress": report}
+    messages = chat.append_exchange([], "question", result, seconds=2.5)
+    assert messages[-1]["usage"] == {"input_tokens": 3, "output_tokens": 4} and messages[-1]["seconds"] == 2.5

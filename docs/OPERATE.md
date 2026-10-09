@@ -289,6 +289,32 @@ prefix. Manifests over 10,000 rows or versions, and any unversioned or foreign o
 needs exact-table read, update, put and delete, `ListBucketVersions` on `incidents/`, `DeleteObjectVersion` and the
 STS account check. Recipient changes need exact-topic inspect and unsubscribe plus stack read.
 
+## Chat speed and token use
+
+**What you see.** While a question runs, the chat shows the current step ("Thinking", "Reading logs",
+"Reading metrics", "Checking the answer against the evidence"), and your question appears at once. Under each answer it
+shows the tokens used and the time taken. The step names are fixed text: they never contain model, log or user text.
+
+**Why replies do not appear word by word.** Every answer is redacted and, in staging and production, checked against the
+evidence it cites before it is shown. The check needs the complete answer, so showing a partial one would skip it. Live
+steps give the feel of a chat without that risk.
+
+**What bounds the cost of one question.** All of it comes from `runtime_limits` in `runtime.json`:
+
+| Limit | What it caps |
+| --- | --- |
+| `tokens_reserved` | Input plus output tokens added up over every model step of the question. A reservation is never refunded |
+| `model_steps`, `tool_calls`, `log_queries` | How many model rounds, tool calls and log searches one question may use |
+| `output_tokens` | The length of one model reply |
+| `context_bytes` | The size of everything sent to the model in one step, including the conversation so far. A long conversation hits this and asks you to start a new one |
+| `tool_bytes`, `window_minutes` | The size of one tool result, and the time window one tool call may read (a log search returns at most 50 lines) |
+
+Each model step also makes one token-count call before the model call, so a question that needs several tool calls
+takes several round trips. To make answers cheaper or faster, lower `tokens_reserved`, `model_steps`, `tool_bytes` and
+`context_bytes`, or choose a smaller model in a region close to the UI. A change to `runtime_limits` is a new release,
+so qualify it on staging first. Nothing here has been measured against a real model: read the token and time figures
+under your first real answers before you set limits.
+
 ## Maintenance, pausing and spend
 
 Declare an owner, UTC start and end, and a resume deadline first.

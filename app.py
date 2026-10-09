@@ -35,6 +35,16 @@ st.markdown(
 )
 
 
+# Fixed step names from the runtime, never model, log or user text.
+STEPS = {
+    "thinking": "Thinking…",
+    "tool:fetch_logs": "Reading logs…",
+    "tool:fetch_metrics": "Reading metrics…",
+    "tool": "Using a read-only tool…",
+    "checking": "Checking the answer against the evidence…",
+}
+
+
 def clear_conversation():
     st.session_state.messages = []
     st.session_state.session_id = str(uuid.uuid4())
@@ -289,6 +299,10 @@ for message in st.session_state.messages:
             st.caption(f"{message['code']} · Reference {message['reference']}")
             if message["status"] == "partial":
                 st.caption("Partial result · the investigation did not complete.")
+        if message.get("usage"):
+            used = sum(message["usage"].get(key, 0) for key in ("input_tokens", "output_tokens"))
+            took = f" · {message['seconds']:.0f} s" if message.get("seconds") else ""
+            st.caption(f"{used:,} tokens{took}")
 
 now = time.monotonic()
 st.session_state.attempts = chat.recent_attempts(st.session_state.attempts, now)
@@ -335,7 +349,15 @@ if prompt and prompt.strip():
         clear_conversation()  # Only after the checks pass: a refused retry keeps the conversation.
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
-    with st.spinner("Reading evidence from your cloud…"):
+    with st.chat_message("user"):
+        st.markdown(prompt)
+    started = time.monotonic()
+    with st.chat_message("assistant"), st.status("Starting the investigation…", expanded=True) as box:
+
+        def show(step):
+            box.update(label=STEPS.get(step, "Working…"))
+            box.write(STEPS.get(step, "Working…"))
+
         if member is not None:
             result = chat.invoke(
                 prompt,
@@ -343,6 +365,7 @@ if prompt and prompt.strip():
                 settings,
                 history=st.session_state.messages,
                 allowed=member.instances,
+                progress=show,
             )
             usage = result.usage or {}
             team.audit(
@@ -358,9 +381,20 @@ if prompt and prompt.strip():
             )
         else:
             result = chat.invoke(
-                prompt, st.session_state.session_id, settings, history=st.session_state.messages
+                prompt,
+                st.session_state.session_id,
+                settings,
+                history=st.session_state.messages,
+                progress=show,
             )
-    st.session_state.messages = chat.append_exchange(st.session_state.messages, prompt, result)
+        box.update(
+            label="Done" if result.status == "ok" else "Stopped before a complete answer",
+            state="complete" if result.status == "ok" else "error",
+            expanded=False,
+        )
+    st.session_state.messages = chat.append_exchange(
+        st.session_state.messages, prompt, result, seconds=time.monotonic() - started
+    )
     st.session_state.connection_state = (
         "Last request succeeded" if result.status == "ok" else "Last request incomplete"
     )

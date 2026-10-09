@@ -35,7 +35,7 @@ def failure(code, message, partial=""):
     return ChatResult(partial, "partial" if partial else "error", code, message, problem["request_id"])
 
 
-def invoke(prompt, session_id, settings, *, history=(), allowed=None):
+def invoke(prompt, session_id, settings, *, history=(), allowed=None, progress=None):
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         return failure("INVALID_PROMPT", f"Enter a question of 1–{MAX_PROMPT_CHARS} characters.")
     if settings.problems():
@@ -68,6 +68,8 @@ def invoke(prompt, session_id, settings, *, history=(), allowed=None):
                 options["local"] = local_tools.load(settings.local_tools)
             if allowed is not None:
                 options["allowed"] = frozenset(allowed)
+            if progress is not None:
+                options["progress"] = progress
             result = execution.execute(payload, **options)
         else:
             result = agentcore.invoke(
@@ -137,7 +139,7 @@ def recent_attempts(attempts, now):
     return [stamp for stamp in attempts if now - stamp < 3600]
 
 
-def append_exchange(messages, prompt, result):
+def append_exchange(messages, prompt, result, seconds=None):
     return (
         messages
         + [
@@ -149,6 +151,8 @@ def append_exchange(messages, prompt, result):
                 "code": result.code,
                 "message": result.message,
                 "reference": result.reference,
+                "usage": result.usage,
+                "seconds": seconds,
             },
         ]
     )[-MAX_HISTORY_MESSAGES:]

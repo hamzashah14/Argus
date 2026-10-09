@@ -689,3 +689,42 @@ def test_model_api_failure_has_safe_correlated_telemetry(operation, outcome, cap
     assert events == [
         {"Component": "model", "outcome": outcome, "Failure": 1, "incident_id": "a" * 32, "fence": 2}
     ]
+
+
+def call(name, ident):
+    return answer(
+        stop="tool_use",
+        blocks=[{"toolUse": {"toolUseId": ident, "name": name, "input": {"instance_id": IID}}}],
+    )
+
+
+def test_progress_reports_each_step_with_fixed_names_only():
+    tools = MagicMock()
+    tools.invoke.return_value = ({"status": "ok", "instance_id": IID, "complete": True}, True)
+    client = MagicMock()
+    client.converse.side_effect = [call("fetch_logs", "1"), call("fetch_metrics", "2"), answer("Final")]
+    steps = []
+    result, _, _ = drive(client, tools=tools, progress=steps.append)
+    assert result["text"] == "Final"
+    assert steps == ["thinking", "tool:fetch_logs", "thinking", "tool:fetch_metrics", "thinking"]
+
+
+def test_an_unknown_tool_name_is_reported_generically():
+    tools = MagicMock()
+    tools.invoke.side_effect = runtime.RuntimeStop("UNKNOWN_TOOL")
+    client = MagicMock()
+    client.converse.side_effect = [call("PRIVATE-NAME-FROM-THE-MODEL", "1")]
+    steps = []
+    result, _, _ = drive(client, tools=tools, progress=steps.append)
+    assert result["code"] == "UNKNOWN_TOOL"
+    assert steps == ["thinking", "tool"] and "PRIVATE" not in repr(steps)
+
+
+def test_a_failing_progress_observer_never_changes_the_investigation():
+    def broken(step):
+        raise RuntimeError("UI went away")
+
+    client = MagicMock()
+    client.converse.return_value = answer("Final")
+    result, _, _ = drive(client, progress=broken)
+    assert result["complete"] and result["text"] == "Final"

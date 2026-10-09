@@ -245,6 +245,15 @@ class LambdaTools:
         ) is True
 
 
+def notify(progress, step):
+    """Tell a caller which fixed step is running. A failing observer never affects the investigation."""
+    if progress:
+        try:
+            progress(step)
+        except Exception:
+            pass
+
+
 def run(
     prompt,
     *,
@@ -260,8 +269,12 @@ def run(
     require_evidence=False,
     record_usage=None,
     access_guard=None,
+    progress=None,
 ):
-    """All side effects go through injected authorization/budget-aware adapters."""
+    """All side effects go through injected authorization/budget-aware adapters.
+
+    `progress` (chat only) receives one of a fixed set of step names: "thinking", "tool:fetch_logs",
+    "tool:fetch_metrics", "tool" and "checking". It never receives model, log or user text."""
     if (
         os.getenv("ENVIRONMENT", "development") != "development"
         and os.getenv("KIRA_DIAGNOSTIC_POLICY") != diagnosis.VERSION
@@ -293,6 +306,7 @@ def run(
                 access_guard()
             if deadline - time.time() < 30:
                 raise RuntimeStop("DEADLINE")
+            notify(progress, "thinking")
             request = {"messages": messages, "system": system, "toolConfig": tool_configuration()}
             if len(json.dumps(request).encode()) > limits.context_bytes:
                 raise RuntimeStop("CONTEXT_LIMIT")
@@ -359,6 +373,8 @@ def run(
                 checkpoint(text)
             stop = response.get("stopReason")
             if not calls:
+                if structured:
+                    notify(progress, "checking")
                 quality = diagnosis.validate(text.strip(), catalog) if structured else None
                 if structured:
                     if quality["status"] != "VALID":
@@ -399,6 +415,10 @@ def run(
                 ):
                     raise RuntimeStop("INVALID_MODEL_TOOL_REQUEST")
                 seen.add(call["toolUseId"])
+                notify(
+                    progress,
+                    "tool:" + call["name"] if call["name"] in {"fetch_logs", "fetch_metrics"} else "tool",
+                )
                 try:
                     result, valid = tools.invoke(call["name"], call["input"], deadline)
                     result = safety.bounded(result)

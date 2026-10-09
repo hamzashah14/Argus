@@ -429,3 +429,23 @@ def test_team_refused_retry_keeps_the_conversation(team_mode, monkeypatch):
     button(test, "Retry in a new conversation").click().run()
     assert test.session_state["messages"] == before
     assert any("hourly investigation limit" in item.value for item in test.info)
+
+
+def test_chat_reports_live_steps_and_shows_the_cost_of_each_answer(settings, monkeypatch):
+    steps = []
+
+    def answer(prompt, session_id, config, **kwargs):
+        kwargs["progress"]("tool:fetch_logs")
+        steps.append(kwargs["progress"])
+        return chat.ChatResult("Answer", "ok", usage={"input_tokens": 3000, "output_tokens": 500})
+
+    monkeypatch.setattr(chat, "invoke", answer)
+    test = app(False).run()
+    test.text_input[0].input("synthetic-workspace-password")
+    button(test, "Open workspace").click().run()
+    test.chat_input[0].set_value("Investigate the incident").run()
+    assert not test.exception and len(steps) == 1
+    assert any("Answer" in item.value for item in test.markdown)
+    assert any(
+        item.value == "3,500 tokens" or item.value.startswith("3,500 tokens · ") for item in test.caption
+    )

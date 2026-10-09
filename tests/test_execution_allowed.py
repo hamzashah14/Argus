@@ -52,3 +52,21 @@ def test_a_scope_is_refused_for_incident_runs(host):
     }
     with pytest.raises(RuntimeStop, match="PURPOSE_MISMATCH"):
         execution.execute(incident, allowed=frozenset({IID}))
+
+
+def test_chat_progress_reaches_the_runtime(host, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(
+        execution,
+        "run",
+        lambda *args, **kwargs: seen.update(kwargs) or {"complete": True, "text": "ok", "usage": {}},
+    )
+
+    def report(step):
+        return None
+
+    execution.execute(CHAT, progress=report)
+    assert seen["progress"] is report
+    seen.clear()
+    execution.execute(CHAT)
+    assert seen["progress"] is None
