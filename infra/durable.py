@@ -14,6 +14,11 @@ from infra.spec import name as resource_name
 from infra.verify import VerificationError
 from scripts.build_lambdas import PIPELINE_FUNCTIONS
 
+TEAM_SIGNIN_CHANGED = (
+    "Team sign-in changed: remove the identity, security and initial_access settings. "
+    "Team access is now a team.toml allowlist on the UI host; see docs/DEPLOY.md section 7."
+)
+
 
 def load_config(path, spec):
     value = json.loads(Path(path).read_text())
@@ -26,21 +31,12 @@ def load_config(path, spec):
         "runtime_target",
         "runtime_limits",
     }
-    if (
-        not expected <= set(value)
-        or set(value) - expected - {"identity", "security"}
-        or ("security" in value and "identity" not in value)
-    ):
+    if {"identity", "security"} & set(value):
+        raise VerificationError(TEAM_SIGNIN_CHANGED)
+    if set(value) != expected:
         raise ValueError(
             "Durable configuration requires status URL, fallback email, retention, initial capacity and model pause"
         )
-    if "identity" in value:
-        from infra.identity import validate_config
-
-        validate_config(value["identity"])
-        from kira.work_policy import DEFAULT, validate
-
-        validate(value.get("security", DEFAULT))
     url = value["status_base_url"]
     email = value["fallback_email"]
     if (

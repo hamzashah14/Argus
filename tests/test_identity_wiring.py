@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from infra import durable, durable_ops, owned_ops, owned_runtime
 from infra import identity as infrastructure
+from infra import owned_ops, owned_runtime
 from infra.spec import ROOT, load, name
 from infra.verify import VerificationError
 from kira import identity
@@ -129,16 +129,6 @@ def test_identity_metadata_and_key_version_change_release_fingerprint():
     assert original != owned_runtime.fingerprint(SPEC, other, data)
     data["identity"]["SigningSecretVersion"] = "b" * 32
     assert original != owned_runtime.fingerprint(SPEC, CONFIG, data)
-
-
-def test_identity_config_can_render_foundations_before_secret_bindings(tmp_path):
-    path = tmp_path / "config.json"
-    path.write_text(json.dumps(CONFIG))
-    bundle = durable.render(ROOT / "examples/deployment.example.json", path, tmp_path / "plan")
-    for stage in ["identity-foundation", "identity-secret"]:
-        assert stage in bundle["stages"] and stage in durable_ops.STAGES
-        assert bundle["stages"][stage]["region"] == durable_ops.stage_region(SPEC, stage)
-    durable_ops.read_bundle(tmp_path / "plan", bundle["review_hash"])
 
 
 def test_inline_identity_policy_is_bound_and_conflicting_file_is_denied(monkeypatch):

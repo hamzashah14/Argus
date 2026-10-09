@@ -1003,16 +1003,6 @@ def canary_client(bundle):
     return client
 
 
-def test_canary_with_identity_requires_a_ticket_before_any_aws_client():
-    from infra import owned_ops
-
-    factory = Mock()
-    bundle = canary_bundle(CONFIG)
-    with pytest.raises(VerificationError, match="individual-session"):
-        owned_ops.canary(bundle, factory, allow_model_invocation=True)
-    factory.assert_not_called()
-
-
 def test_canary_without_identity_needs_no_ticket_and_uses_the_staging_runtime_canary(monkeypatch):
     from infra import owned_ops
 
@@ -1031,30 +1021,13 @@ def test_canary_without_identity_needs_no_ticket_and_uses_the_staging_runtime_ca
     assert event["runtime_canary"]["mode"] == "chat"
 
 
-def test_canary_with_identity_sends_the_ticket_to_the_dedicated_chat_gateway(monkeypatch):
-    from infra import owned_ops
-
-    monkeypatch.setattr(owned_ops, "verify_candidate", Mock())
-    monkeypatch.setattr(owned_ops, "coverage", Mock())
-    bundle = canary_bundle(CONFIG)
-    client = canary_client(bundle)
-    owned_ops.canary(bundle, Mock(), allow_model_invocation=True, client=client, access_ticket="synthetic")
-    call = client.invoke.call_args.kwargs
-    assert call["FunctionName"] == bundle["bindings"]["chat_version"]["ChatVersionArn"]
-    event = json.loads(call["Payload"])
-    assert set(event) == {"runtime_chat"} and event["runtime_chat"]["access_ticket"] == "synthetic"
-
-
-@pytest.mark.parametrize("config", [BASE, CONFIG], ids=["default-local", "identity"])
-def test_canary_still_requires_paid_authorization_in_staging(config):
+def test_canary_still_requires_paid_authorization_in_staging():
     from infra import owned_ops
 
     factory = Mock()
     for spec, allowed in (({"environment": "staging"}, False), ({"environment": "production"}, True)):
         with pytest.raises(VerificationError, match="staging"):
-            owned_ops.canary(
-                {"spec": spec, "config": config}, factory, allow_model_invocation=allowed, access_ticket="t"
-            )
+            owned_ops.canary({"spec": spec, "config": BASE}, factory, allow_model_invocation=allowed)
     factory.assert_not_called()
 
 
@@ -1104,12 +1077,8 @@ def test_identity_free_guard_still_rejects_synthetic_reference_bundles():
         security_ops.recipient_plan(bundle, Mock())
 
 
-@pytest.mark.parametrize(
-    "command,allowed", [("access-review", False), ("recipients-plan", True), ("erase-plan", True)]
-)
-def test_security_cli_requires_identity_only_for_access_review(
-    command, allowed, tmp_path, monkeypatch, capsys
-):
+@pytest.mark.parametrize("command", ["recipients-plan", "erase-plan"])
+def test_security_cli_commands_do_not_require_identity(command, tmp_path, monkeypatch, capsys):
     bundle = plain_bundle()
     monkeypatch.setattr(security_ops.durable_ops, "read_bundle", lambda *a: bundle)
     monkeypatch.setattr(security_ops, "recipient_plan", lambda b: {"status": "PLANNED"})
@@ -1128,9 +1097,9 @@ def test_security_cli_requires_identity_only_for_access_review(
             str(tmp_path / "o"),
         ],
     )
-    assert security_ops.main() == (0 if allowed else 2)
-    assert (tmp_path / "o").exists() == allowed
-    assert ("failed" in capsys.readouterr().err) == (not allowed)
+    assert security_ops.main() == 0
+    assert (tmp_path / "o").exists()
+    assert "failed" not in capsys.readouterr().err
 
 
 @pytest.mark.parametrize("field", ["token", "access_ticket", "aws_secret_access_key", "session_token"])

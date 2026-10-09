@@ -1,7 +1,7 @@
 """Customer deployment CLI: init, dry-run, check, apply and resumable status.
 
 No AWS call in init/dry-run/status. Apply reuses the existing reviewed/sealed
-release gates, never installs collectors or bypasses OIDC/inbox qualification.
+release gates, never installs collectors or bypasses inbox qualification.
 """
 
 import argparse
@@ -90,25 +90,17 @@ def model_api(spec):
 
 def stage_order(spec, config):
     stages = ["foundation-tools", "foundation-monitor", "durable-foundation"]
-    if "identity" in config:
-        stages += ["identity-foundation", "identity-secret", "identity-foundation-bound"]
     if model_api(spec):
         stages += ["model-secret"]  # Pins the out-of-band key secret version before any runtime renders.
     stages += ["owned-tools"]
     if config["runtime_target"] == "agentcore":
         stages += ["agentcore-runtime", "agentcore-endpoint"]
-        if "identity" in config:
-            stages += ["agentcore-chat-runtime", "agentcore-chat-endpoint"]
     stages += ["durable-runtime"]
-    if "identity" in config:
-        stages += ["chat-runtime"]
     if "observability" in spec:
         stages += ["observation-foundation", "observation-runtime", "health-bootstrap"]
     return (
         stages
-        + ["candidate-verification"]
-        + (["initial-access"] if "identity" in config else [])
-        + ["staging-canary", "routing"]
+        + ["candidate-verification", "staging-canary", "routing"]
         + (["observations"] if "observability" in spec else [])
         + ["registration-verification", "manual-acceptance"]
     )
@@ -117,10 +109,9 @@ def stage_order(spec, config):
 def plan(path):
     path = Path(path).resolve()
     value = json.loads(path.read_text())
-    if (
-        set(value) != {"version", "spec", "runtime_config", "profile", "wheelhouse", "initial_access"}
-        or value["version"] != 1
-    ):
+    if "initial_access" in value:
+        raise VerificationError(durable.TEAM_SIGNIN_CHANGED)
+    if set(value) != {"version", "spec", "runtime_config", "profile", "wheelhouse"} or value["version"] != 1:
         raise VerificationError("Automation configuration has unknown or missing fields")
     if value["profile"] is not None and (
         not isinstance(value["profile"], str) or not re.fullmatch(r"[A-Za-z0-9_.@-]{1,128}", value["profile"])
@@ -133,36 +124,12 @@ def plan(path):
         paths[field] = (path.parent / value[field]).resolve()
     spec = load(paths["spec"])
     config = durable.load_config(paths["runtime_config"], spec)
-    identity_mode = "identity" in config
     if model_api(spec) and config["runtime_target"] != "standalone":
         raise VerificationError("model_api is supported only by the standalone runtime")
     if not config["investigation_paused"]:
         raise VerificationError(
             "Initial deployment must keep investigation_paused true; activation is a separate qualified release"
         )
-    access = value["initial_access"]
-    if not isinstance(access, list) or len(access) > 100:
-        raise VerificationError("Invalid initial access list")
-    if access and not identity_mode:
-        raise VerificationError("initial_access needs an identity block in the runtime configuration")
-    subjects = set()
-    for request in access:
-        if not isinstance(request, dict) or set(request) != {"subject", "enabled", "role", "instance_ids"}:
-            raise VerificationError("Initial access requires subject, enabled, role and instance_ids")
-        if (
-            not isinstance(request["subject"], str)
-            or not 1 <= len(request["subject"]) <= 512
-            or request["subject"] in subjects
-            or type(request["enabled"]) is not bool
-            or request["role"] not in {"viewer", "investigator"}
-            or not isinstance(request["instance_ids"], list)
-            or not request["instance_ids"]
-            or any(not isinstance(i, str) for i in request["instance_ids"])
-            or len(set(request["instance_ids"])) != len(request["instance_ids"])
-            or not set(request["instance_ids"]) <= {i["id"] for i in spec["instances"]}
-        ):
-            raise VerificationError("Invalid initial grant subject/role/scope")
-        subjects.add(request["subject"])
     source = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
     result = {
         "version": 1,
@@ -170,17 +137,12 @@ def plan(path):
         "spec": spec,
         "runtime_config": config,
         "profile": value["profile"],
-        "initial_access": access,
         "paths": {k: str(v) for k, v in paths.items()},
         "stages": stage_order(spec, config),
         "automatic_activation": False,
         "manual": [
             "EC2/application/CloudWatch Agent configuration and telemetry",
-            *(
-                ["OIDC provider registration, client/cookie secrets, native MFA staging login"]
-                if identity_mode
-                else ["Local UI: export APP_PASSWORD (12+ characters) in your shell before launching it"]
-            ),
+            "Local UI: export APP_PASSWORD (12+ characters) in your shell before launching it",
             *(
                 [
                     f"Create secret {prefix(spec)}/model-api-key in {spec['bedrock_region']} out of band; automation never reads or writes its value"
@@ -192,20 +154,12 @@ def plan(path):
             "Production promotion/activation after customer acceptance",
         ],
     }
-    from infra import durable_ops, durable_templates, identity
+    from infra import durable_ops, durable_templates
 
     previews = {
         "foundation-tools": templates.foundation(spec, "tools"),
         "foundation-monitor": templates.foundation(spec, "monitor"),
         "durable-foundation": durable_templates.foundation(spec, config),
-        **(
-            {
-                "identity-foundation": identity.foundation(spec),
-                "identity-secret": identity.signing_secret(spec),
-            }
-            if identity_mode
-            else {}
-        ),
     }
     result["bootstrap_templates"] = previews
     result["resources"] = {
@@ -228,16 +182,8 @@ def plan(path):
                     "AWS::IAM::Role",
                     "AWS::Logs::LogGroup",
                 ],
-                "chat-runtime": [
-                    "AWS::Lambda::Function",
-                    "AWS::Lambda::Version",
-                    "AWS::IAM::Role",
-                    "AWS::Logs::LogGroup",
-                ],
                 "agentcore-runtime": ["AWS::BedrockAgentCore::Runtime", "AWS::IAM::Role"],
-                "agentcore-chat-runtime": ["AWS::BedrockAgentCore::Runtime", "AWS::IAM::Role"],
                 "agentcore-endpoint": ["AWS::BedrockAgentCore::RuntimeEndpoint", "AWS::Logs::LogGroup"],
-                "agentcore-chat-endpoint": ["AWS::BedrockAgentCore::RuntimeEndpoint", "AWS::Logs::LogGroup"],
                 "routing": [
                     "AWS::CloudWatch::Alarm",
                     "AWS::Events::Rule",
@@ -267,9 +213,7 @@ def plan(path):
     result["preview_limit"] = (
         "Bootstrap templates are exact; later runtime resources resolve collected AWS outputs and immutable artifact versions during apply. Actual change sets are inspected before execution. No invoice/free-tier estimate or production qualification."
     )
-    result["permission_screen"] = deployment_preflight.permission_requests(
-        spec, {**config, "_initial_access": access}
-    )
+    result["permission_screen"] = deployment_preflight.permission_requests(spec, config)
     result["plan_hash"] = digest(result)
     return result
 
@@ -534,7 +478,7 @@ class Driver:
         raise Waiting(f"{stage}: execution requested; rerun apply to resume", automatic=True)
 
 
-def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_canary=False):
+def deploy(planned, directory, driver, *, allow_model=False, retry_canary=False):
     journal = directory / "state.json"
     state = (
         json.loads(journal.read_text())
@@ -549,19 +493,15 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
     )
     if state.get("version") != 1 or state.get("plan_hash") != planned["plan_hash"]:
         raise VerificationError("Configuration/source changed; create a new deployment work directory")
-    # Without an identity block this is local single-user mode: no identity stages, grants or tickets.
-    identity_mode = "identity" in planned["runtime_config"]
 
     def save():
         private_json(journal, state)
 
-    def stage(stage_name, checkpoint=None, *, unbound=False, **kwargs):
-        checkpoint = checkpoint or stage_name
-        bindings = {k: v for k, v in state["bindings"].items() if not (unbound and k == "identity")}
-        bundle = driver.render(bindings)
+    def stage(stage_name, **kwargs):
+        bundle = driver.render(state["bindings"])
         if stage_name not in bundle["stages"]:
             raise VerificationError("Required deployment bindings are missing")
-        record = state["stages"].setdefault(checkpoint, {})
+        record = state["stages"].setdefault(stage_name, {})
         driver.stage(bundle, stage_name, record, save, **kwargs)
         return bundle
 
@@ -571,12 +511,8 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         save()
 
     if retry_canary:
-        if not allow_model or (identity_mode and ticket is None):
-            raise VerificationError(
-                "Retry requires a private ticket and explicit paid invocation authorization"
-                if identity_mode
-                else "Retry requires explicit paid invocation authorization"
-            )
+        if not allow_model:
+            raise VerificationError("Retry requires explicit paid invocation authorization")
         state.setdefault("canary_history", []).append(
             {
                 "previous_receipt": state.pop("canary", None),
@@ -587,38 +523,28 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         save()
     save()
     try:
-        # Recheck identity and permissions on every resume. Capacity accounts for
-        # already verified own reservations, never trusts journal-only values.
-        # Investigate (2) and Chat (1) are reserved only by identity-enabled templates.
-        remaining = planned["runtime_config"]["initial_reserved_concurrency"] + (3 if identity_mode else 0)
-        for stage_name, logicals in [
-            (
-                "durable-runtime",
-                [("Initial", planned["runtime_config"]["initial_reserved_concurrency"])]
-                + ([("Investigate", 2)] if identity_mode else []),
-            ),
-            *([("chat-runtime", [("Chat", 1)])] if identity_mode else []),
-        ]:
-            record = state["stages"].get(stage_name)
-            if record:
-                bundle = driver.render(state["bindings"]) if state.get("built") else None
-                current = driver.inspect_stack(bundle, stage_name) if bundle else None
+        # Recheck permissions on every resume. Capacity accounts for the already verified
+        # own reservation, never trusts journal-only values.
+        initial = planned["runtime_config"]["initial_reserved_concurrency"]
+        remaining = initial
+        if state["stages"].get("durable-runtime"):
+            bundle = driver.render(state["bindings"]) if state.get("built") else None
+            current = driver.inspect_stack(bundle, "durable-runtime") if bundle else None
+            if (
+                current
+                and current["StackStatus"] in {"CREATE_COMPLETE", "UPDATE_COMPLETE"}
+                and driver.template_matches(bundle, "durable-runtime")
+            ):
+                client = driver.clients("lambda", planned["spec"]["monitor_region"])
+                output = driver.op(bundle, "collect", stage="durable-runtime")
+                arn = output["InitialVersionArn"]
                 if (
-                    current
-                    and current["StackStatus"] in {"CREATE_COMPLETE", "UPDATE_COMPLETE"}
-                    and driver.template_matches(bundle, stage_name)
+                    client.get_function_concurrency(FunctionName=arn.rsplit(":", 1)[0]).get(
+                        "ReservedConcurrentExecutions"
+                    )
+                    == initial
                 ):
-                    client = driver.clients("lambda", planned["spec"]["monitor_region"])
-                    output = driver.op(bundle, "collect", stage=stage_name)
-                    for logical, amount in logicals:
-                        arn = output[logical + "VersionArn"]
-                        if (
-                            client.get_function_concurrency(FunctionName=arn.rsplit(":", 1)[0]).get(
-                                "ReservedConcurrentExecutions"
-                            )
-                            == amount
-                        ):
-                            remaining -= amount
+                    remaining -= initial
         report = getattr(driver, "preflight", None)
         if report is None:
             report = deployment_preflight.check(planned, driver.clients, remaining_reserved=remaining)
@@ -630,22 +556,10 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             driver.build()
             state["built"] = True
             save()
-        for name in (
-            "foundation-tools",
-            "foundation-monitor",
-            "durable-foundation",
-            *(("identity-foundation", "identity-secret") if identity_mode else ()),
-        ):
-            if name == "identity-foundation":
-                if "identity-foundation-bound" not in state["stages"]:
-                    stage(name, unbound=True)
-            else:
-                stage(name)
+        for name in ("foundation-tools", "foundation-monitor", "durable-foundation"):
+            stage(name)
         collect("durable-foundation", "foundation")
         bundle = driver.render(state["bindings"])
-        if identity_mode and "identity" not in state["bindings"]:
-            state["bindings"]["identity"] = driver.op(bundle, "identity-version")
-            save()
         if "secret" not in state["bindings"]:
             state["bindings"]["secret"] = driver.op(bundle, "cursor-version")
             save()
@@ -653,21 +567,6 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             # Read-only: pins the out-of-band key secret's current version; the value is never read here.
             state["bindings"]["model_secret"] = driver.op(bundle, "model-secret-version")
             save()
-        if identity_mode:
-            # The second identity foundation adds the exact-version issuer grants.
-            stage("identity-foundation", "identity-foundation-bound")
-            bundle = driver.render(state["bindings"])
-            driver.command(
-                "infra.identity_ops",
-                [
-                    "pin-secret-version",
-                    "--bundle",
-                    directory / "bundle",
-                    "--review-hash",
-                    bundle["review_hash"],
-                ],
-                directory / "pin.json",
-            )
         if "tool_artifacts" not in state["bindings"]:
             bundle = driver.render(state["bindings"])
             state["bindings"]["tool_artifacts"] = driver.op(
@@ -695,26 +594,15 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
                 )
                 save()
         if planned["runtime_config"]["runtime_target"] == "agentcore":
-            for suffix, candidate, binding in [
-                ("agentcore", "agentcore_candidate", "agentcore"),
-                *(
-                    [("agentcore-chat", "agentcore_chat_candidate", "agentcore_chat")]
-                    if identity_mode
-                    else []
-                ),
-            ]:
-                stage(suffix + "-runtime")
-                collect(suffix + "-runtime", candidate)
-                # RuntimeArn is unused candidate metadata; render expects exact ID/version.
-                state["bindings"][candidate].pop("RuntimeArn", None)
-                save()
-                stage(suffix + "-endpoint")
-                collect(suffix + "-endpoint", binding)
+            stage("agentcore-runtime")
+            collect("agentcore-runtime", "agentcore_candidate")
+            # RuntimeArn is unused candidate metadata; render expects exact ID/version.
+            state["bindings"]["agentcore_candidate"].pop("RuntimeArn", None)
+            save()
+            stage("agentcore-endpoint")
+            collect("agentcore-endpoint", "agentcore")
         stage("durable-runtime")
         collect("durable-runtime", "versions")
-        if identity_mode:
-            stage("chat-runtime")
-            collect("chat-runtime", "chat_version")
         if "observability" in planned["spec"]:
             stage("observation-foundation")
             stage("observation-runtime")
@@ -723,7 +611,7 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             driver.op(bundle, "seed-health")
         bundle = driver.render(state["bindings"])
         driver.op(bundle, "verify-candidate")
-        # This output has references only; credentials and IdP secrets stay separate.
+        # This output has references only; credentials stay separate.
         connection = json.loads((directory / "bundle/routing.json").read_text())["Outputs"][
             "RuntimeConnection"
         ]["Value"]
@@ -733,48 +621,12 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
             "INCIDENT_TABLE": state["bindings"]["foundation"]["TableName"],
             "REPORT_BUCKET": state["bindings"]["foundation"]["EvidenceBucket"],
         }
-        if identity_mode:
-            issuer = driver.op(bundle, "collect", stage="identity-foundation")["SessionIssuerRoleArn"]
-            private_json(
-                directory / "ui-connection.json",
-                {
-                    "environment": env,
-                    "staging_issuer_role_arn": issuer,
-                    "operational_role": "Available only after routing verification",
-                    "provider_setup": "Configure privately; see deployment automation guide",
-                },
-            )
-        for index, request in enumerate(planned["initial_access"]):
-            request_file = directory / f"access-{index}.json"
-            private_json(request_file, request)
-            args = [
-                "--bundle",
-                directory / "bundle",
-                "--review-hash",
-                bundle["review_hash"],
-                "--request",
-                request_file,
-            ]
-            grant_file = directory / f"grant-{index}.json"
-            diff = driver.command("infra.identity_ops", ["grant-plan", *args], grant_file)
-            before, after = diff["before"], diff["after"]
-            if before and all(before.get(k) == v for k, v in after.items() if k != "epoch"):
-                continue
-            driver.command(
-                "infra.identity_ops",
-                ["grant-apply", *args, "--grant-plan", grant_file],
-                directory / f"grant-result-{index}.json",
-            )
         if planned["spec"]["environment"] != "staging":
             raise Waiting(
                 "Production candidates provisioned; existing gates require separately qualified staging and production cutover"
             )
-        if not allow_model or (identity_mode and ticket is None):
-            raise Waiting(
-                "Candidate ready: configure OIDC, log in with MFA and export the private staging ticket; resume with --allow-model-invocation --access-ticket-file"
-                if identity_mode
-                else "Candidate ready: resume with --allow-model-invocation"
-            )
+        if not allow_model:
+            raise Waiting("Candidate ready: resume with --allow-model-invocation")
         # Paid work is not blindly repeated on an ambiguous failure.
         receipt = state.get("canary")
         if receipt:
@@ -793,7 +645,7 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         else:
             state["canary_requested"] = True
             save()
-            receipt = driver.op(bundle, "canary", allow_model_invocation="", access_ticket_file=ticket)
+            receipt = driver.op(bundle, "canary", allow_model_invocation="")
             state["canary"] = receipt
             save()
         private_json(directory / "canary.json", receipt)
@@ -811,15 +663,7 @@ def deploy(planned, directory, driver, *, allow_model=False, ticket=None, retry_
         role = driver.op(bundle, "collect", stage="routing")["UiRoleArn"]
         private_json(
             directory / "ui-connection.json",
-            {
-                "environment": env,
-                "ui_role_arn": role,
-                **(
-                    {"staging_issuer_role_arn": issuer, "provider_setup": "Configure privately"}
-                    if identity_mode
-                    else {}
-                ),
-            },
+            {"environment": env, "ui_role_arn": role},
         )
         state["status"] = "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
         state["next"] = (
@@ -862,15 +706,7 @@ def main():
         action="store_true",
         help="Explicitly authorize replacing an expired or ambiguous paid canary after inspection",
     )
-    parser.add_argument("--access-ticket-file", type=Path)
-    parser.add_argument(
-        "--identity",
-        action="store_true",
-        help="init only: start from the opt-in individual-identity (OIDC) runtime example",
-    )
     args = parser.parse_args()
-    if args.identity and args.command != "init":
-        parser.error("--identity applies to init only; identity mode follows runtime.json")
     try:
         directory = private_dir(args.work_dir)
         with locked(directory):
@@ -879,10 +715,7 @@ def main():
 
                 targets = {
                     "deployment.json": ROOT / "examples/deployment.example.json",
-                    "runtime.json": ROOT
-                    / (
-                        "examples/identity.example.json" if args.identity else "examples/durable.example.json"
-                    ),
+                    "runtime.json": ROOT / "examples/durable.example.json",
                 }
                 if any((directory / p).exists() for p in [*targets, "automation.json"]):
                     raise VerificationError("Init never overwrites existing customer files")
@@ -897,16 +730,10 @@ def main():
                         "runtime_config": "runtime.json",
                         "profile": None,
                         "wheelhouse": str(ROOT / ".build/wheels"),
-                        "initial_access": [],
                     },
                 )
                 print(
                     "Created private templates. Fill deployment.json/runtime.json/automation.json; see docs/DEPLOY.md. Reference inputs cannot deploy AWS."
-                    + (
-                        ""
-                        if args.identity
-                        else " Local single-user mode; add --identity at init for individual OIDC sign-in."
-                    )
                 )
                 return 0
             if args.command == "status":
@@ -960,32 +787,8 @@ def main():
                 raise VerificationError("Run dry-run and supply its exact --plan-hash before apply")
             if subprocess.check_output(["git", "status", "--porcelain"], cwd=ROOT, text=True).strip():
                 raise VerificationError("Apply requires a clean reviewed source checkout")
-            identity_mode = "identity" in planned["runtime_config"]
-            if args.access_ticket_file and not identity_mode:
-                raise VerificationError(
-                    "--access-ticket-file applies only with an identity block in runtime.json"
-                )
-            if args.retry_canary and (
-                not args.allow_model_invocation or (identity_mode and not args.access_ticket_file)
-            ):
-                raise VerificationError(
-                    "--retry-canary needs --allow-model-invocation and a private ticket"
-                    if identity_mode
-                    else "--retry-canary needs --allow-model-invocation"
-                )
-            if args.access_ticket_file and not args.allow_model_invocation:
-                raise VerificationError("A canary ticket requires explicit paid model authorization")
-            if args.access_ticket_file:
-                ticket = args.access_ticket_file
-                if (
-                    ticket.is_symlink()
-                    or ticket.stat().st_mode & 0o077
-                    or ticket.parent.stat().st_mode & 0o077
-                    or not 1 <= ticket.stat().st_size <= 1024
-                ):
-                    raise VerificationError(
-                        "Canary ticket and parent directory must be private, with a bounded nonempty ticket"
-                    )
+            if args.retry_canary and not args.allow_model_invocation:
+                raise VerificationError("--retry-canary needs --allow-model-invocation")
             if not 0 <= args.wait_seconds <= 3600:
                 raise VerificationError("--wait-seconds must be between 0 and 3600")
             driver = Driver(planned, directory)
@@ -995,7 +798,6 @@ def main():
                 directory,
                 driver,
                 allow_model=args.allow_model_invocation,
-                ticket=args.access_ticket_file,
                 retry_canary=args.retry_canary,
             )
             while result["status"] == "WAITING" and result["auto_resume"] and time.monotonic() < deadline:
@@ -1006,7 +808,6 @@ def main():
                     directory,
                     driver,
                     allow_model=args.allow_model_invocation,
-                    ticket=args.access_ticket_file,
                 )
             print(json.dumps(result, indent=2))
             return 2 if result["status"] == "WAITING" else 0

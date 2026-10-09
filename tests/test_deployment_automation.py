@@ -2,13 +2,12 @@ import copy
 import json
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 from botocore.exceptions import ClientError
 
-from infra import automation, deployment_preflight, durable, identity, identity_ops, owned_runtime
+from infra import automation, deployment_preflight, durable, owned_runtime
 from infra.spec import name, prefix, topic_arn
 from infra.templates import service_routing
 from infra.verify import PendingConfirmation, VerificationError, routing_health
@@ -22,7 +21,6 @@ def configuration(
     observations=False,
     environment="staging",
     *,
-    identity=True,
     model_api=False,
 ):
     spec = json.loads(
@@ -36,11 +34,7 @@ def configuration(
         spec.pop("model_arns")
         spec["model_provider"] = "model_api"
         spec["model_api"] = {"protocol": "openai", "base_url": "https://models.example.invalid/v1"}
-    config = json.loads(
-        (
-            ROOT / ("examples/identity.example.json" if identity else "examples/durable.example.json")
-        ).read_text()
-    )
+    config = json.loads((ROOT / "examples/durable.example.json").read_text())
     config["runtime_target"] = target
     (tmp_path / "deployment.json").write_text(json.dumps(spec))
     (tmp_path / "runtime.json").write_text(json.dumps(config))
@@ -52,16 +46,6 @@ def configuration(
                 "runtime_config": "runtime.json",
                 "profile": None,
                 "wheelhouse": str(ROOT / ".build/wheels"),
-                "initial_access": [
-                    {
-                        "subject": "synthetic-operator",
-                        "enabled": True,
-                        "role": "investigator",
-                        "instance_ids": [spec["instances"][0]["id"]],
-                    }
-                ]
-                if identity
-                else [],
             }
         )
     )
@@ -88,11 +72,7 @@ def test_dry_run_plan_no_aws_and_settings_change_hash(tmp_path, monkeypatch):
         "unknown",
         "missing",
         "bad_profile",
-        "bad_grant",
-        "duplicate_subject",
-        "unknown_instance",
         "unpaused",
-        "access_without_identity",
     ],
 )
 def test_bad_settings_fail_without_clients(tmp_path, mutation):
@@ -105,24 +85,43 @@ def test_bad_settings_fail_without_clients(tmp_path, mutation):
         del value["version"]
     if mutation == "bad_profile":
         value["profile"] = "../unsafe"
-    if mutation == "bad_grant":
-        value["initial_access"][0]["enabled"] = "yes"
-    if mutation == "duplicate_subject":
-        value["initial_access"] *= 2
-    if mutation == "unknown_instance":
-        value["initial_access"][0]["instance_ids"] = ["i-foreign"]
-    if mutation in {"unpaused", "access_without_identity"}:
+    if mutation == "unpaused":
         r = tmp_path / "runtime.json"
         config = json.loads(r.read_text())
-        if mutation == "unpaused":
-            config["investigation_paused"] = False
-        else:
-            config.pop("identity")
-            config.pop("security")
+        config["investigation_paused"] = False
         r.write_text(json.dumps(config))
     p.write_text(json.dumps(value))
     with pytest.raises((VerificationError, ValueError)):
         automation.plan(p)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"identity": {"issuer": "https://login.example.invalid", "audience": "client"}},
+        {"security": {}},
+    ],
+)
+def test_runtime_config_with_removed_blocks_gets_one_clear_message(tmp_path, extra):
+    from infra import durable
+    from infra.spec import ROOT, load
+    from infra.verify import VerificationError
+
+    config = {**json.loads((ROOT / "examples/durable.example.json").read_text()), **extra}
+    path = tmp_path / "runtime.json"
+    path.write_text(json.dumps(config))
+    with pytest.raises(VerificationError, match="Team sign-in changed"):
+        durable.load_config(path, load(ROOT / "examples/deployment.example.json"))
+
+
+def test_automation_json_with_initial_access_gets_the_team_signin_message(tmp_path):
+    configuration(tmp_path)
+    path = tmp_path / "automation.json"
+    value = json.loads(path.read_text())
+    value["initial_access"] = []
+    path.write_text(json.dumps(value))
+    with pytest.raises(VerificationError, match="Team sign-in changed"):
+        automation.plan(path)
 
 
 def test_private_state_atomic_and_lock(tmp_path):
@@ -148,13 +147,14 @@ def test_order_and_separate_runtime_candidates(tmp_path, target, observations):
     p = configuration(tmp_path, target, observations)
     stages = p["stages"]
     assert (
-        stages.index("identity-foundation-bound")
-        < stages.index("owned-tools")
+        stages.index("owned-tools")
         < stages.index("durable-runtime")
+        < stages.index("staging-canary")
+        < stages.index("routing")
     )
-    assert stages.index("chat-runtime") < stages.index("staging-canary") < stages.index("routing")
     if target == "agentcore":
-        assert stages.index("agentcore-chat-endpoint") < stages.index("durable-runtime")
+        assert stages.index("agentcore-runtime") < stages.index("agentcore-endpoint")
+        assert stages.index("agentcore-endpoint") < stages.index("durable-runtime")
     if observations:
         assert stages.index("health-bootstrap") < stages.index("staging-canary")
 
@@ -223,14 +223,10 @@ class FakeDriver(automation.Driver):
         )
         _, self.outputs, artifacts, versions = examples(
             bedrock_spec,
-            {k: v for k, v in config.items() if k not in {"identity", "security"}},
+            config,
             include_bindings=True,
         )
         self.outputs["versions"] = versions
-        self.outputs["identity"] = {
-            "SigningSecretArn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:{identity.secret_name(spec)}-123abc",
-            "SigningSecretVersion": "a" * 32,
-        }
         self.outputs["secret"] = {
             "arn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:kira-staging/log-cursor-123abc",
             "version_id": "a" * 32,
@@ -244,7 +240,6 @@ class FakeDriver(automation.Driver):
         self.clients = Mock(side_effect=AssertionError("No live SDK"))
         self.preflight = {"status": "SIMULATED"}
         self.calls = []
-        self.grants = {}
         self.canaries = 0
         self.subscriptions = confirmed_subscriptions(spec, self.outputs["foundation"]["IngressQueueArn"])
         from infra import observations, release
@@ -293,10 +288,6 @@ class FakeDriver(automation.Driver):
                 return self.outputs["tools"]
             if stage == "durable-runtime":
                 return self.outputs["versions"]
-            if stage == "chat-runtime":
-                return {
-                    "ChatVersionArn": f"arn:aws:lambda:{spec['monitor_region']}:{spec['account_id']}:function:{name(spec, 'chat-investigate', True)}:1"
-                }
             if stage == "observation-runtime":
                 return {
                     logical
@@ -305,8 +296,6 @@ class FakeDriver(automation.Driver):
                         "infra.observation_templates", fromlist=["FUNCTIONS"]
                     ).FUNCTIONS.items()
                 }
-            if stage == "identity-foundation":
-                return {"SessionIssuerRoleArn": f"arn:aws:iam::{spec['account_id']}:role/kira/staging/issuer"}
             if stage == "routing":
                 return {"UiRoleArn": f"arn:aws:iam::{spec['account_id']}:role/kira/staging/ui"}
             if stage.endswith("-runtime"):
@@ -328,8 +317,6 @@ class FakeDriver(automation.Driver):
                     "EndpointName": endpoint,
                     "EndpointArn": arn + "/runtime-endpoint/" + endpoint + "-1234567890",
                 }
-        if command == "identity-version":
-            return self.outputs["identity"]
         if command == "cursor-version":
             return self.outputs["secret"]
         if command == "model-secret-version":
@@ -360,7 +347,7 @@ class FakeDriver(automation.Driver):
             return artifacts["incident_investigate"] if kind == "host" else artifacts
         if command == "canary":
             self.canaries += 1
-            self.canary_ticket = kw.get("access_ticket_file")
+            self.canary_options = set(kw)
             return {
                 "status": "PASS",
                 "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -387,16 +374,6 @@ class FakeDriver(automation.Driver):
         return {"status": "PASS"}
 
     def command(self, module, args, output=None):
-        if module == "infra.identity_ops" and args[0] == "grant-plan":
-            request = json.loads(Path(args[args.index("--request") + 1]).read_text())
-            bundle = json.loads((self.directory / "bundle/bundle.json").read_text())
-            diff = identity_ops.change(bundle, request, self.grants.get(request["subject"]))
-            automation.private_json(output, diff)
-            return diff
-        if module == "infra.identity_ops" and args[0] == "grant-apply":
-            request = json.loads(Path(args[args.index("--request") + 1]).read_text())
-            diff = json.loads(Path(args[args.index("--grant-plan") + 1]).read_text())
-            self.grants[request["subject"]] = diff["after"]
         return {"status": "PASS"}
 
 
@@ -409,15 +386,13 @@ def test_complete_orchestration_with_real_renderer_and_resume(tmp_path, monkeypa
     driver = FakeDriver(p, directory, monkeypatch)
     result = automation.deploy(p, directory, driver)
     assert result["status"] == "WAITING" and not result["auto_resume"]
-    assert "configure OIDC" in result["next"]
+    assert "--allow-model-invocation" in result["next"]
     assert driver.canaries == 0 and "routing" not in result["completed_stages"]
-    epoch = driver.grants["synthetic-operator"]["epoch"]
-    result = automation.deploy(p, directory, driver, allow_model=True, ticket=tmp_path / "ticket")
+    result = automation.deploy(p, directory, driver, allow_model=True)
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
     assert "routing" in result["completed_stages"] and driver.canaries == 1
-    assert driver.grants["synthetic-operator"]["epoch"] == epoch
     assert json.loads((directory / "ui-connection.json").read_text())["ui_role_arn"]
-    result = automation.deploy(p, directory, driver, allow_model=True, ticket=tmp_path / "ticket")
+    result = automation.deploy(p, directory, driver, allow_model=True)
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING" and driver.canaries == 1
 
 
@@ -439,11 +414,9 @@ def test_paid_canary_ambiguity_never_retried(tmp_path, monkeypatch):
     state = json.loads((directory / "state.json").read_text())
     state["canary_requested"] = True
     automation.private_json(directory / "state.json", state)
-    result = automation.deploy(p, directory, driver, allow_model=True, ticket=tmp_path / "ticket")
+    result = automation.deploy(p, directory, driver, allow_model=True)
     assert result["status"] == "WAITING" and "ambiguous" in result["next"] and driver.canaries == 0
-    result = automation.deploy(
-        p, directory, driver, allow_model=True, ticket=tmp_path / "ticket", retry_canary=True
-    )
+    result = automation.deploy(p, directory, driver, allow_model=True, retry_canary=True)
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING" and driver.canaries == 1
 
 
@@ -691,7 +664,6 @@ def test_complete_account_roles_inventory_capacity_permissions_preflight(tmp_pat
         in {planned["spec"]["ci_principal_arn"], planned["spec"]["deployment_role_arn"]}
         for c in calls
     )
-    assert any(entry["ContextKeyType"] == "stringList" for c in calls for entry in c.kwargs["ContextEntries"])
     clients["bedrock"].get_foundation_model.assert_called_once()
 
 
@@ -777,12 +749,10 @@ def test_generated_ui_launch_uses_scoped_role_not_deployer(tmp_path, monkeypatch
 @pytest.mark.parametrize(
     "interrupted",
     [
-        "identity-foundation",
         "owned-tools",
         "agentcore-runtime",
-        "agentcore-chat-endpoint",
+        "agentcore-endpoint",
         "durable-runtime",
-        "chat-runtime",
         "observation-runtime",
         "routing",
     ],
@@ -806,7 +776,7 @@ def test_resume_at_interrupted_stage_reconciles_real_bindings(tmp_path, monkeypa
 
     driver.stage = once
     for _ in range(3):
-        result = automation.deploy(planned, directory, driver, allow_model=True, ticket=tmp_path / "ticket")
+        result = automation.deploy(planned, directory, driver, allow_model=True)
         if result["status"] != "WAITING":
             break
     assert hit and result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
@@ -821,7 +791,7 @@ def test_production_candidate_does_not_bypass_staging_gate(tmp_path, monkeypatch
     driver.outputs["secret"]["arn"] = (
         "arn:aws:secretsmanager:eu-central-1:123456789012:secret:kira-production/log-cursor-123abc"
     )
-    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=tmp_path / "ticket")
+    result = automation.deploy(planned, directory, driver, allow_model=True)
     assert result["status"] == "WAITING" and "Production candidates provisioned" in result["next"]
     assert driver.canaries == 0 and "routing" not in result["completed_stages"]
 
@@ -876,22 +846,18 @@ def test_operator_wrapper_binds_one_explicit_sdk_session(monkeypatch):
     setup.assert_called_once_with(profile_name="customer-sso")
     run.assert_called_once_with("infra.durable_ops", run_name="__main__")
     assert __import__("sys").argv == ["infra.durable_ops", "collect", "--bundle", ".local/customer/bundle"]
+    assert "infra.identity_ops" not in operator.MODULES
 
 
-# Pre-change stage lists of the opt-in identity plan (captured from the code before default mode existed).
-IDENTITY_STAGES = {
+# The stage lists of a plan, pinned as literals.
+DEFAULT_STAGES = {
     ("standalone", False): [
         "foundation-tools",
         "foundation-monitor",
         "durable-foundation",
-        "identity-foundation",
-        "identity-secret",
-        "identity-foundation-bound",
         "owned-tools",
         "durable-runtime",
-        "chat-runtime",
         "candidate-verification",
-        "initial-access",
         "staging-canary",
         "routing",
         "registration-verification",
@@ -901,17 +867,12 @@ IDENTITY_STAGES = {
         "foundation-tools",
         "foundation-monitor",
         "durable-foundation",
-        "identity-foundation",
-        "identity-secret",
-        "identity-foundation-bound",
         "owned-tools",
         "durable-runtime",
-        "chat-runtime",
         "observation-foundation",
         "observation-runtime",
         "health-bootstrap",
         "candidate-verification",
-        "initial-access",
         "staging-canary",
         "routing",
         "observations",
@@ -922,18 +883,11 @@ IDENTITY_STAGES = {
         "foundation-tools",
         "foundation-monitor",
         "durable-foundation",
-        "identity-foundation",
-        "identity-secret",
-        "identity-foundation-bound",
         "owned-tools",
         "agentcore-runtime",
         "agentcore-endpoint",
-        "agentcore-chat-runtime",
-        "agentcore-chat-endpoint",
         "durable-runtime",
-        "chat-runtime",
         "candidate-verification",
-        "initial-access",
         "staging-canary",
         "routing",
         "registration-verification",
@@ -943,21 +897,14 @@ IDENTITY_STAGES = {
         "foundation-tools",
         "foundation-monitor",
         "durable-foundation",
-        "identity-foundation",
-        "identity-secret",
-        "identity-foundation-bound",
         "owned-tools",
         "agentcore-runtime",
         "agentcore-endpoint",
-        "agentcore-chat-runtime",
-        "agentcore-chat-endpoint",
         "durable-runtime",
-        "chat-runtime",
         "observation-foundation",
         "observation-runtime",
         "health-bootstrap",
         "candidate-verification",
-        "initial-access",
         "staging-canary",
         "routing",
         "observations",
@@ -965,79 +912,63 @@ IDENTITY_STAGES = {
         "manual-acceptance",
     ],
 }
-IDENTITY_ONLY = {
-    "identity-foundation",
-    "identity-secret",
-    "identity-foundation-bound",
-    "chat-runtime",
-    "agentcore-chat-runtime",
-    "agentcore-chat-endpoint",
-    "initial-access",
-}
 
 
-@pytest.mark.parametrize("target,observations", IDENTITY_STAGES)
-def test_opt_in_identity_plan_stages_unchanged(tmp_path, target, observations):
+@pytest.mark.parametrize("target,observations", DEFAULT_STAGES)
+def test_default_plan_stage_lists_are_pinned(tmp_path, target, observations):
     planned = configuration(tmp_path, target, observations)
-    assert planned["stages"] == IDENTITY_STAGES[target, observations]
-    assert "model-secret" not in planned["stages"]
-    assert {"identity-foundation", "identity-secret"} <= set(planned["bootstrap_templates"])
-    assert any("OIDC" in item for item in planned["manual"])
-
-
-@pytest.mark.parametrize("target,observations", IDENTITY_STAGES)
-def test_default_plan_drops_exactly_the_identity_stages(tmp_path, target, observations):
-    planned = configuration(tmp_path, target, observations, identity=False)
-    assert planned["stages"] == [s for s in IDENTITY_STAGES[target, observations] if s not in IDENTITY_ONLY]
-    assert planned["initial_access"] == [] and "identity" not in planned["runtime_config"]
-    assert not {"identity-foundation", "identity-secret"} & set(planned["bootstrap_templates"])
-    assert not {"identity-foundation", "identity-secret"} & set(planned["resources"])
+    assert planned["stages"] == DEFAULT_STAGES[target, observations]
+    assert "initial_access" not in planned
+    assert set(planned["bootstrap_templates"]) == {
+        "foundation-tools",
+        "foundation-monitor",
+        "durable-foundation",
+    }
+    assert not any(stage.startswith(("identity", "chat", "agentcore-chat")) for stage in planned["resources"])
+    assert (
+        "Local UI: export APP_PASSWORD (12+ characters) in your shell before launching it"
+        in planned["manual"]
+    )
     assert not any("OIDC" in item for item in planned["manual"])
-    assert "staging-canary" in planned["stages"] and "durable-runtime" in planned["stages"]
+
+
+def test_permission_screen_has_no_cloudtrail_or_grant_checks(tmp_path):
+    actions = {a for request in configuration(tmp_path)["permission_screen"] for a in request["actions"]}
+    assert not {a for a in actions if a.startswith("cloudtrail:")} and "dynamodb:PutItem" not in actions
 
 
 @pytest.mark.parametrize("target", ["standalone", "agentcore"])
 @pytest.mark.parametrize("observations", [False, True])
-def test_default_mode_reaches_canary_without_identity_or_ticket(tmp_path, monkeypatch, target, observations):
-    (tmp_path / "identity").mkdir()
-    reference = configuration(tmp_path / "identity", target, observations)
-    ref_dir = tmp_path / "ref-work"
-    ref_dir.mkdir()
-    ref_driver = FakeDriver(reference, ref_dir, monkeypatch)
-    automation.deploy(reference, ref_dir, ref_driver)
-    ref = automation.deploy(reference, ref_dir, ref_driver, allow_model=True, ticket=tmp_path / "ticket")
-    assert ref["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
-
-    (tmp_path / "local").mkdir()
-    planned = configuration(tmp_path / "local", target, observations, identity=False)
+def test_default_deploy_reaches_the_canary_without_a_ticket(tmp_path, monkeypatch, target, observations):
+    planned = configuration(tmp_path, target, observations)
     directory = tmp_path / "work"
     directory.mkdir()
     driver = FakeDriver(planned, directory, monkeypatch)
     result = automation.deploy(planned, directory, driver)
     assert result["status"] == "WAITING" and not result["auto_resume"]
-    assert "--allow-model-invocation" in result["next"] and "OIDC" not in result["next"]
-    assert "ticket" not in result["next"] and driver.canaries == 0
+    assert result["next"] == "Candidate ready: resume with --allow-model-invocation" and driver.canaries == 0
     result = automation.deploy(planned, directory, driver, allow_model=True)
-    assert result["status"] == ref["status"] and driver.canaries == 1 and driver.canary_ticket is None
-    assert result["completed_stages"] == [s for s in ref["completed_stages"] if s not in IDENTITY_ONLY]
-    state = json.loads((directory / "state.json").read_text())
-    assert "identity" not in state["bindings"] and "model_secret" not in state["bindings"]
-    assert not any(
-        c.startswith("identity") or "identity-foundation" in c or c.startswith("chat-runtime")
-        for c in driver.calls
+    assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
+    assert driver.canaries == 1 and driver.canary_options == {"allow_model_invocation"}
+    # Every CloudFormation stage of the plan completed, and nothing else.
+    assert sorted(result["completed_stages"]) == sorted(
+        s for s in planned["stages"] if s in planned["resources"]
     )
-    assert not any("chat" in c for c in driver.calls)
+    state = json.loads((directory / "state.json").read_text())
+    assert not {"identity", "model_secret"} & set(state["bindings"])
+    assert not any("identity" in c or "chat" in c for c in driver.calls)
     connection = json.loads((directory / "ui-connection.json").read_text())
     assert set(connection) == {"environment", "ui_role_arn"}
     assert "KIRA_AUTH_MODE" not in connection["environment"]
     assert (
-        automation.deploy(planned, directory, driver, allow_model=True)["status"] == ref["status"]
+        automation.deploy(planned, directory, driver, allow_model=True)["status"]
+        == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
         and driver.canaries == 1
     )
 
 
 def test_default_mode_paid_canary_retry_needs_authorization_not_ticket(tmp_path, monkeypatch):
-    planned = configuration(tmp_path, identity=False)
+    planned = configuration(tmp_path)
     directory = tmp_path / "work"
     directory.mkdir()
     driver = FakeDriver(planned, directory, monkeypatch)
@@ -1053,9 +984,8 @@ def test_default_mode_paid_canary_retry_needs_authorization_not_ticket(tmp_path,
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING" and driver.canaries == 1
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_reserved_concurrency_counts_only_what_the_templates_reserve(tmp_path, monkeypatch, identity_mode):
-    planned = configuration(tmp_path, identity=identity_mode)
+def test_reserved_concurrency_counts_only_what_the_templates_reserve(tmp_path, monkeypatch):
+    planned = configuration(tmp_path)
     initial = planned["runtime_config"]["initial_reserved_concurrency"]
     directory = tmp_path / "work"
     directory.mkdir()
@@ -1069,14 +999,9 @@ def test_reserved_concurrency_counts_only_what_the_templates_reserve(tmp_path, m
     monkeypatch.setattr(deployment_preflight, "check", check)
     driver.preflight = None
     automation.deploy(planned, directory, driver)
-    assert seen == [initial + (3 if identity_mode else 0)]
-    # Resume: every reservation the plan makes is verified live and leaves nothing to reserve.
-    names = {
-        driver.outputs["versions"]["InitialVersionArn"].rsplit(":", 1)[0]: initial,
-        driver.op(None, "collect", stage="chat-runtime")["ChatVersionArn"].rsplit(":", 1)[0]: 1,
-    }
-    if identity_mode:
-        names[driver.outputs["versions"]["InvestigateVersionArn"].rsplit(":", 1)[0]] = 2
+    assert seen == [initial]
+    # Resume: the reservation the plan makes is verified live and leaves nothing to reserve.
+    names = {driver.outputs["versions"]["InitialVersionArn"].rsplit(":", 1)[0]: initial}
     lambda_client = Mock()
     lambda_client.get_function_concurrency.side_effect = lambda FunctionName: (
         {"ReservedConcurrentExecutions": names[FunctionName]} if FunctionName in names else {}
@@ -1089,28 +1014,22 @@ def test_reserved_concurrency_counts_only_what_the_templates_reserve(tmp_path, m
     assert seen[-1] == 0
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_preflight_capacity_follows_reservations_the_plan_makes(tmp_path, identity_mode):
-    planned = configuration(tmp_path, identity=identity_mode)
+def test_preflight_capacity_follows_reservations_the_plan_makes(tmp_path):
+    planned = configuration(tmp_path)
     planned["spec"]["reference_only"] = False
     clients = preflight_factory(planned)
-    # 103 unreserved leaves 3 reservable: the three identity functions' 5 do not fit, 2 do.
+    # 103 unreserved leaves 3 reservable: the initial reservation of 2 fits.
     clients["lambda"].get_account_settings.return_value["AccountLimit"]["UnreservedConcurrentExecutions"] = (
         103
     )
-    if identity_mode:
-        with pytest.raises(VerificationError, match="unreserved capacity"):
-            deployment_preflight.check(planned, lambda service, region: clients[service])
-    else:
-        result = deployment_preflight.check(planned, lambda service, region: clients[service])
-        assert result["status"] == "SIMULATED"
+    result = deployment_preflight.check(planned, lambda service, region: clients[service])
+    assert result["status"] == "SIMULATED"
 
 
 # model_api plans insert exactly one read-only secret-version stage; Bedrock plans do not.
-@pytest.mark.parametrize("identity_mode", [True, False])
 @pytest.mark.parametrize("target", ["standalone", "agentcore"])
-def test_model_api_stage_order_pure(target, identity_mode):
-    config = {"runtime_target": target, **({"identity": {}} if identity_mode else {})}
+def test_model_api_stage_order_pure(target):
+    config = {"runtime_target": target}
     for spec in ({}, {"model_provider": "bedrock"}):
         assert "model-secret" not in automation.stage_order(spec, config)
     stages = automation.stage_order({"model_provider": "model_api"}, config)
@@ -1119,17 +1038,15 @@ def test_model_api_stage_order_pure(target, identity_mode):
     assert [s for s in stages if s != "model-secret"] == automation.stage_order({}, config)
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_model_api_plan_and_resumable_secret_binding(tmp_path, monkeypatch, identity_mode):
-    planned = configuration(tmp_path, identity=identity_mode, model_api=True)
+def test_model_api_plan_and_resumable_secret_binding(tmp_path, monkeypatch):
+    planned = configuration(tmp_path, model_api=True)
     assert planned["stages"].count("model-secret") == 1
     assert "model-secret" not in planned["resources"]
     directory = tmp_path / "work"
     directory.mkdir()
     driver = FakeDriver(planned, directory, monkeypatch)
-    ticket = tmp_path / "ticket" if identity_mode else None
     automation.deploy(planned, directory, driver)
-    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    result = automation.deploy(planned, directory, driver, allow_model=True)
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING" and driver.canaries == 1
     state = json.loads((directory / "state.json").read_text())
     assert state["bindings"]["model_secret"] == driver.outputs["model_secret"]
@@ -1148,26 +1065,22 @@ def test_bedrock_deploy_never_resolves_a_model_secret(tmp_path, monkeypatch):
     assert "model_secret" not in json.loads((directory / "state.json").read_text())["bindings"]
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_missing_model_secret_fails_closed_before_any_runtime_or_model_call(
-    tmp_path, monkeypatch, identity_mode
-):
-    planned = configuration(tmp_path, identity=identity_mode, model_api=True)
+def test_missing_model_secret_fails_closed_before_any_runtime_or_model_call(tmp_path, monkeypatch):
+    planned = configuration(tmp_path, model_api=True)
     directory = tmp_path / "work"
     directory.mkdir()
     driver = FakeDriver(planned, directory, monkeypatch)
     driver.missing_model_secret = True
-    ticket = tmp_path / "ticket" if identity_mode else None
     with pytest.raises(VerificationError, match="Model API key secret"):
-        automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+        automation.deploy(planned, directory, driver, allow_model=True)
     assert driver.calls[-1] == "model-secret-version" and driver.canaries == 0
-    assert not {"owned-tools", "durable-runtime", "chat-runtime", "upload", "canary"} & set(driver.calls)
+    assert not {"owned-tools", "durable-runtime", "upload", "canary"} & set(driver.calls)
     state = json.loads((directory / "state.json").read_text())
     assert state["status"] == "FAILED" and "model_secret" not in state["bindings"]
 
 
 def model_api_preflight(tmp_path, secret):
-    planned = configuration(tmp_path, identity=False)
+    planned = configuration(tmp_path)
     planned["spec"]["reference_only"] = False
     planned["spec"].pop("model_arns")
     planned["spec"]["model_provider"] = "model_api"
@@ -1225,61 +1138,43 @@ def run_main(monkeypatch, *argv):
     return automation.main()
 
 
-@pytest.mark.parametrize("flag", [None, "--identity"])
-def test_init_copies_default_or_identity_runtime_and_plans(tmp_path, monkeypatch, capsys, flag):
+def test_init_copies_the_default_runtime_and_plans(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(automation, "private_dir", lambda path: path)
-    assert run_main(monkeypatch, "init", "--work-dir", tmp_path, *([flag] if flag else [])) == 0
-    source = "identity" if flag else "durable"
-    assert (tmp_path / "runtime.json").read_bytes() == (ROOT / f"examples/{source}.example.json").read_bytes()
+    assert run_main(monkeypatch, "init", "--work-dir", tmp_path) == 0
+    assert (tmp_path / "runtime.json").read_bytes() == (ROOT / "examples/durable.example.json").read_bytes()
     assert (tmp_path / "runtime.json").stat().st_mode & 0o777 == 0o600
-    assert json.loads((tmp_path / "automation.json").read_text())["initial_access"] == []
+    assert "initial_access" not in json.loads((tmp_path / "automation.json").read_text())
     assert "docs/DEPLOY.md" in capsys.readouterr().out
     assert (
         run_main(monkeypatch, "dry-run", "--config", tmp_path / "automation.json", "--work-dir", tmp_path)
         == 0
     )
     stages = json.loads(capsys.readouterr().out)["stages"]
-    assert ("identity-foundation-bound" in stages) == bool(flag) and "staging-canary" in stages
-    assert ("initial-access" in stages) == bool(flag)
+    assert stages == DEFAULT_STAGES["standalone", False]
     # Init never overwrites what the customer already filled in.
     assert run_main(monkeypatch, "init", "--work-dir", tmp_path) == 1
 
 
-def test_identity_flag_belongs_to_init_only(tmp_path, monkeypatch):
+def test_removed_identity_options_are_no_longer_accepted(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(automation, "private_dir", lambda path: path)
-    with pytest.raises(SystemExit):
-        run_main(
-            monkeypatch,
-            "dry-run",
-            "--identity",
-            "--config",
-            tmp_path / "automation.json",
-            "--work-dir",
-            tmp_path,
-        )
+    for argv in (["init", "--identity"], ["apply", "--access-ticket-file", tmp_path / "ticket"]):
+        with pytest.raises(SystemExit) as stop:
+            run_main(monkeypatch, *argv, "--work-dir", tmp_path)
+        assert stop.value.code == 2 and "unrecognized arguments" in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(
-    "identity_mode,flags,accepted",
+    "flags,accepted",
     [
-        (False, ["--allow-model-invocation"], True),
-        (False, ["--allow-model-invocation", "--retry-canary"], True),
-        (False, ["--allow-model-invocation", "--access-ticket-file", "TICKET"], False),
-        (True, ["--allow-model-invocation", "--access-ticket-file", "TICKET"], True),
-        (True, ["--allow-model-invocation", "--retry-canary", "--access-ticket-file", "TICKET"], True),
-        (True, ["--allow-model-invocation", "--retry-canary"], False),
+        (["--allow-model-invocation"], True),
+        (["--allow-model-invocation", "--retry-canary"], True),
+        (["--retry-canary"], False),
     ],
 )
-def test_ticket_options_exist_only_with_identity(
-    tmp_path, monkeypatch, capsys, identity_mode, flags, accepted
-):
+def test_apply_paid_canary_flags_need_explicit_authorization(tmp_path, monkeypatch, capsys, flags, accepted):
     monkeypatch.setattr(automation, "private_dir", lambda path: path)
-    planned = configuration(tmp_path, identity=identity_mode)
+    planned = configuration(tmp_path)
     planned["spec"]["reference_only"] = False
-    ticket = tmp_path / "ticket"
-    ticket.write_text("synthetic")
-    ticket.chmod(0o600)
-    tmp_path.chmod(0o700)
     monkeypatch.setattr(automation, "plan", lambda path: planned)
     monkeypatch.setattr(automation.subprocess, "check_output", lambda *a, **kw: "")
     driver = Mock()
@@ -1289,13 +1184,16 @@ def test_ticket_options_exist_only_with_identity(
     )
     monkeypatch.setattr(automation, "deploy", deploy)
     argv = ["apply", "--config", tmp_path / "automation.json", "--work-dir", tmp_path]
-    argv += ["--plan-hash", planned["plan_hash"], *[ticket if f == "TICKET" else f for f in flags]]
+    argv += ["--plan-hash", planned["plan_hash"], *flags]
     assert run_main(monkeypatch, *argv) == (0 if accepted else 1)
     assert deploy.called is accepted and driver.called is accepted
-    if not accepted:
-        assert "ticket" in capsys.readouterr().err
+    if accepted:
+        assert deploy.call_args.kwargs == {
+            "allow_model": True,
+            "retry_canary": "--retry-canary" in flags,
+        }
     else:
-        assert deploy.call_args.kwargs["ticket"] == (ticket if "TICKET" in flags else None)
+        assert "--retry-canary needs --allow-model-invocation" in capsys.readouterr().err
 
 
 def launcher_connection(tmp_path, **extra):
@@ -1322,36 +1220,22 @@ def launcher_connection(tmp_path, **extra):
     return lambda: environment(path, "customer-ui", session_factory=session)
 
 
-@pytest.mark.parametrize("mode", [None, "oidc"])
-def test_launcher_keeps_operator_password_only_outside_identity_mode(tmp_path, monkeypatch, mode):
-    for key in (
-        "APP_PASSWORD",
-        "KIRA_IDENTITY_HEADER",
-        "KIRA_SESSION_SIGNING_KEY",
-        "KIRA_STAGING_TICKET_FILE",
-    ):
-        monkeypatch.setenv(key, "x" * 16)
+def test_launcher_keeps_the_operator_password_and_passes_connection_values_through(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "x" * 16)
     model = json.dumps({"protocol": "openai", "base_url": "https://models.example.invalid/v1"})
-    result = launcher_connection(tmp_path, MODEL_API=model, **({"KIRA_AUTH_MODE": mode} if mode else {}))()
-    assert ("APP_PASSWORD" in result) == (mode is None)
-    assert (
-        not {"KIRA_IDENTITY_HEADER", "KIRA_SESSION_SIGNING_KEY", "KIRA_STAGING_TICKET_FILE"} & result.keys()
-    )
+    result = launcher_connection(tmp_path, MODEL_API=model)()
+    assert "APP_PASSWORD" in result
     assert result["MODEL_API"] == model  # connection values pass straight through, no allowlist
 
 
-@pytest.mark.parametrize(
-    "mode,password,hint", [(None, False, True), (None, True, False), ("oidc", False, False)]
-)
-def test_launcher_hints_when_default_mode_has_no_password(
-    tmp_path, monkeypatch, capsys, mode, password, hint
-):
+@pytest.mark.parametrize("password,hint", [(False, True), (True, False)])
+def test_launcher_hints_when_default_mode_has_no_password(tmp_path, monkeypatch, capsys, password, hint):
     from scripts import run_customer_ui
 
     monkeypatch.delenv("APP_PASSWORD", raising=False)
     if password:
         monkeypatch.setenv("APP_PASSWORD", "x" * 16)
-    build = launcher_connection(tmp_path, **({"KIRA_AUTH_MODE": mode} if mode else {}))
+    build = launcher_connection(tmp_path)
     monkeypatch.setattr(run_customer_ui, "environment", lambda path, profile: build())
     execve = Mock()
     monkeypatch.setattr(run_customer_ui.os, "execve", execve)
@@ -1410,7 +1294,7 @@ def test_launcher_ignores_a_stray_team_file_variable(tmp_path, monkeypatch):
 def run_model_secret_op(tmp_path, monkeypatch, secret, *, provider="model_api"):
     from infra import durable_ops
 
-    planned = configuration(tmp_path, identity=False, model_api=provider == "model_api")
+    planned = configuration(tmp_path, model_api=provider == "model_api")
     spec = {**planned["spec"], "reference_only": False}
     secretsmanager = Mock()
     secretsmanager.describe_secret.return_value = secret(spec) if callable(secret) else secret
@@ -1479,24 +1363,23 @@ def primary_email(driver):
     return next(s for s in driver.subscriptions if s["Protocol"] == "email")
 
 
-def awaiting_routing_verification(tmp_path, monkeypatch, identity_mode):
+def awaiting_routing_verification(tmp_path, monkeypatch):
     """A deployment that has provisioned routing and will run its registration verification next."""
-    planned = configuration(tmp_path, identity=identity_mode)
+    planned = configuration(tmp_path)
     directory = tmp_path / "work"
     directory.mkdir()
     driver = FakeDriver(planned, directory, monkeypatch)
-    return planned, directory, driver, (tmp_path / "ticket" if identity_mode else None)
+    return planned, directory, driver
 
 
 def journal(directory):
     return json.loads((directory / "state.json").read_text())
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_pending_email_confirmation_waits_instead_of_failing(tmp_path, monkeypatch, identity_mode):
-    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+def test_pending_email_confirmation_waits_instead_of_failing(tmp_path, monkeypatch):
+    planned, directory, driver = awaiting_routing_verification(tmp_path, monkeypatch)
     primary_email(driver)["SubscriptionArn"] = "PendingConfirmation"
-    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    result = automation.deploy(planned, directory, driver, allow_model=True)
     assert result["status"] == "WAITING" and not result["auto_resume"]
     assert "notification_email" in result["next"] and "same plan hash" in result["next"]
     assert planned["spec"]["notification_email"] not in result["next"]  # key names only, never the address
@@ -1510,19 +1393,16 @@ def test_pending_email_confirmation_waits_instead_of_failing(tmp_path, monkeypat
     assert not connection.exists() or "ui_role_arn" not in json.loads(connection.read_text())
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
-def test_resume_after_confirmation_reruns_only_verification_and_finishes(
-    tmp_path, monkeypatch, identity_mode
-):
-    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+def test_resume_after_confirmation_reruns_only_verification_and_finishes(tmp_path, monkeypatch):
+    planned, directory, driver = awaiting_routing_verification(tmp_path, monkeypatch)
     primary_email(driver)["SubscriptionArn"] = "PendingConfirmation"
-    automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    automation.deploy(planned, directory, driver, allow_model=True)
     # Resuming before the click still waits; it is neither a failure nor progress.
-    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    result = automation.deploy(planned, directory, driver, allow_model=True)
     assert result["status"] == "WAITING" and journal(directory)["status"] == "WAITING"
     primary_email(driver)["SubscriptionArn"] = driver.subscriptions[1]["SubscriptionArn"] + ":confirmed"
     before = len(driver.calls)
-    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    result = automation.deploy(planned, directory, driver, allow_model=True)
     assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
     assert "verify-routing" in driver.calls[before:] and "collect:routing" in driver.calls[before:]
     # No rebuild, upload, second paid canary or new change set: provisioning is not repeated.
@@ -1558,7 +1438,6 @@ def mismatch(kind, driver, spec):
         )
 
 
-@pytest.mark.parametrize("identity_mode", [True, False])
 @pytest.mark.parametrize(
     "kind",
     [
@@ -1573,11 +1452,11 @@ def mismatch(kind, driver, spec):
         "extra_subscriber_while_pending",
     ],
 )
-def test_every_other_subscription_mismatch_still_fails_closed(tmp_path, monkeypatch, identity_mode, kind):
-    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+def test_every_other_subscription_mismatch_still_fails_closed(tmp_path, monkeypatch, kind):
+    planned, directory, driver = awaiting_routing_verification(tmp_path, monkeypatch)
     mismatch(kind, driver, planned["spec"])
     with pytest.raises(VerificationError) as failure:
-        automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+        automation.deploy(planned, directory, driver, allow_model=True)
     assert not isinstance(failure.value, PendingConfirmation)
     assert journal(directory)["status"] == "FAILED" and "collect:routing" not in driver.calls
 
@@ -1670,7 +1549,7 @@ def test_driver_turns_only_the_pending_exit_of_a_durable_operation_into_waiting(
     with pytest.raises(automation.Waiting, match="notification_email and fallback_email") as waiting:
         driver.command("infra.durable_ops", ["verify-routing"], output)
     assert not waiting.value.automatic and "same plan hash" in str(waiting.value)
-    for module, code in (("infra.identity_ops", 3), ("infra.durable_ops", 1), ("infra.durable_ops", 2)):
+    for module, code in (("scripts.build_pipeline", 3), ("infra.durable_ops", 1), ("infra.durable_ops", 2)):
         exits(code)
         with pytest.raises(VerificationError, match="failed"):
             driver.command(module, ["verify-routing"], output)

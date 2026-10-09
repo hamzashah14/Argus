@@ -48,7 +48,6 @@ RESOURCE_ACTIONS = {
     "secretsmanager": ["CreateSecret", "DescribeSecret", "GetRandomPassword", "TagResource"],
     "iam": ["CreateRole", "GetRole", "PutRolePolicy", "TagRole"],
     "kms": ["CreateKey", "CreateAlias", "PutKeyPolicy", "EnableKeyRotation", "DescribeKey", "TagResource"],
-    "cloudtrail": ["CreateTrail", "StartLogging", "AddTags", "PutEventSelectors", "GetTrailStatus"],
 }
 
 
@@ -109,7 +108,6 @@ def permission_requests(spec, config):
             "secretsmanager": f"arn:aws:secretsmanager:{region}:{account}:secret:{project}/*",
             "iam": f"arn:aws:iam::{account}:role/{spec['project']}/{spec['environment']}/*",
             "kms": "*",
-            "cloudtrail": f"arn:aws:cloudtrail:{region}:{account}:trail/{project}-*",
         }
         for service, actions in RESOURCE_ACTIONS.items():
             if region != spec["monitor_region"] and service not in {
@@ -119,8 +117,6 @@ def permission_requests(spec, config):
                 "secretsmanager",
                 "iam",
             }:
-                continue
-            if service == "cloudtrail" and "identity" not in config:
                 continue
             for action in actions:
                 resource = resources[service]
@@ -188,7 +184,6 @@ def permission_requests(spec, config):
         "cloudwatch": ["ListMetrics", "DescribeAlarms"],
         "events": ["DescribeRule", "ListTargetsByRule"],
         "ec2": ["DescribeInstances", "DescribeRegions"],
-        "cloudtrail": ["GetTrail", "GetTrailStatus", "GetEventSelectors"],
         "s3": ["GetBucketVersioning", "GetBucketLocation"],
         "kms": ["DescribeKey", "GetKeyPolicy"],
     }.items():
@@ -200,7 +195,6 @@ def permission_requests(spec, config):
             "sns": f"arn:aws:sns:{region}:{account}:{project}-*",
             "sqs": f"arn:aws:sqs:{region}:{account}:{project}-*",
             "events": f"arn:aws:events:{region}:{account}:rule/{project}-*",
-            "cloudtrail": f"arn:aws:cloudtrail:{region}:{account}:trail/{project}-*",
             "s3": f"arn:aws:s3:::{project}-{account}-{region}-*",
         }
         for action in actions:
@@ -216,21 +210,6 @@ def permission_requests(spec, config):
                 if action in {"GetAccountSettings", "ListEventSourceMappings"}:
                     resource = "*"
                 add(operator, spec["bedrock_region"], [service + ":" + action], resource)
-    from infra.identity import table_arn
-    from kira.identity import actor_id
-
-    for access in config.get("_initial_access", []):
-        add(
-            operator,
-            spec["monitor_region"],
-            ["dynamodb:GetItem", "dynamodb:PutItem"],
-            table_arn(spec),
-            {
-                "dynamodb:LeadingKeys": [
-                    "IDENTITY#" + actor_id(config["identity"]["issuer"], access["subject"])
-                ]
-            },
-        )
     return checks
 
 
@@ -324,8 +303,7 @@ def check(plan, factory, *, remaining_reserved=None):
         raise VerificationError("Create/configure the declared EC2 inventory before deployment")
     from infra.verify import assert_concurrency
 
-    # Investigate (2) and Chat (1) are reserved only by identity-enabled templates.
-    requested = config["initial_reserved_concurrency"] + (3 if "identity" in config else 0)
+    requested = config["initial_reserved_concurrency"]
     assert_concurrency(
         factory("lambda", spec["monitor_region"]),
         requested if remaining_reserved is None else remaining_reserved,
@@ -365,7 +343,7 @@ def check(plan, factory, *, remaining_reserved=None):
             if model.get("modelDetails", {}).get("modelArn") not in spec["model_arns"]:
                 raise VerificationError("Model catalog ARN differs from declared model_arns")
     checks = []
-    for request in permission_requests(spec, {**config, "_initial_access": plan["initial_access"]}):
+    for request in permission_requests(spec, config):
         checks.extend(simulate(iam, request))
     denied = [r for r in checks if r["decision"] != "allowed" or r["missing_context"]]
     return {

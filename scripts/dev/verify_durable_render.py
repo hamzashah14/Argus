@@ -19,7 +19,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tool-build-dir", type=Path, default=ROOT / ".build/reference-lambda")
     parser.add_argument("--observations", action="store_true")
-    parser.add_argument("--identity", action="store_true")
     args = parser.parse_args()
     spec_path = ROOT / (
         "examples/observability.example.json" if args.observations else "examples/deployment.example.json"
@@ -41,18 +40,6 @@ def main():
     for target, count in (("standalone", 6), ("agentcore", 8)):
         config = {**base, "runtime_target": target}
         _, bindings, artifacts, versions = examples(spec, config, include_bindings=True)
-        if args.identity:
-            from infra.identity import secret_name
-
-            config["identity"] = {"issuer": "https://identity.example.invalid", "audience": "customer-ui"}
-            bindings["identity"] = {
-                "SigningSecretArn": f"arn:aws:secretsmanager:{spec['bedrock_region']}:{spec['account_id']}:secret:{secret_name(spec)}-123abc",
-                "SigningSecretVersion": "a" * 32,
-            }
-            from infra.chat import fixture_bindings
-
-            fixture_bindings(spec, bindings)
-            count += 3 if target == "standalone" else 5
         bindings.update(
             {
                 "artifacts": {n: pin(pipeline, "monitor", n) for n in artifacts},
@@ -83,7 +70,7 @@ def main():
                 for n, logical in FUNCTIONS.items()
             }
             count += 3
-        kind = ("observation" if args.observations else "durable") + ("-identity" if args.identity else "")
+        kind = "observation" if args.observations else "durable"
         folder = ROOT / f".build/{kind}-render" / target
         folder.mkdir(parents=True, exist_ok=True)
         config_path, bindings_path = folder / "config.json", folder / "bindings.json"
