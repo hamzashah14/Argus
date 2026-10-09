@@ -1364,6 +1364,49 @@ def test_launcher_hints_when_default_mode_has_no_password(
     assert ("APP_PASSWORD" in capsys.readouterr().err) is hint
 
 
+def launch(tmp_path, monkeypatch, *argv):
+    from scripts import run_customer_ui
+
+    build = launcher_connection(tmp_path)
+    monkeypatch.setattr(run_customer_ui, "environment", lambda path, profile: build())
+    execve = Mock()
+    monkeypatch.setattr(run_customer_ui.os, "execve", execve)
+    monkeypatch.setattr(run_customer_ui.os, "chdir", Mock())
+    monkeypatch.setattr(
+        "sys.argv",
+        ["run_customer_ui", "--connection", str(tmp_path / "ui.json"), "--profile", "customer-ui", *argv],
+    )
+    return run_customer_ui.main(), execve
+
+
+def test_launcher_team_file_turns_on_team_mode_and_drops_the_password(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_PASSWORD", "x" * 16)
+    team_path = tmp_path / "team.toml"
+    team_path.write_text('issuer = "https://login.example.invalid"\n')
+    team_path.chmod(0o600)
+    code, execve = launch(tmp_path, monkeypatch, "--team-file", str(team_path))
+    assert code == 0
+    env = execve.call_args.args[2]
+    assert env["KIRA_TEAM_FILE"] == str(team_path.resolve())
+    assert "APP_PASSWORD" not in env
+
+
+def test_launcher_refuses_a_team_file_others_can_write(tmp_path, monkeypatch, capsys):
+    team_path = tmp_path / "team.toml"
+    team_path.write_text("x = 1\n")
+    team_path.chmod(0o664)
+    code, execve = launch(tmp_path, monkeypatch, "--team-file", str(team_path))
+    assert code == 1
+    execve.assert_not_called()
+    assert "team file" in capsys.readouterr().err.lower()
+
+
+def test_launcher_ignores_a_stray_team_file_variable(tmp_path, monkeypatch):
+    monkeypatch.setenv("KIRA_TEAM_FILE", str(tmp_path / "stray.toml"))
+    result = launcher_connection(tmp_path)()
+    assert "KIRA_TEAM_FILE" not in result
+
+
 def run_model_secret_op(tmp_path, monkeypatch, secret, *, provider="model_api"):
     from infra import durable_ops
 

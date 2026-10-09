@@ -45,6 +45,7 @@ def environment(path, profile, *, session_factory=boto3.Session):
         "KIRA_SESSION_SIGNING_KEY",
         "KIRA_ACCESS_POLICY_JSON",
         "KIRA_STAGING_TICKET_FILE",
+        "KIRA_TEAM_FILE",
     ):
         result.pop(key, None)
     if values.get("KIRA_AUTH_MODE") == "oidc":
@@ -58,11 +59,18 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--connection", type=Path, required=True)
     parser.add_argument("--profile", required=True)
+    parser.add_argument("--team-file", type=Path)
     parser.add_argument("--staging-ticket-file", type=Path)
     args = parser.parse_args()
     try:
         env = environment(args.connection, args.profile)
-        if env.get("KIRA_AUTH_MODE") != "oidc" and not env.get("APP_PASSWORD"):
+        if args.team_file:
+            team_path = args.team_file
+            if team_path.is_symlink() or not team_path.is_file() or team_path.stat().st_mode & 0o022:
+                raise ValueError("Team file must be a regular file that group and others cannot write")
+            env["KIRA_TEAM_FILE"] = str(team_path.resolve())
+            env.pop("APP_PASSWORD", None)  # Team mode signs in through the identity provider only.
+        elif env.get("KIRA_AUTH_MODE") != "oidc" and not env.get("APP_PASSWORD"):
             print(
                 "APP_PASSWORD is not set: export it (12+ characters) in this shell first; .env is not loaded.",
                 file=sys.stderr,
