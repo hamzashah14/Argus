@@ -203,6 +203,49 @@ release. Every field is required:
 `INSTANCE_ID-memory`). `heartbeat_log_group` must be one of that instance's `log_groups`, and every
 service on an instance shares one. The whole block can be at most 2500 bytes.
 
+**No roles yet? Create them with one template.** Write the three role ARNs you want into
+`deployment.json` first (any names, for example `role/kira-staging-operator`,
+`role/kira-staging-cfn-execution` and `role/kira-staging-ui`). Then render the template. It makes no
+AWS call:
+
+```bash
+python -m infra bootstrap-iam --spec .local/customer/deployment.json --output .local/customer/iam.template.json
+```
+
+An AWS administrator deploys it once, with the command the tool prints:
+
+```bash
+aws cloudformation deploy --template-file .local/customer/iam.template.json \
+  --stack-name PROJECT-ENVIRONMENT-iam --capabilities CAPABILITY_NAMED_IAM --region MONITOR_REGION
+```
+
+After that the administrator is no longer needed: every later step runs as the operator role (see the
+profile example in [PREREQUISITES.md](PREREQUISITES.md#34-profiles)).
+
+| Option | Effect |
+| --- | --- |
+| `--operator-trust ARN`, `--ui-trust ARN` | Who may assume the operator role and the UI principal role. Repeat the option for several. The default is your whole account (`arn:aws:iam::ACCOUNT:root`), which still needs an IAM policy that allows `sts:AssumeRole`. Narrow it to your administrators and the people who run the UI |
+| `--agentcore` | Adds the AgentCore runtime actions to the execution role. Use it only with `runtime_target` `agentcore` |
+| `--instance-role` | Also creates an instance role and profile for the monitored servers: AWS's `CloudWatchAgentServerPolicy` plus a deny on creating log groups under your project path, so only Kira's stack creates them. Attach the profile to each instance |
+
+What the roles can do:
+
+- **Operator.** Change and read stacks named `PROJECT-ENVIRONMENT-*`, pass the execution role to
+  CloudFormation only, upload and read release files in the project buckets, invoke the project's
+  functions for the canary, move secret version stages, and read what `check` inspects. It cannot
+  create roles or functions itself.
+- **CloudFormation execution.** Only the CloudFormation service can assume it. It creates the
+  resources whose names start with `PROJECT-ENVIRONMENT-`, and IAM roles only under the path
+  `/PROJECT/ENVIRONMENT/`, with inline policies and no managed-policy attachment. Because it can create
+  roles, treat it as a powerful role and keep the stack's template review (`dry-run`) in the process.
+- **UI principal.** May only assume the role Kira generates for the UI.
+
+The template allows more than the screened actions where an update or delete needs it (for example
+`s3:*` on the project buckets) but always within the name prefix, except for the few APIs that accept
+no resource scope. Tests confirm that every request in the `check` permission screen is covered, and
+`check` then simulates them against the real roles before anything is deployed. Whether the roles
+suffice for every real stack operation is not verified: the template has never been deployed to AWS.
+
 ### 3.4 Preview without deploying
 
 ```bash

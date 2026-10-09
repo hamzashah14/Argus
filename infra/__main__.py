@@ -16,7 +16,50 @@ def main():
     build_parser.add_argument("--spec", type=Path, required=True)
     build_parser.add_argument("--output", type=Path, required=True)
     build_parser.add_argument("--wheelhouse", type=Path, required=True)
+    iam_parser = commands.add_parser(
+        "bootstrap-iam",
+        help="Write the CloudFormation template that creates the roles named in deployment.json",
+    )
+    iam_parser.add_argument("--spec", type=Path, required=True)
+    iam_parser.add_argument("--output", type=Path, required=True)
+    iam_parser.add_argument(
+        "--operator-trust",
+        action="append",
+        help="Principal ARN that may assume the operator role (repeatable)",
+    )
+    iam_parser.add_argument(
+        "--ui-trust", action="append", help="Principal ARN that may assume the UI principal role (repeatable)"
+    )
+    iam_parser.add_argument(
+        "--agentcore", action="store_true", help="Also allow the AgentCore runtime stages"
+    )
+    iam_parser.add_argument(
+        "--instance-role", action="store_true", help="Also create the instance role and profile for the agent"
+    )
     args = parser.parse_args()
+    if args.command == "bootstrap-iam":
+        try:
+            from infra import bootstrap_iam
+
+            spec = load(args.spec)
+            template = bootstrap_iam.render(
+                spec,
+                operator_trust=args.operator_trust,
+                ui_trust=args.ui_trust,
+                agentcore=args.agentcore,
+                instance_role=args.instance_role,
+            )
+            release.write_json(args.output, template)
+        except (VerificationError, ValueError, KeyError, OSError) as exc:
+            print(f"IAM template failed ({type(exc).__name__}); nothing was written to AWS.", file=sys.stderr)
+            return 1
+        print(
+            f"Wrote {args.output}. As an AWS administrator, deploy it once in {spec['monitor_region']}:\n"
+            f"  aws cloudformation deploy --template-file {args.output} "
+            f"--stack-name {spec['project']}-{spec['environment']}-iam --capabilities CAPABILITY_NAMED_IAM "
+            f"--region {spec['monitor_region']}"
+        )
+        return 0
     try:
         from scripts.build_lambdas import FUNCTIONS, build
 
