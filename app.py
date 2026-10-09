@@ -9,12 +9,13 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from kira import chat, identity
+from kira import chat, identity, team
 from kira import status as incident_status
 from kira.config import AppConfig
 
 load_dotenv()
 settings = AppConfig.from_env()
+TEAM_FILE = settings.team_file
 ASSETS = Path(__file__).resolve().parent / "assets"
 st.set_page_config(
     page_title="Kira · Infrastructure investigations", page_icon=str(ASSETS / "kira-mark.png"), layout="wide"
@@ -56,7 +57,7 @@ def sign_out():
             return
     st.session_state.pop("access_ticket", None)
     st.session_state.pop("logout_failed", None)
-    if identity.required() and st.user.get("is_logged_in", False):
+    if (identity.required() or TEAM_FILE) and st.user.get("is_logged_in", False):
         st.logout()
 
 
@@ -80,6 +81,7 @@ if "attempts" not in st.session_state:
     st.session_state.attempts = []
 if (
     not identity.required()
+    and not TEAM_FILE
     and st.session_state.get("authenticated")
     and time.monotonic() - st.session_state.get("auth_at", 0) > chat.SESSION_SECONDS
 ):
@@ -113,6 +115,46 @@ st.markdown(
     '<div class="kira-subtitle">Connect an incident, its logs and its metrics. Kira helps you work from evidence toward an explanation—inside your own cloud.</div>',
     unsafe_allow_html=True,
 )
+
+member = None
+roster = None
+if TEAM_FILE:
+    # Streamlit's native OIDC verifies state, nonce and signature. Never trust browser headers
+    # or session_state as an identity.
+    st.session_state.authenticated = False
+    if st.get_option("server.trustedUserHeaders") or not st.get_option("server.enableXsrfProtection"):
+        clear_conversation()
+        st.error("Team mode requires XSRF protection and disabled trusted-header identity overrides.")
+        st.stop()
+    if not st.user.get("is_logged_in", False):
+        st.subheader("Sign in to your workspace")
+        st.caption("Use your organization's identity provider and multi-factor authentication.")
+        if st.button("Sign in with SSO", type="primary"):
+            try:
+                st.login()
+            except Exception:
+                st.error("SSO is not configured. Ask the deployment operator to check the sign-in settings.")
+        st.stop()
+    try:
+        roster = team.load(TEAM_FILE, settings.allowed_instances())
+    except (team.TeamError, ValueError) as error:
+        clear_conversation()
+        st.error(f"The team access list cannot be used. {error}")
+        st.stop()
+    try:
+        member = roster.authorize(st.user.to_dict())
+    except team.TeamDenied as denied:
+        clear_conversation()
+        if st.session_state.get("team_denied") != denied.reason:
+            st.session_state.team_denied = denied.reason
+            team.audit(
+                str(st.user.get("sub", ""))[:256], None, None, "sign_in", "DENIED_" + denied.reason.upper()
+            )
+        st.error(team.DENIED_MESSAGES[denied.reason])
+        st.button("Sign out", on_click=sign_out, key="team_denied_sign_out")
+        st.stop()
+    st.session_state.pop("team_denied", None)
+    st.session_state.authenticated = True
 
 if identity.required():
     # Native OIDC verifies state/nonce/signature. Never trust browser headers or
@@ -167,7 +209,7 @@ if identity.required():
                         "Session export requires an investigator, a loopback staging UI and an owner-only directory."
                     )
 
-if not identity.required() and len(settings.password) < 12:
+if not identity.required() and not TEAM_FILE and len(settings.password) < 12:
     with st.container(border=True):
         st.subheader("Set up your workspace")
         st.info("Set APP_PASSWORD to at least 12 characters in your private .env file before signing in.")
@@ -198,11 +240,14 @@ if requested_incident:
     with st.container(border=True):
         st.subheader("Incident status")
         try:
-            snapshot = (
-                incident_status.load(requested_incident, access_ticket=st.session_state.access_ticket)
-                if identity.required()
-                else incident_status.load(requested_incident)
-            )
+            if identity.required():
+                snapshot = incident_status.load(
+                    requested_incident, access_ticket=st.session_state.access_ticket
+                )
+            elif member is not None:
+                snapshot = incident_status.load(requested_incident, allowed=member.instances)
+            else:
+                snapshot = incident_status.load(requested_incident)
             if snapshot is None:
                 st.info("This incident was not found or has passed its retention period.")
             else:
@@ -214,6 +259,12 @@ if requested_incident:
                         else "Investigation report"
                     )
                     st.text_area(label, snapshot["report"], height=280, disabled=True)
+                if member is not None:
+                    if "viewed" not in st.session_state:
+                        st.session_state.viewed = set()
+                    if requested_incident not in st.session_state.viewed:
+                        st.session_state.viewed.add(requested_incident)
+                        team.audit(member.sub, member.role, snapshot.get("instance_id"), "report", "OK")
         except (ValueError, RuntimeError, OSError):
             st.warning("Incident status is unavailable. Ask the deployment operator to check storage access.")
         except Exception:
@@ -322,8 +373,15 @@ if identity.required():
     st.caption(
         "Evidence is redacted. Diagnoses separate observations from hypotheses; review recommendations before taking action."
     )
+if member is not None:
+    work_cap = roster.chat_per_hour
+    st.caption(
+        f"Your access: {member.role} · {len(member.instances)} authorized instance(s) · up to {work_cap} investigations per hour. Evidence is redacted; review recommendations before taking action."
+    )
 work_limit = len(st.session_state.attempts) >= work_cap
-scope_limit = identity.required() and access["role"] != "investigator"
+scope_limit = (identity.required() and access["role"] != "investigator") or (
+    member is not None and member.role != "investigator"
+)
 if scope_limit:
     st.info("Your viewer role allows report access. Ask your operator for investigation access.")
 history_limit = len(st.session_state.messages) >= chat.MAX_HISTORY_MESSAGES
@@ -347,6 +405,14 @@ if retry:
     prompt = st.session_state.last_prompt
     clear_conversation()
 if prompt and prompt.strip():
+    if member is not None and member.role != "investigator":
+        st.stop()  # Defence in depth: the input is disabled for viewers.
+    if member is not None and not team.admit(member.sub, roster.chat_per_hour):
+        team.audit(
+            member.sub, member.role, None, "chat", "RATE_LIMITED", instance_count=len(member.instances)
+        )
+        st.info("You reached your hourly investigation limit. Try again later.")
+        st.stop()
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
     with st.spinner("Reading evidence from your cloud…"):
@@ -357,6 +423,26 @@ if prompt and prompt.strip():
                 settings,
                 history=st.session_state.messages,
                 access_ticket=st.session_state.access_ticket,
+            )
+        elif member is not None:
+            result = chat.invoke(
+                prompt,
+                st.session_state.session_id,
+                settings,
+                history=st.session_state.messages,
+                allowed=member.instances,
+            )
+            usage = result.usage or {}
+            team.audit(
+                member.sub,
+                member.role,
+                None,
+                "chat",
+                "OK" if result.status == "ok" else result.status.upper(),
+                instance_count=len(member.instances),
+                tokens={"input": usage.get("input_tokens", 0), "output": usage.get("output_tokens", 0)}
+                if usage
+                else None,
             )
         else:
             result = chat.invoke(

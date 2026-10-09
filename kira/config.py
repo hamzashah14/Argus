@@ -29,6 +29,7 @@ class AppConfig:
     chat_arn: str = ""
     model_api: str = ""
     local_tools: str = ""
+    team_file: str = ""
 
     @classmethod
     def from_env(cls):
@@ -49,7 +50,16 @@ class AppConfig:
             os.getenv("CHAT_FUNCTION_ARN", ""),
             os.getenv("MODEL_API", ""),
             os.getenv("KIRA_LOCAL_TOOLS", "").strip(),
+            os.getenv("KIRA_TEAM_FILE", ""),
         )
+
+    def allowed_instances(self):
+        """The instances this deployment may investigate: the inventory, or the local tools file."""
+        if self.local_tools:
+            from kira import local_tools
+
+            return set(local_tools.load(self.local_tools).instances)
+        return {item for item in self.allowed_ids.split(",") if item}
 
     def problems(self):
         problems = []
@@ -110,6 +120,13 @@ class AppConfig:
                 problems.append(f"Set a valid MODEL_API setting ({error}).")
             if self.runtime_target == "agentcore":
                 problems.append("AgentCore uses a Bedrock model only; remove MODEL_API.")
+        if self.team_file:
+            if self.runtime_target != "standalone":
+                problems.append("Team mode needs RUNTIME_TARGET=standalone: chat runs in the UI process.")
+            if identity.required():
+                problems.append(
+                    "Use team mode (KIRA_TEAM_FILE) or the identity module (KIRA_AUTH_MODE), not both."
+                )
         if bool(os.getenv("AWS_ACCESS_KEY_ID")) != bool(os.getenv("AWS_SECRET_ACCESS_KEY")):
             problems.append("Set both AWS credential variables, or remove both to use the credential chain.")
         return problems

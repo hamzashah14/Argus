@@ -192,3 +192,29 @@ def test_local_tools_keep_the_model_account_and_limit_requirements(local, monkey
 def test_local_tools_are_rejected_outside_local_development(local, monkeypatch, key, value):
     monkeypatch.setenv(key, value)
     assert AppConfig.from_env().problems()
+
+
+def test_team_mode_is_valid_with_the_standalone_runtime(configured, monkeypatch):
+    monkeypatch.setenv("KIRA_TEAM_FILE", "/srv/kira/team.toml")
+    assert AppConfig.from_env().problems() == []
+
+
+def test_team_mode_needs_the_standalone_runtime(configured, monkeypatch):
+    monkeypatch.setenv("KIRA_TEAM_FILE", "/srv/kira/team.toml")
+    monkeypatch.setenv("RUNTIME_TARGET", "agentcore")
+    assert "Team mode needs RUNTIME_TARGET=standalone: chat runs in the UI process." in (
+        AppConfig.from_env().problems()
+    )
+
+
+def test_team_mode_and_the_identity_module_are_exclusive(configured, monkeypatch):
+    monkeypatch.setenv("KIRA_TEAM_FILE", "/srv/kira/team.toml")
+    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
+    monkeypatch.setenv("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4")
+    assert "Use team mode (KIRA_TEAM_FILE) or the identity module (KIRA_AUTH_MODE), not both." in (
+        AppConfig.from_env().problems()
+    )
+
+
+def test_allowed_instances_come_from_the_inventory(configured):
+    assert AppConfig.from_env().allowed_instances() == {"i-0123456789abcdef0"}

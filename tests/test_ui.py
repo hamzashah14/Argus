@@ -1,11 +1,14 @@
 import json
+import os
 import time
 from unittest.mock import Mock
 
 import pytest
+import streamlit
 from streamlit.testing.v1 import AppTest
 
-from kira import chat, runtime, status
+from kira import chat, runtime, status, team
+from kira import status as incident_status
 from tests.helpers import ROOT
 
 
@@ -211,3 +214,191 @@ def test_invalid_local_tools_file_keeps_chat_disabled_and_explains_why(settings,
     test = app().run()
     assert not test.exception and test.chat_input[0].disabled
     assert any("KIRA_LOCAL_TOOLS" in item.value for item in test.markdown)
+
+
+TEAM_IID = "i-0123456789abcdef0"
+TEAM_OTHER = "i-0fedcba9876543210"
+TEAM_ISSUER = "https://login.example.invalid"
+
+
+class VerifiedUser(dict):
+    """Stands in for st.user after a verified OIDC login."""
+
+    def to_dict(self):
+        return dict(self)
+
+
+def team_text(users, extra=""):
+    body = "".join(
+        f'\n[[users]]\nsub = "{sub}"\nrole = "{role}"\ninstances = {json.dumps(ids)}\n'
+        for sub, role, ids in users
+    )
+    return f'issuer = "{TEAM_ISSUER}"\n{extra}{body}'
+
+
+@pytest.fixture
+def team_mode(settings, monkeypatch, tmp_path):
+    monkeypatch.setenv("ALLOWED_INSTANCE_IDS", f"{TEAM_IID},{TEAM_OTHER}")
+    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
+    team._CACHE.clear()
+    team._HITS.clear()
+    path = tmp_path / "team.toml"
+
+    def configure(users=(("user-1", "investigator", [TEAM_IID]),), claims=None, extra="", options=None):
+        path.write_text(team_text(users, extra))
+        os.chmod(path, 0o600)
+        monkeypatch.setenv("KIRA_TEAM_FILE", str(path))
+        verified = {
+            "is_logged_in": True,
+            "iss": TEAM_ISSUER,
+            "sub": "user-1",
+            "auth_time": time.time() - 60,
+            "amr": ["mfa"],
+            **(claims or {}),
+        }
+        monkeypatch.setattr(streamlit, "user", VerifiedUser(verified))
+        defaults = {"server.trustedUserHeaders": {}, "server.enableXsrfProtection": True, **(options or {})}
+        monkeypatch.setattr(streamlit, "get_option", lambda name: defaults.get(name))
+        return path
+
+    return configure
+
+
+def audit_spy(monkeypatch):
+    calls = []
+    monkeypatch.setattr(team, "audit", lambda *args, **kwargs: calls.append((args, kwargs)))
+    return calls
+
+
+def bump(path):
+    info = os.stat(path)
+    os.utime(path, ns=(info.st_atime_ns, info.st_mtime_ns + 5_000_000_000))
+
+
+def test_team_investigator_chats_within_their_instances(team_mode, monkeypatch):
+    team_mode()
+    calls = audit_spy(monkeypatch)
+    invoke = Mock(return_value=chat.ChatResult("Answer", "ok", usage={"input_tokens": 3, "output_tokens": 4}))
+    monkeypatch.setattr(chat, "invoke", invoke)
+    test = app(False).run()
+    assert not test.exception and test.chat_input and not test.chat_input[0].disabled
+    test.chat_input[0].set_value(f"Why is {TEAM_IID} slow?").run()
+    invoke.assert_called_once()
+    assert invoke.call_args.kwargs["allowed"] == frozenset({TEAM_IID})
+    assert calls[-1][0] == ("user-1", "investigator", None, "chat", "OK")
+    assert calls[-1][1] == {"instance_count": 1, "tokens": {"input": 3, "output": 4}}
+
+
+def test_team_password_is_not_used(team_mode):
+    team_mode()
+    test = app(False).run()
+    assert not test.exception and not test.text_input
+
+
+@pytest.mark.parametrize(
+    "claims,reason",
+    [
+        ({"sub": "stranger"}, "not_listed"),
+        ({"iss": "https://other.example.invalid"}, "issuer"),
+        ({"auth_time": time.time() - 9 * 3600}, "expired"),
+        ({"amr": ["pwd"]}, "mfa"),
+    ],
+)
+def test_team_refuses_people_who_are_not_allowed(team_mode, monkeypatch, claims, reason):
+    team_mode(claims=claims)
+    calls = audit_spy(monkeypatch)
+    invoke = Mock()
+    monkeypatch.setattr(chat, "invoke", invoke)
+    test = app(False).run()
+    assert not test.exception and not test.chat_input
+    assert team.DENIED_MESSAGES[reason] in [item.value for item in test.error]
+    invoke.assert_not_called()
+    assert [call[0][4] for call in calls] == ["DENIED_" + reason.upper()]
+
+
+def test_team_viewer_sees_the_input_disabled_and_the_server_side_refuses_too(team_mode, monkeypatch):
+    team_mode(users=(("user-1", "viewer", [TEAM_IID]),))
+    invoke = Mock()
+    monkeypatch.setattr(chat, "invoke", invoke)
+    test = app(False).run()
+    assert test.chat_input[0].disabled
+    # AppTest refuses set_value on a disabled widget and Streamlit discards a forged value for one, so
+    # make the widget hand a prompt back anyway to prove the app's own check refuses it.
+    monkeypatch.setattr(streamlit, "chat_input", lambda *args, **kwargs: "question")
+    test.run()
+    invoke.assert_not_called()
+
+
+def test_team_removed_user_is_refused_on_the_next_request(team_mode):
+    path = team_mode(users=(("user-1", "investigator", [TEAM_IID]), ("user-2", "viewer", [TEAM_IID])))
+    test = app(False).run()
+    assert test.chat_input
+    path.write_text(team_text([("user-2", "viewer", [TEAM_IID])]))
+    bump(path)
+    test.run()
+    assert not test.chat_input
+    assert team.DENIED_MESSAGES["not_listed"] in [item.value for item in test.error]
+
+
+def test_team_file_that_becomes_invalid_stops_the_app(team_mode):
+    path = team_mode()
+    test = app(False).run()
+    assert test.chat_input
+    path.write_text("broken = [")
+    bump(path)
+    test.run()
+    assert not test.chat_input
+    assert any("team access list cannot be used" in item.value for item in test.error)
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{"server.trustedUserHeaders": {"x": 1}}, {"server.enableXsrfProtection": False}],
+)
+def test_team_refuses_trusted_headers_and_missing_xsrf_protection(team_mode, options):
+    team_mode(options=options)
+    test = app(False).run()
+    assert not test.chat_input
+    assert any("XSRF protection" in item.value for item in test.error)
+
+
+def test_team_incident_link_is_scoped_and_audited_once(team_mode, monkeypatch):
+    team_mode()
+    calls = audit_spy(monkeypatch)
+    load = Mock(return_value={"instance_id": TEAM_IID, "status": "DONE", "incident_id": "a" * 32})
+    monkeypatch.setattr(incident_status, "load", load)
+    test = app(False)
+    test.query_params["incident"] = "a" * 32
+    test.run().run()
+    assert load.call_args.kwargs == {"allowed": frozenset({TEAM_IID})}
+    assert [c[0][3:] for c in calls if c[0][3] == "report"] == [("report", "OK")]
+
+
+def test_team_incident_outside_the_list_looks_like_a_missing_incident(team_mode, monkeypatch):
+    team_mode()
+    monkeypatch.setattr(incident_status, "load", Mock(return_value=None))
+    test = app(False)
+    test.query_params["incident"] = "a" * 32
+    test.run()
+    assert any("not found" in item.value for item in test.info)
+
+
+def test_team_audit_lines_never_carry_the_prompt(team_mode, monkeypatch):
+    team_mode()
+    calls = audit_spy(monkeypatch)
+    monkeypatch.setattr(chat, "invoke", Mock(return_value=chat.ChatResult("Answer", "ok")))
+    test = app(False).run()
+    test.chat_input[0].set_value("UNIQUE-MARKER-123 why is it slow?").run()
+    assert calls and "UNIQUE-MARKER-123" not in repr(calls)
+
+
+def test_team_hourly_limit_is_shared_by_a_person_across_sessions(team_mode, monkeypatch):
+    team_mode(extra="[limits]\nchat_per_user_per_hour = 1\n")
+    invoke = Mock(return_value=chat.ChatResult("Answer", "ok"))
+    monkeypatch.setattr(chat, "invoke", invoke)
+    first = app(False).run()
+    first.chat_input[0].set_value("first").run()
+    second = app(False).run()  # a second browser session of the same person
+    second.chat_input[0].set_value("second").run()
+    assert invoke.call_count == 1
+    assert any("hourly" in item.value for item in second.info)
