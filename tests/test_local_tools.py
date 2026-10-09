@@ -301,9 +301,6 @@ def local_env(monkeypatch, tmp_path):
         "RUNTIME_RELEASE",
         "LOGS_TOOL_ARN",
         "METRICS_TOOL_ARN",
-        "KIRA_AUTH_MODE",
-        "KIRA_SESSION_TABLE",
-        "CHAT_FUNCTION_ARN",
         "ALLOWED_INSTANCE_IDS",
         "LOG_CURSOR_SECRET_ARN",
         "RUNTIME_TARGET",
@@ -326,7 +323,6 @@ def test_problems_accepts_a_matching_allowlist_in_any_order(local_env, monkeypat
     [
         ("ENVIRONMENT", "production", "ENVIRONMENT=development"),
         ("ENVIRONMENT", "staging", "ENVIRONMENT=development"),
-        ("KIRA_AUTH_MODE", "oidc", "KIRA_AUTH_MODE"),
         ("RUNTIME_TARGET", "agentcore", "RUNTIME_TARGET=standalone"),
         ("LOGS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:logs:1", "LOGS_TOOL_ARN"),
         ("METRICS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:m:1", "METRICS_TOOL_ARN"),

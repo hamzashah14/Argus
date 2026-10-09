@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
-from kira import chat, execution, identity, runtime
+from kira import chat, execution, runtime
 from kira.config import AppConfig
 
 SETTINGS = AppConfig(
@@ -29,8 +29,6 @@ def test_client_construction_failure_handled(monkeypatch):
 
 def test_default_mode_chat_runs_in_process_without_access_ticket(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
-    monkeypatch.setattr(identity, "Sessions", Mock(side_effect=AssertionError("identity is opt-in")))
     execute = Mock(return_value={"text": "Evidence", "complete": True})
     monkeypatch.setattr(execution, "execute", execute)
     result = chat.invoke("investigate", "session", replace(SETTINGS, environment="production"))
@@ -108,7 +106,7 @@ def test_local_tools_chat_passes_the_loaded_config_and_the_local_release(monkeyp
     from kira import local_tools
     from tests.helpers import write_local_tools
 
-    for key in ("KIRA_AUTH_MODE", "ALLOWED_INSTANCE_IDS", "LOG_CURSOR_SECRET_ARN"):
+    for key in ("ALLOWED_INSTANCE_IDS", "LOG_CURSOR_SECRET_ARN"):
         monkeypatch.delenv(key, raising=False)
     path = write_local_tools(tmp_path)
     local = replace(
@@ -140,7 +138,7 @@ def team_settings(monkeypatch):
         "METRICS_TOOL_ARN": "arn:aws:lambda:eu-central-1:123456789012:function:metrics:1",
     }.items():
         monkeypatch.setenv(key, value)
-    for key in ("KIRA_AUTH_MODE", "MODEL_API", "KIRA_LOCAL_TOOLS"):
+    for key in ("MODEL_API", "KIRA_LOCAL_TOOLS"):
         monkeypatch.delenv(key, raising=False)
     return AppConfig.from_env()
 
@@ -177,21 +175,15 @@ def test_failures_carry_no_usage():
     assert chat.failure("X", "message").usage == {}
 
 
-@pytest.mark.parametrize("auth_mode,target", [("", "agentcore"), ("oidc", "standalone")])
-def test_a_scope_is_refused_where_the_runtime_cannot_enforce_it(monkeypatch, auth_mode, target):
-    from kira import agentcore, chat_gateway
+def test_a_scope_is_refused_where_the_runtime_cannot_enforce_it(monkeypatch):
+    from kira import agentcore
 
-    calls = [Mock(), Mock(), Mock()]
+    calls = [Mock(), Mock()]
     monkeypatch.setattr(execution, "execute", calls[0])
     monkeypatch.setattr(agentcore, "invoke", calls[1])
-    monkeypatch.setattr(chat_gateway, "invoke", calls[2])
-    monkeypatch.setattr(
-        identity, "Sessions", Mock(side_effect=AssertionError("refusal must precede any identity call"))
-    )
-    monkeypatch.setenv("KIRA_AUTH_MODE", auth_mode)
     settings = Mock()
     settings.problems.return_value = []
-    settings.runtime_target = target
+    settings.runtime_target = "agentcore"
     result = chat.invoke("question", "session", settings, allowed={"i-0123456789abcdef0"})
     assert (result.status, result.code) == ("error", "SCOPE_UNSUPPORTED")
     assert result.message == "This deployment cannot restrict chat to a list of instances."

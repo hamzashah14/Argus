@@ -20,7 +20,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-from kira import identity
 from kira.config import INSTANCE, REGION
 from kira.metrics import validate_catalog
 
@@ -104,8 +103,6 @@ def problems(settings):
     found = []
     if settings.environment != "development":
         found.append("Local tools run only with ENVIRONMENT=development.")
-    if identity.required():
-        found.append("Local tools are not available with KIRA_AUTH_MODE=oidc.")
     if settings.runtime_target != "standalone":
         found.append("Local tools require RUNTIME_TARGET=standalone.")
     if settings.logs_arn or settings.metrics_arn:

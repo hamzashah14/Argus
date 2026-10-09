@@ -30,7 +30,6 @@ def local_env(tmp_path, monkeypatch):
         "RUNTIME_RELEASE",
         "LOGS_TOOL_ARN",
         "METRICS_TOOL_ARN",
-        "KIRA_AUTH_MODE",
         "ALLOWED_INSTANCE_IDS",
     ):
         monkeypatch.delenv(key, raising=False)
@@ -72,13 +71,6 @@ def test_incident_mode_cannot_use_local_tools(local):
         execution.execute(payload, local=local, store=store)
     execution.run.assert_not_called()
     store.get.assert_not_called()
-
-
-def test_identity_mode_cannot_use_local_tools(local, monkeypatch):
-    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
-    with pytest.raises(RuntimeStop, match="PURPOSE_MISMATCH"):
-        execution.execute(request(access_ticket="x"), local=local)
-    execution.run.assert_not_called()
 
 
 @pytest.mark.parametrize("environment", ["staging", "production"])

@@ -8,17 +8,15 @@ import time
 import boto3
 from botocore.config import Config
 
-from kira import identity, safety
+from kira import safety
 
 INCIDENT = re.compile(r"[0-9a-f]{32}\Z")
 READ_CONFIG = Config(connect_timeout=3, read_timeout=8, retries={"total_max_attempts": 2})
 
 
-def load(incident_id, *, access_ticket=None, allowed=None):
+def load(incident_id, *, allowed=None):
     if not isinstance(incident_id, str) or not INCIDENT.fullmatch(incident_id):
         raise ValueError("Invalid incident reference")
-    if identity.required():
-        identity.Sessions().authorize(access_ticket, "session", touch=False)
     table_name = os.getenv("INCIDENT_TABLE")
     region = os.getenv("MONITOR_REGION")
     if not table_name or not region:
@@ -35,8 +33,6 @@ def load(incident_id, *, access_ticket=None, allowed=None):
     if allowed is not None and incident.get("instance_id") not in allowed:
         # Same answer as a missing incident: do not reveal what exists outside the caller's scope.
         return None
-    if identity.required():
-        identity.Sessions().authorize(access_ticket, "report", incident.get("instance_id"))
     result = {
         key: incident.get(key)
         for key in (

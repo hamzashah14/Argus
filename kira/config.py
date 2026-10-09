@@ -5,7 +5,7 @@ import os
 import re
 from dataclasses import dataclass, field
 
-from kira import identity, model_api
+from kira import model_api
 
 REGION = re.compile(r"^[a-z]{2}(?:-gov)?-[a-z]+-\d+$")
 INSTANCE = re.compile(r"^i-(?:[0-9a-f]{8}|[0-9a-f]{17})$")
@@ -26,7 +26,6 @@ class AppConfig:
     runtime_release: str = ""
     agentcore_arn: str = ""
     agentcore_endpoint: str = ""
-    chat_arn: str = ""
     model_api: str = ""
     local_tools: str = ""
     team_file: str = ""
@@ -47,7 +46,6 @@ class AppConfig:
             os.getenv("RUNTIME_RELEASE", ""),
             os.getenv("AGENTCORE_RUNTIME_ARN", ""),
             os.getenv("AGENTCORE_ENDPOINT", ""),
-            os.getenv("CHAT_FUNCTION_ARN", ""),
             os.getenv("MODEL_API", ""),
             os.getenv("KIRA_LOCAL_TOOLS", "").strip(),
             os.getenv("KIRA_TEAM_FILE", ""),
@@ -87,12 +85,6 @@ class AppConfig:
                     raise ValueError("Invalid inventory")
                 if self.local_tools:
                     pass  # The inventory and tools come from the local tools file, checked below.
-                elif identity.required():
-                    if not re.fullmatch(
-                        rf"arn:aws:lambda:{re.escape(os.getenv('MONITOR_REGION', self.region))}:{self.account_id}:function:[\w-]+:[1-9][0-9]*",
-                        self.chat_arn,
-                    ):
-                        raise ValueError("Invalid dedicated chat version")
                 elif self.runtime_target == "standalone":
                     for arn in (self.logs_arn, self.metrics_arn):
                         if not re.fullmatch(
@@ -110,9 +102,6 @@ class AppConfig:
             from kira import local_tools
 
             problems.extend(local_tools.problems(self))
-        # A forgotten KIRA_AUTH_MODE must not silently turn an identity deployment into password-only chat.
-        if not identity.required() and (self.chat_arn or os.getenv("KIRA_SESSION_TABLE")):
-            problems.append("Set KIRA_AUTH_MODE=oidc, or remove CHAT_FUNCTION_ARN and KIRA_SESSION_TABLE.")
         if self.model_api.strip():
             try:
                 model_api.parse(self.model_api.strip())
@@ -123,10 +112,6 @@ class AppConfig:
         if self.team_file:
             if self.runtime_target != "standalone":
                 problems.append("Team mode needs RUNTIME_TARGET=standalone: chat runs in the UI process.")
-            if identity.required():
-                problems.append(
-                    "Use team mode (KIRA_TEAM_FILE) or the identity module (KIRA_AUTH_MODE), not both."
-                )
         if bool(os.getenv("AWS_ACCESS_KEY_ID")) != bool(os.getenv("AWS_SECRET_ACCESS_KEY")):
             problems.append("Set both AWS credential variables, or remove both to use the credential chain.")
         return problems

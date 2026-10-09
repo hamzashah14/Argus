@@ -1,7 +1,6 @@
 """Customer-operated Kira web client. Run with: streamlit run app.py."""
 
 import hmac
-import os
 import time
 import uuid
 from pathlib import Path
@@ -9,7 +8,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from kira import chat, identity, team
+from kira import chat, team
 from kira import status as incident_status
 from kira.config import AppConfig
 
@@ -43,27 +42,14 @@ def clear_conversation():
 
 
 def sign_out():
-    ticket = st.session_state.get("access_ticket")
     st.session_state.authenticated = False
     st.session_state.pop("auth_at", None)
     clear_conversation()
-    if ticket:
-        try:
-            identity.Sessions().revoke(ticket)
-        except identity.AccessDenied:
-            # Preserve the reference so a later retry can revoke it. Do not
-            # silently discard it or claim global logout during a storage outage.
-            st.session_state.logout_failed = True
-            return
-    st.session_state.pop("access_ticket", None)
-    st.session_state.pop("logout_failed", None)
-    if (identity.required() or TEAM_FILE) and st.user.get("is_logged_in", False):
+    if TEAM_FILE and st.user.get("is_logged_in", False):
         st.logout()
 
 
 def authenticate():
-    if identity.required():
-        return
     password = st.session_state.get("workspace_password", "")
     accepted = hmac.compare_digest(password.encode(), settings.password.encode())
     st.session_state.authenticated = accepted
@@ -80,41 +66,12 @@ if "messages" not in st.session_state:
 if "attempts" not in st.session_state:
     st.session_state.attempts = []
 if (
-    not identity.required()
-    and not TEAM_FILE
+    not TEAM_FILE
     and st.session_state.get("authenticated")
     and time.monotonic() - st.session_state.get("auth_at", 0) > chat.SESSION_SECONDS
 ):
     sign_out()
     st.session_state.session_expired = True
-
-with st.sidebar:
-    st.caption("Your cloud. Your investigation.")
-    st.divider()
-    st.markdown("**Workspace**")
-    st.caption("Customer-operated · AWS / CloudWatch")
-    if st.session_state.get("authenticated"):
-        st.button("New conversation", on_click=clear_conversation, width="stretch")
-        st.button("Sign out", on_click=sign_out, width="stretch")
-        st.divider()
-        st.markdown("**Connection**")
-        st.caption(st.session_state.connection_state if not settings.problems() else "Setup required")
-        st.caption(f"Region: {settings.region or 'Not configured'}")
-        st.caption(f"Runtime: {settings.runtime_target}")
-        st.caption(f"Environment: {settings.environment}")
-        if settings.local_tools:
-            st.caption("Local tools · this machine's AWS credentials")
-    st.divider()
-    st.caption(
-        "Investigations read the cloud resources allowed by your deployment. Review recommendations before making changes."
-    )
-
-st.markdown('<div class="kira-label">INFRASTRUCTURE INTELLIGENCE</div>', unsafe_allow_html=True)
-st.markdown('<div class="kira-title">Investigate with context.</div>', unsafe_allow_html=True)
-st.markdown(
-    '<div class="kira-subtitle">Connect an incident, its logs and its metrics. Kira helps you work from evidence toward an explanation—inside your own cloud.</div>',
-    unsafe_allow_html=True,
-)
 
 member = None
 roster = None
@@ -156,60 +113,35 @@ if TEAM_FILE:
     st.session_state.pop("team_denied", None)
     st.session_state.authenticated = True
 
-if identity.required():
-    # Native OIDC verifies state/nonce/signature. Never trust browser headers or
-    # session_state's authenticated flag as an individual identity.
-    st.session_state.authenticated = False
-    if st.get_option("server.trustedUserHeaders") or not st.get_option("server.enableXsrfProtection"):
-        clear_conversation()
-        st.error("SSO requires XSRF protection and disabled trusted-header identity overrides.")
-        st.stop()
-    if st.session_state.get("logout_failed", False):
-        st.error("Session revocation failed. Retry sign-out or ask the operator to revoke access.")
-        st.button("Retry sign-out", on_click=sign_out)
-        st.stop()
-    if not st.user.get("is_logged_in", False):
-        st.subheader("Sign in to your workspace")
-        st.caption("Use your organization's identity provider and multi-factor authentication.")
-        if st.button("Sign in with SSO", type="primary"):
-            try:
-                st.login()
-            except Exception:
-                st.error("SSO is not configured. Ask the deployment operator to check identity settings.")
-        st.stop()
-    try:
-        if "access_ticket" not in st.session_state:
-            st.session_state.access_ticket = identity.Sessions().issue(st.user.to_dict())
-        access = identity.Sessions().authorize(st.session_state.access_ticket, "session", touch=False)
-        if access["actor"] != identity.actor_id(st.user["iss"], st.user["sub"]):
-            raise identity.AccessDenied()
-        st.session_state.authenticated = True
-    except (identity.AccessDenied, KeyError, TypeError):
-        clear_conversation()
-        st.error("Access is expired, revoked, or unavailable. Sign out and contact the deployment operator.")
-        if st.button("Sign out from SSO"):
-            sign_out()
-        st.stop()
+with st.sidebar:
+    st.caption("Your cloud. Your investigation.")
+    st.divider()
+    st.markdown("**Workspace**")
+    st.caption("Customer-operated · AWS / CloudWatch")
+    if st.session_state.get("authenticated"):
+        st.button("New conversation", on_click=clear_conversation, width="stretch")
+        st.button("Sign out", on_click=sign_out, width="stretch")
+        st.divider()
+        st.markdown("**Connection**")
+        st.caption(st.session_state.connection_state if not settings.problems() else "Setup required")
+        st.caption(f"Region: {settings.region or 'Not configured'}")
+        st.caption(f"Runtime: {settings.runtime_target}")
+        st.caption(f"Environment: {settings.environment}")
+        if settings.local_tools:
+            st.caption("Local tools · this machine's AWS credentials")
+    st.divider()
+    st.caption(
+        "Investigations read the cloud resources allowed by your deployment. Review recommendations before making changes."
+    )
 
-    if os.getenv("KIRA_STAGING_TICKET_FILE") and settings.environment == "staging":
-        with st.expander("Operator staging canary"):
-            st.caption(
-                "Save your short-lived session to the private file configured by the local operator. This does not invoke a model."
-            )
-            if st.button("Save staging canary session"):
-                try:
-                    identity.Sessions().save_staging_ticket(
-                        st.session_state.access_ticket,
-                        os.environ["KIRA_STAGING_TICKET_FILE"],
-                        st.get_option("server.address"),
-                    )
-                    st.success("Session saved to the operator's private file. Remove it after the canary.")
-                except identity.AccessDenied:
-                    st.error(
-                        "Session export requires an investigator, a loopback staging UI and an owner-only directory."
-                    )
+st.markdown('<div class="kira-label">INFRASTRUCTURE INTELLIGENCE</div>', unsafe_allow_html=True)
+st.markdown('<div class="kira-title">Investigate with context.</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="kira-subtitle">Connect an incident, its logs and its metrics. Kira helps you work from evidence toward an explanation—inside your own cloud.</div>',
+    unsafe_allow_html=True,
+)
 
-if not identity.required() and not TEAM_FILE and len(settings.password) < 12:
+if not TEAM_FILE and len(settings.password) < 12:
     with st.container(border=True):
         st.subheader("Set up your workspace")
         st.info("Set APP_PASSWORD to at least 12 characters in your private .env file before signing in.")
@@ -240,11 +172,7 @@ if requested_incident:
     with st.container(border=True):
         st.subheader("Incident status")
         try:
-            if identity.required():
-                snapshot = incident_status.load(
-                    requested_incident, access_ticket=st.session_state.access_ticket
-                )
-            elif member is not None:
+            if member is not None:
                 snapshot = incident_status.load(requested_incident, allowed=member.instances)
             else:
                 snapshot = incident_status.load(requested_incident)
@@ -315,8 +243,6 @@ with st.expander("Connection details", expanded=False):
             "Model": settings.model_id,
             "Endpoint": settings.agentcore_endpoint
             if settings.runtime_target == "agentcore"
-            else "Dedicated chat Lambda"
-            if identity.required()
             else "Local tools (this machine's AWS credentials)"
             if settings.local_tools
             else "Local Python runtime",
@@ -358,30 +284,13 @@ for message in st.session_state.messages:
 now = time.monotonic()
 st.session_state.attempts = chat.recent_attempts(st.session_state.attempts, now)
 work_cap = chat.MAX_REQUESTS_PER_HOUR
-if identity.required():
-    from kira.work_policy import configured
-
-    try:
-        work = configured()
-        work_cap = work["chat_user"]
-    except Exception:
-        st.error("Work allowances are unavailable. Ask your operator to review the deployment.")
-        st.stop()
-    st.caption(
-        f"Your access: {access['role']} · {len(access['instance_ids'])} authorized instance(s) · up to {work_cap} investigations per UTC hour. Shared capacity limits also apply."
-    )
-    st.caption(
-        "Evidence is redacted. Diagnoses separate observations from hypotheses; review recommendations before taking action."
-    )
 if member is not None:
     work_cap = roster.chat_per_hour
     st.caption(
         f"Your access: {member.role} · {len(member.instances)} authorized instance(s) · up to {work_cap} investigations per hour. Evidence is redacted; review recommendations before taking action."
     )
 work_limit = len(st.session_state.attempts) >= work_cap
-scope_limit = (identity.required() and access["role"] != "investigator") or (
-    member is not None and member.role != "investigator"
-)
+scope_limit = member is not None and member.role != "investigator"
 if scope_limit:
     st.info("Your viewer role allows report access. Ask your operator for investigation access.")
 history_limit = len(st.session_state.messages) >= chat.MAX_HISTORY_MESSAGES
@@ -417,15 +326,7 @@ if prompt and prompt.strip():
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
     with st.spinner("Reading evidence from your cloud…"):
-        if identity.required():
-            result = chat.invoke(
-                prompt,
-                st.session_state.session_id,
-                settings,
-                history=st.session_state.messages,
-                access_ticket=st.session_state.access_ticket,
-            )
-        elif member is not None:
+        if member is not None:
             result = chat.invoke(
                 prompt,
                 st.session_state.session_id,

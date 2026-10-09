@@ -55,9 +55,8 @@ def test_missing_runtime_configuration_disables_input(settings, monkeypatch):
     assert any("not been checked" in item.value for item in test.info)
 
 
-def test_production_without_oidc_uses_password_login_and_in_process_chat(settings, monkeypatch):
+def test_production_uses_password_login_and_in_process_chat(settings, monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
     invoke = Mock(return_value=chat.ChatResult("Answer", "ok"))
     monkeypatch.setattr(chat, "invoke", invoke)
     test = app(False).run()
@@ -239,7 +238,6 @@ def team_text(users, extra=""):
 @pytest.fixture
 def team_mode(settings, monkeypatch, tmp_path):
     monkeypatch.setenv("ALLOWED_INSTANCE_IDS", f"{TEAM_IID},{TEAM_OTHER}")
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
     team._CACHE.clear()
     team._HITS.clear()
     path = tmp_path / "team.toml"
@@ -334,11 +332,12 @@ def test_team_viewer_sees_the_input_disabled_and_the_server_side_refuses_too(tea
 def test_team_removed_user_is_refused_on_the_next_request(team_mode):
     path = team_mode(users=(("user-1", "investigator", [TEAM_IID]), ("user-2", "viewer", [TEAM_IID])))
     test = app(False).run()
-    assert test.chat_input
+    assert test.chat_input and test.sidebar.button
     path.write_text(team_text([("user-2", "viewer", [TEAM_IID])]))
     bump(path)
     test.run()
     assert not test.chat_input
+    assert not test.sidebar.button  # a removed person must not see the workspace sidebar from the last run
     assert team.DENIED_MESSAGES["not_listed"] in [item.value for item in test.error]
 
 

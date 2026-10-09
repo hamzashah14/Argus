@@ -6,7 +6,6 @@ import os
 import re
 import time
 
-from kira import identity
 from kira.runtime import LambdaTools, Limits, MemoryBudget, RuntimeStop, run
 from kira.telemetry import correlate
 
@@ -64,15 +63,9 @@ def execute(payload, *, store=None, checkpoint=None, local=None, allowed=None):
     if (
         mode not in {"chat", "incident"}
         or (purpose != "both" and purpose != mode)
-        or (identity.required() and purpose == "both")
         or (allowed is not None and mode != "chat")
         or (
-            local is not None
-            and (
-                mode != "chat"
-                or identity.required()
-                or os.getenv("ENVIRONMENT", "development") != "development"
-            )
+            local is not None and (mode != "chat" or os.getenv("ENVIRONMENT", "development") != "development")
         )
     ):
         raise RuntimeStop("PURPOSE_MISMATCH")
@@ -144,10 +137,7 @@ def execute(payload, *, store=None, checkpoint=None, local=None, allowed=None):
                 ),
             )
     elif mode == "chat":
-        expected = {"version", "release", "mode", "prompt", "history"}
-        if identity.required():
-            expected.add("access_ticket")
-        if set(payload) != expected:
+        if set(payload) != {"version", "release", "mode", "prompt", "history"}:
             raise RuntimeStop("INVALID_EXECUTION_REQUEST")
         if not isinstance(payload["prompt"], str) or not 1 <= len(payload["prompt"].strip()) <= 4000:
             raise RuntimeStop("INVALID_PROMPT")
@@ -165,63 +155,26 @@ def execute(payload, *, store=None, checkpoint=None, local=None, allowed=None):
             )
         ):
             raise RuntimeStop("INVALID_HISTORY")
-        access = (
-            identity.Sessions().authorize(payload.get("access_ticket"), "chat")
-            if identity.required()
-            else None
-        )
-        admission = identity.Sessions() if access else None
-        if admission:
-            from kira.work_policy import configured
-
-            policy = Limits(**configured()["chat_limits"])
-        lease = None
-        if admission:
-            try:
-                lease = admission.quotas().admit(access["actor"], "chat")
-                admission.record(access["actor"], "chat_budget", "ALLOWED")
-            except Exception:
-                if lease:
-                    admission.quotas().release(lease)
-                try:
-                    admission.record(access["actor"], "chat_budget", "DENIED")
-                except Exception:
-                    identity.audit(access["actor"], "chat_budget", "DENIED")
-                raise
         budget = MemoryBudget(policy)
 
-        def guard(instance=None):
-            if access:
-                try:
-                    identity.Sessions().authorize(payload["access_ticket"], "chat", instance, touch=False)
-                except identity.AccessDenied:
-                    raise RuntimeStop("ACCESS_DENIED") from None
-
         def reserve(delta):
-            guard()
             return budget.reserve(delta)
 
-        try:
-            result = run(
-                payload["prompt"],
-                model_id=required("BEDROCK_MODEL_ID"),
-                region=required("BEDROCK_REGION"),
-                tools=tools(
-                    policy,
-                    reserve,
-                    allowed=access["instance_ids"] if access else allowed,
-                    access_guard=guard if access else None,
-                    **({"local": local} if local is not None else {}),
-                ),
-                reserve=reserve,
-                limits=policy,
-                deadline=time.time() + 180,
-                history=history,
-                access_guard=guard if access else None,
-            )
-        finally:
-            if admission:
-                admission.quotas().release(lease)
+        result = run(
+            payload["prompt"],
+            model_id=required("BEDROCK_MODEL_ID"),
+            region=required("BEDROCK_REGION"),
+            tools=tools(
+                policy,
+                reserve,
+                allowed=allowed,
+                **({"local": local} if local is not None else {}),
+            ),
+            reserve=reserve,
+            limits=policy,
+            deadline=time.time() + 180,
+            history=history,
+        )
     else:
         raise RuntimeStop("INVALID_EXECUTION_MODE")
     return {**result, "release": release}
@@ -240,15 +193,12 @@ def incident_request(claim, seconds):
 
 
 def safe_chat(executor, payload):
-    """Expected access/allowance denials cross adapters without private exceptions."""
+    """Expected execution denials cross adapters without private exceptions."""
     try:
         return executor(payload)
-    except (identity.AccessDenied, RuntimeStop) as exc:
-        code = "ACCESS_DENIED" if isinstance(exc, identity.AccessDenied) else str(exc)
+    except RuntimeStop as exc:
+        code = str(exc)
         allowed = {
-            "ACCESS_DENIED",
-            "USER_OR_SHARED_ALLOWANCE_EXHAUSTED",
-            "ADMISSION_UNAVAILABLE",
             "RELEASE_MISMATCH",
             "PURPOSE_MISMATCH",
             "INVALID_EXECUTION_REQUEST",

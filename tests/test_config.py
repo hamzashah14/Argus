@@ -56,36 +56,11 @@ def test_invalid_bindings_are_rejected(configured, monkeypatch, key, value):
     assert AppConfig.from_env().problems()
 
 
-def test_oidc_production_requires_qualified_chat_gateway(configured, monkeypatch):
+def test_standalone_production_keeps_tool_pins(configured, monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
-    monkeypatch.setenv("KIRA_SESSION_TABLE", "identity-table")
-    monkeypatch.delenv("CHAT_FUNCTION_ARN", raising=False)
-    assert AppConfig.from_env().problems()
-    monkeypatch.setenv("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4")
-    assert AppConfig.from_env().problems() == []
-
-
-def test_standalone_production_needs_no_chat_gateway_but_keeps_tool_pins(configured, monkeypatch):
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    for key in ("KIRA_AUTH_MODE", "KIRA_SESSION_TABLE", "CHAT_FUNCTION_ARN"):
-        monkeypatch.delenv(key, raising=False)
     assert AppConfig.from_env().problems() == []
     monkeypatch.setenv("LOGS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:logs:$LATEST")
     assert AppConfig.from_env().problems()
-
-
-@pytest.mark.parametrize(
-    "key,value",
-    [
-        ("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4"),
-        ("KIRA_SESSION_TABLE", "identity-table"),
-    ],
-)
-def test_identity_resources_without_oidc_fail_closed(configured, monkeypatch, key, value):
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
-    monkeypatch.setenv(key, value)
-    assert any("KIRA_AUTH_MODE=oidc" in problem for problem in AppConfig.from_env().problems())
 
 
 def test_password_is_not_in_configuration_repr(monkeypatch):
@@ -182,7 +157,6 @@ def test_local_tools_keep_the_model_account_and_limit_requirements(local, monkey
     "key,value",
     [
         ("ENVIRONMENT", "production"),
-        ("KIRA_AUTH_MODE", "oidc"),
         ("RUNTIME_TARGET", "agentcore"),
         ("LOGS_TOOL_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:logs:1"),
         ("ALLOWED_INSTANCE_IDS", "i-0aaaaaaaaaaaaaaaa"),
@@ -203,15 +177,6 @@ def test_team_mode_needs_the_standalone_runtime(configured, monkeypatch):
     monkeypatch.setenv("KIRA_TEAM_FILE", "/srv/kira/team.toml")
     monkeypatch.setenv("RUNTIME_TARGET", "agentcore")
     assert "Team mode needs RUNTIME_TARGET=standalone: chat runs in the UI process." in (
-        AppConfig.from_env().problems()
-    )
-
-
-def test_team_mode_and_the_identity_module_are_exclusive(configured, monkeypatch):
-    monkeypatch.setenv("KIRA_TEAM_FILE", "/srv/kira/team.toml")
-    monkeypatch.setenv("KIRA_AUTH_MODE", "oidc")
-    monkeypatch.setenv("CHAT_FUNCTION_ARN", "arn:aws:lambda:eu-central-1:123456789012:function:chat:4")
-    assert "Use team mode (KIRA_TEAM_FILE) or the identity module (KIRA_AUTH_MODE), not both." in (
         AppConfig.from_env().problems()
     )
 

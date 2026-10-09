@@ -21,7 +21,6 @@ def host(monkeypatch):
         "BEDROCK_REGION": "eu-central-1",
     }.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
     monkeypatch.delenv("EXECUTION_PURPOSE", raising=False)
     seen = {}
     monkeypatch.setattr(execution, "tools", lambda policy, reserve, **kwargs: seen.update(kwargs) or object())

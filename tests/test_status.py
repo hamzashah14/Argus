@@ -31,7 +31,6 @@ class Resource:
 def storage(monkeypatch):
     monkeypatch.setenv("INCIDENT_TABLE", "incidents")
     monkeypatch.setenv("MONITOR_REGION", "eu-central-1")
-    monkeypatch.delenv("KIRA_AUTH_MODE", raising=False)
     items = {
         (f"INCIDENT#{INCIDENT}", "META"): {
             "instance_id": IID,

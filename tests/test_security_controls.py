@@ -61,14 +61,6 @@ def test_boundaries_reject_excessive_depth_size_and_nonfinite_numbers():
         safety.bounded(value)
 
 
-@pytest.mark.parametrize(
-    "key,value", [("chat_user", 0), ("tokens_global", True), ("audit_days", 91), ("chat_global", 1)]
-)
-def test_work_policy_invalid_allowances_fail_closed(key, value):
-    with pytest.raises(ValueError):
-        work_policy.validate({**work_policy.DEFAULT, key: value})
-
-
 @pytest.mark.parametrize("case", evaluate_diagnostics.suite()[0]["cases"], ids=lambda c: c["id"])
 def test_versioned_diagnosis_reference_controls(case):
     catalog = [{**e, "result": safety.bounded(e["result"])} for e in case["catalog"]]

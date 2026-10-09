@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
-from kira import identity, safety
+from kira import safety
 from kira.runtime import RuntimeStop
 from kira.transport import clip_utf8, error_result
 
@@ -35,20 +35,18 @@ def failure(code, message, partial=""):
     return ChatResult(partial, "partial" if partial else "error", code, message, problem["request_id"])
 
 
-def invoke(prompt, session_id, settings, *, history=(), access_ticket=None, allowed=None):
+def invoke(prompt, session_id, settings, *, history=(), allowed=None):
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         return failure("INVALID_PROMPT", f"Enter a question of 1–{MAX_PROMPT_CHARS} characters.")
     if settings.problems():
         return failure(
             "NOT_CONFIGURED", "Complete the agent connection settings before starting an investigation."
         )
-    if allowed is not None and (identity.required() or settings.runtime_target != "standalone"):
+    if allowed is not None and settings.runtime_target != "standalone":
         # Only the in-process path enforces a scope; refuse rather than silently widen access.
         return failure("SCOPE_UNSUPPORTED", "This deployment cannot restrict chat to a list of instances.")
     text = ""
     try:
-        if identity.required():
-            identity.Sessions().authorize(access_ticket, "chat")
         from kira import agentcore, execution
 
         payload = {
@@ -62,13 +60,7 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None, allo
                 if m.get("content")
             ],
         }
-        if identity.required():
-            payload["access_ticket"] = access_ticket
-        if identity.required():
-            from kira.chat_gateway import invoke as invoke_gateway
-
-            result = invoke_gateway(payload)
-        elif settings.runtime_target == "standalone":
+        if settings.runtime_target == "standalone":
             options = {}
             if settings.local_tools:
                 from kira import local_tools
@@ -96,27 +88,13 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None, allo
                     text,
                 )
             return ChatResult(text, "ok", usage=result.get("usage") or {})
-        if result.get("code") in {"USER_OR_SHARED_ALLOWANCE_EXHAUSTED", "ADMISSION_UNAVAILABLE"}:
-            return failure(
-                "WORK_ALLOWANCE",
-                "Your user or shared work allowance is unavailable. Wait for the next window or contact your operator.",
-            )
-        if result.get("code") == "ACCESS_DENIED":
-            return failure("ACCESS_DENIED", "Sign in again or ask your operator to review access.")
         return failure(
             "INVESTIGATION_INCOMPLETE",
             "Investigation stopped with incomplete evidence or an execution limit.",
             text,
         )
-    except RuntimeStop as exc:
-        if str(exc) in {"USER_OR_SHARED_ALLOWANCE_EXHAUSTED", "ADMISSION_UNAVAILABLE"}:
-            return failure(
-                "WORK_ALLOWANCE",
-                "Your user or shared work allowance is unavailable. Wait for the next window or contact your operator.",
-            )
+    except RuntimeStop:
         return failure("INVESTIGATION_INCOMPLETE", "Investigation stopped at an execution limit.")
-    except identity.AccessDenied:
-        return failure("ACCESS_DENIED", "Sign in again or ask your operator to review access.")
     except (NoCredentialsError, PartialCredentialsError):
         return failure(
             "CREDENTIALS_UNAVAILABLE",
