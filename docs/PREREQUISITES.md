@@ -264,7 +264,7 @@ is missing.
 | CloudWatch agent | Installed with the file that `dry-run` writes to `.local/customer/collector-examples/INSTANCE_ID.json`. Service enabled and running. Metrics every 60 seconds |
 | Metrics | Namespace `CWAgent`, dimension `InstanceId`: `mem_used_percent`, `swap_used_percent`, `disk_used_percent` (adds dimension `path` set to `disk_path`), and, when `process_exe` is set, `procstat_lookup_pid_count` (adds `exe` and `pid_finder`). AWS/EC2 `StatusCheckFailed` is always required, and `CPUUtilization` with `resource_alarms`. Wrong dimensions are the most common failure |
 | Log groups | `/PROJECT/ENVIRONMENT/INSTANCE_ID/NAME`, with `/LOG_SEGMENT` before the instance ID if you set one. The stream name is the instance ID. Retention is `log_retention_days` |
-| Application logs | The generated file does not collect them. Add one `collect_list` entry per name in `log_groups`, except the heartbeat group, which the generated file already ships. The agent must be able to read each file |
+| Application logs | The generated file ships the files you list in `log_files`, and nothing else beyond Nginx and the heartbeat. The agent must be able to read each file |
 | Nginx (`nginx_alarm: true`) | Standard combined format in `/var/log/nginx/access.log` and the error log in `/var/log/nginx/error.log`, shipped to the `nginx-access` and `nginx-error` groups |
 | Heartbeat (observers only) | Run `scripts/collector_heartbeat.py` every minute from a supervised timer. It appends one JSON line to `/var/log/kira-collector-heartbeat.log` and makes no AWS calls. It needs Python 3 and only the standard library (minimum version not verified) |
 | Readiness routes (observers only) | Public HTTPS on port 443, with a path. No credentials, query or redirect. Private VPC-only endpoints are not supported |
@@ -346,6 +346,7 @@ appear after a test request. The coverage check inside the canary enforces all o
 | `instances[].id` | yes | `i-` plus 8 or 17 lowercase hex digits | EC2 console |
 | `instances[].log_groups` | yes | 0 to 8 unique names of 1 to 40 letters, digits, `_` or `-`. May be empty if `existing_log_groups` is set | Your choice. Kira creates these groups and the agent writes the same names |
 | `instances[].existing_log_groups` | no | Up to 8 objects. `name`: 1 to 512 letters, digits, `_`, `.`, `/`, `#` or `-`, a group that already exists in the monitor region, not under Kira's own log prefix. `streams` (optional): `instance` (default) or `all` | `aws logs describe-log-groups`. Kira reads these groups and never creates or changes them. See [SERVERS.md](SERVERS.md#use-log-groups-that-already-exist) |
+| `instances[].log_files` | no | Up to 16 objects, each with `group` (one of the instance's own `log_groups` or `existing_log_groups`, not the Nginx or heartbeat group) and `file` (absolute path of up to 200 letters, digits, `_`, `.`, `/`, `*`, `?` or `-`, no `..`). No repeated pair | Where your application writes its logs. [SERVERS.md](SERVERS.md#step-1-install-the-cloudwatch-agent) |
 | `instances[].disk_path` | yes | Absolute path of letters, digits, `/`, `_`, `-` | The mount point to alarm on |
 | `instances[].resource_alarms`, `nginx_alarm` | yes | Boolean each | Your choice |
 | `instances[].process_exe` | yes | `null`, or 1 to 40 characters of letters, digits, `_`, `.`, `-` | The executable name to count |

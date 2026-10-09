@@ -20,6 +20,7 @@ Everything below is derived from the instance entries in `deployment.json`.
 | --- | --- |
 | `id` | An EC2 instance that is not terminated. The generated log stream name is the instance ID |
 | `log_groups` (names such as `application`) | A log group `/PROJECT/ENVIRONMENT/INSTANCE_ID/NAME`. If `log_segment` is set, it comes before the instance ID |
+| `log_files` (optional) | The files the generated agent file ships, each into one of the instance's groups (see Step 1) |
 | `existing_log_groups` (optional) | Log groups that already exist in the monitor region. Kira only reads them (see below) |
 | `nginx_alarm: true` | Log groups `.../nginx-access` and `.../nginx-error`, plus the Nginx metrics below |
 | `resource_alarms: true` | CPU, memory and disk metrics for alarms |
@@ -50,9 +51,40 @@ The generated configuration publishes, every 60 seconds, to the `CWAgent` namesp
   Nginx log groups.
 - If `observability` is configured: `/var/log/kira-collector-heartbeat.log` to the heartbeat group.
 
-It does not collect your application logs. Add a `collect_list` entry for each name in
-`log_groups`, using the group name from the table above and the instance ID as the stream name.
-Check that file permissions let the agent read each file.
+**Your application logs.** The file ships them when you list them in `log_files`. Each item names
+a group the instance already declares (in `log_groups` or `existing_log_groups`) and an absolute
+file path, which may use `*` or `?`:
+
+```json
+"log_files": [
+  {"group": "application", "file": "/var/log/myapp/app.log"},
+  {"group": "/myapp/prod/web", "file": "/srv/web/logs/*.log"}
+]
+```
+
+- A group from `log_groups` is written as `/PROJECT/ENVIRONMENT/INSTANCE_ID/NAME`, with the
+  instance ID as the stream and `log_retention_days` as retention.
+- An existing group keeps its own name, gets the instance ID as the stream and is never given a
+  retention setting by the agent. Streams written this way are named after the instance, so the
+  default `streams: instance` finds them. Use `streams: all` for a group that something else writes,
+  such as Docker's `awslogs` driver.
+- The nginx and heartbeat groups are already shipped, so `log_files` cannot repeat them. Two items
+  cannot be the same group and file. Paths cannot contain `..`.
+- The agent runs as root by default. If you run it as another user, check that it can read each file.
+- After you change `log_files`, run `dry-run` again, copy the new file to the instance and restart
+  the agent.
+
+Common starting points. They are the usual defaults and have not been checked against a live
+instance, so look at your own setup:
+
+| Application | Log source |
+| --- | --- |
+| Nginx | Set `nginx_alarm`. The file ships `/var/log/nginx/access.log` and `error.log` |
+| Gunicorn or Uvicorn | The agent does not read the systemd journal. Log to a file: `--access-logfile` and `--error-logfile` for Gunicorn, or `StandardOutput=append:/var/log/myapp/app.log` in the unit (systemd 240 or later) |
+| Node.js with pm2 | `/home/USER/.pm2/logs/*.log` |
+| Docker, `json-file` driver | `/var/lib/docker/containers/*/*-json.log`. Each line is a JSON wrapper with a `log` field. All containers go to one stream |
+| Docker, `awslogs` driver | Docker writes to CloudWatch itself. List the group in `existing_log_groups` with `streams: all`. The instance role needs the log write permissions, and the group must exist |
+| Anything else that writes a file | That file |
 
 ## Use log groups that already exist
 

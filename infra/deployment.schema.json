@@ -224,6 +224,29 @@
               }
             }
           },
+          "log_files": {
+            "description": "Files the generated CloudWatch agent file ships, each to one of this instance's log groups.",
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "group",
+                "file"
+              ],
+              "properties": {
+                "group": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_./#-]{1,512}$"
+                },
+                "file": {
+                  "type": "string",
+                  "pattern": "^/[A-Za-z0-9_./*?-]{1,200}$"
+                }
+              }
+            }
+          },
           "disk_path": {
             "type": "string",
             "pattern": "^/[A-Za-z0-9/_-]*$"

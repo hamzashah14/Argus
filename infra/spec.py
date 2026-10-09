@@ -32,10 +32,10 @@ def load(path):
         if not item["log_groups"] and not names:
             raise ValueError("Every instance needs log_groups or existing_log_groups")
         if len(set(names)) != len(names) or any(
-            name.startswith(owned) or name.endswith("/") for name in names
+            name.startswith(owned) or name.endswith("/") or name in item["log_groups"] for name in names
         ):
             raise ValueError(
-                "Invalid existing_log_groups: unique names outside Kira's own log prefix required"
+                "Invalid existing_log_groups: names must be unique and not one of Kira's own groups"
             )
         for group in groups:
             modes.setdefault(group["name"], []).append(group.get("streams", "instance"))
@@ -73,6 +73,13 @@ def load(path):
             raise ValueError("Collector heartbeat must reference an exact declared metric")
         if {s["instance_id"] for s in value["observability"]["services"]} != set(ids):
             raise ValueError("Every mandatory inventory instance needs observed service coverage")
+    for item in value["instances"]:
+        known = (set(item["log_groups"]) - shipped(value, item)) | {
+            group["name"] for group in item.get("existing_log_groups", [])
+        }
+        pairs = [(entry["group"], entry["file"]) for entry in item.get("log_files", [])]
+        if len(set(pairs)) != len(pairs) or any(g not in known or ".." in f.split("/") for g, f in pairs):
+            raise ValueError("Invalid log_files: unique files, each for one of the instance's own log groups")
     return value
 
 
@@ -277,6 +284,24 @@ def readable_log_groups(spec):
     )
 
 
+def shipped(spec, instance):
+    """Group names the generated agent file already ships (nginx, heartbeat), so log_files cannot repeat them."""
+    nginx = {"nginx-access", "nginx-error"} if instance["nginx_alarm"] else set()
+    services = spec.get("observability", {}).get("services", [])
+    return nginx | {s["heartbeat_log_group"] for s in services if s["instance_id"] == instance["id"]}
+
+
+def log_file(spec, instance, entry):
+    """One agent collect_list item. Only a group Kira creates gets its retention set by the agent."""
+    item = {"file_path": entry["file"], "log_stream_name": instance["id"]}
+    if entry["group"] in instance["log_groups"]:
+        item["log_group_name"] = f"{log_prefix(spec)}/{instance['id']}/{entry['group']}"
+        item["retention_in_days"] = spec["log_retention_days"]
+    else:
+        item["log_group_name"] = entry["group"]
+    return item
+
+
 def cwagent(spec, instance):
     metrics = {
         "mem": {"measurement": ["mem_used_percent"]},
@@ -306,6 +331,7 @@ def cwagent(spec, instance):
                         for kind in ("access", "error")
                         if instance["nginx_alarm"]
                     ]
+                    + [log_file(spec, instance, entry) for entry in instance.get("log_files", [])]
                     + (
                         [
                             {

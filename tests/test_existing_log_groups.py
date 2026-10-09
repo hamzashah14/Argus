@@ -65,8 +65,10 @@ def test_bad_existing_groups_are_rejected_without_echoing_values(tmp_path, exist
 
 
 def test_the_rejection_names_the_rule(tmp_path):
-    with pytest.raises(ValueError, match="outside Kira's own log prefix"):
+    with pytest.raises(ValueError, match="not one of Kira's own groups"):
         make_spec(tmp_path, [{"name": OWN}])
+    with pytest.raises(ValueError, match="not one of Kira's own groups"):
+        make_spec(tmp_path, [{"name": "application"}])  # the example's own short group name
 
 
 def test_an_instance_needs_at_least_one_group(tmp_path):
