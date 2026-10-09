@@ -84,6 +84,7 @@ def test_bounded_history_and_attempt_window():
         messages = chat.append_exchange(messages, "question", chat.ChatResult("answer", "ok"))
     assert len(messages) == chat.MAX_HISTORY_MESSAGES
     assert chat.recent_attempts([0, 100, 3601], 3700) == [3601]
+    assert len(chat.recent_attempts(list(range(3000, 3100)), 3100)) == 100  # no cap below the hourly limit
 
 
 def test_unconfigured_runtime_does_not_invoke_aws(monkeypatch):

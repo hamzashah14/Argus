@@ -1,4 +1,4 @@
-"""Request limits for chat investigations. The diagnostics evaluation reads them too."""
+"""Default chat request limits. The diagnostics evaluation reads them."""
 
 from dataclasses import asdict
 

@@ -405,3 +405,27 @@ def test_team_hourly_limit_is_shared_by_a_person_across_sessions(team_mode, monk
     second.chat_input[0].set_value("second").run()
     assert invoke.call_count == 1
     assert any("hourly" in item.value for item in second.info)
+
+
+@pytest.mark.parametrize("name", ["KIRA_AUTH_MODE", "CHAT_FUNCTION_ARN", "KIRA_SESSION_TABLE"])
+def test_a_connection_from_the_removed_identity_module_stops_the_app(settings, monkeypatch, name):
+    monkeypatch.setenv(name, "oidc")
+    test = app(False)
+    test.query_params["incident"] = "a" * 32
+    test.run()
+    assert not test.exception and not test.text_input and not test.chat_input
+    assert any("removed identity module" in item.value for item in test.error)
+    assert not test.info  # not even the incident lookup ran
+
+
+def test_team_refused_retry_keeps_the_conversation(team_mode, monkeypatch):
+    team_mode(extra="[limits]\nchat_per_user_per_hour = 2\n")
+    monkeypatch.setattr(chat, "invoke", Mock(return_value=chat.failure("REQUEST_FAILED", "failed")))
+    test = app(False).run()
+    test.chat_input[0].set_value("first question").run()
+    assert test.session_state["messages"][-1]["status"] == "error"
+    assert team.admit("user-1", 2)  # the same person uses the second request in another browser session
+    before = list(test.session_state["messages"])
+    button(test, "Retry in a new conversation").click().run()
+    assert test.session_state["messages"] == before
+    assert any("hourly investigation limit" in item.value for item in test.info)

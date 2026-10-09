@@ -25,7 +25,7 @@ The options combine freely, with two exceptions. A model API works only with `st
 tool rejects the other combination. Team mode also needs `standalone`: the UI reports a
 configuration problem for `agentcore`.
 
-Team mode is on if, and only if, the UI host sets `KIRA_TEAM_FILE` (section 7). The deployment
+Team mode is on if, and only if, the UI host sets `KIRA_TEAM_FILE` (section 7; the launcher sets it from `--team-file`). The deployment
 tool knows nothing about it and creates nothing for it.
 
 ## Who does what
@@ -426,7 +426,7 @@ public places.
 | "Deployment failed (ValueError); no success claimed. Inspect private evidence." | A setting in `deployment.json` or `runtime.json` breaks a rule in 3.3, and the automation tool does not say which. Run `python -m infra.durable --spec .local/customer/deployment.json --config .local/customer/runtime.json --output .local/customer/check-render`. It makes no AWS call and ends with the exact message. Examples: "Invalid deployment field: NAME", "UI, CI and deployment identities must be distinct", "Model ARN must be included in model_arns", "Invalid durable URL, distinct fallback recipient or retention", "Invalid runtime limit: NAME" |
 | "Automation configuration has unknown or missing fields", "Invalid AWS profile name", "Supply spec, runtime configuration and verified wheelhouse paths" | `automation.json` must have exactly the five keys in 3.3, with valid values |
 | "Initial deployment must keep investigation_paused true; activation is a separate qualified release" | Set `investigation_paused` to `true` in `runtime.json` |
-| "Team sign-in changed: remove the identity, security and initial_access settings. Team access is now a team.toml allowlist on the UI host; see docs/DEPLOY.md section 7." | An older `runtime.json` still has an `identity` or `security` block, or an older `automation.json` still has `initial_access`. Delete those keys. Team access is now the `team.toml` file on the UI host (section 7), and the deployment tool no longer deals with it |
+| "Team sign-in changed: remove the identity, security and initial_access settings. Team access is now a team.toml allowlist on the UI host; see docs/DEPLOY.md section 7." | An older `runtime.json` still has an `identity` or `security` block, or an older `automation.json` still has `initial_access`. Delete those keys. Team access is now the `team.toml` file on the UI host (section 7), and the deployment tool no longer deals with it. Stacks and resources that an earlier release created for that sign-in stay in your account, because the tool never deletes foreign resources: remove them yourself (the dedicated chat function, the AgentCore chat runtime and endpoint, the session table, the signing secret, the audit bucket and trail, and the issuer role). Do not reuse an old `ui-connection.json`; the UI refuses to start with one |
 | "Run dry-run and supply its exact --plan-hash before apply" | Rerun `dry-run` and copy the new hash. Any change to settings or the commit changes it |
 | "Apply requires a clean reviewed source checkout" | Commit or remove every change, including untracked files |
 | "Wrong AWS account; no writes permitted", "Run with the configured CI/operator role credentials" | The profile points at another account, or is not a session of `ci_principal_arn` |

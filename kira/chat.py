@@ -134,7 +134,7 @@ def invoke(prompt, session_id, settings, *, history=(), allowed=None):
 
 
 def recent_attempts(attempts, now):
-    return [stamp for stamp in attempts if now - stamp < 3600][-MAX_REQUESTS_PER_HOUR:]
+    return [stamp for stamp in attempts if now - stamp < 3600]
 
 
 def append_exchange(messages, prompt, result):

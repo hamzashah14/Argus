@@ -29,7 +29,7 @@ the same tool functions or AgentCore runtime as incident investigations). The th
 has the password can use the model and tools the UI role can reach and read every
 incident report. Keep the UI on `127.0.0.1` or behind your own SSO or VPN proxy.
 
-**Optional: team mode.** Set `KIRA_TEAM_FILE` and several people can share one UI. They sign in
+**Optional: team mode.** Start the UI with `--team-file` (it sets `KIRA_TEAM_FILE`) and several people can share one UI. They sign in
 through Streamlit's OIDC login with your identity provider. A `team.toml` allowlist on the UI
 host says who may use which instances, as a viewer or an investigator. Kira checks the token's
 issuer, the immutable subject, the sign-in age and, by default, an `mfa` value in the `amr`

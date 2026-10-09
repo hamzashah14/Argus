@@ -1,6 +1,7 @@
 """Customer-operated Kira web client. Run with: streamlit run app.py."""
 
 import hmac
+import os
 import time
 import uuid
 from pathlib import Path
@@ -72,6 +73,14 @@ if (
 ):
     sign_out()
     st.session_state.session_expired = True
+
+if any(os.getenv(name) for name in ("KIRA_AUTH_MODE", "CHAT_FUNCTION_ARN", "KIRA_SESSION_TABLE")):
+    # A connection from the removed identity module must not fall back to the shared password.
+    st.error(
+        "This connection comes from the removed identity module, so per-person access is no longer "
+        "enforced. Re-run apply with the new settings and start the UI with --team-file (docs/DEPLOY.md section 7)."
+    )
+    st.stop()
 
 member = None
 roster = None
@@ -312,7 +321,6 @@ prompt = st.chat_input(
 )
 if retry:
     prompt = st.session_state.last_prompt
-    clear_conversation()
 if prompt and prompt.strip():
     if member is not None and member.role != "investigator":
         team.audit(member.sub, member.role, None, "chat", "DENIED_ROLE", instance_count=len(member.instances))
@@ -323,6 +331,8 @@ if prompt and prompt.strip():
         )
         st.info("You reached your hourly investigation limit. Try again later.")
         st.stop()
+    if retry:
+        clear_conversation()  # Only after the checks pass: a refused retry keeps the conversation.
     st.session_state.attempts.append(time.monotonic())
     st.session_state.last_prompt = prompt
     with st.spinner("Reading evidence from your cloud…"):
