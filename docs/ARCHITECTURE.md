@@ -85,7 +85,9 @@ identity, shared spend cap or dedicated chat capacity.
 4. The runtime counts the model request before inference (with a Model API, see
    [Model provider seam](#model-provider-seam)). Each handoff checks deadline,
    token/tool/query budgets and permitted instance/time window.
-5. Pinned tools discover and retrieve bounded CloudWatch evidence. Redaction runs
+5. Pinned tools discover and retrieve bounded CloudWatch evidence. (In the
+   development-only [local tools mode](#glossary), the UI process runs the same two tool
+   handlers itself with your own AWS credentials instead.) Redaction runs
    before subsequent model requests and persisted/delivered output.
 6. Structured diagnosis validates citations, correlation and uncertainty. The UI
    displays the qualified answer. With the identity module, viewer grants do not
@@ -146,6 +148,7 @@ See [operations](OPERATE.md) for recovery and data boundaries, the
 - **Ledger:** The DynamoDB table that records each accepted event, its incident and the work still owed, written with conditional updates so duplicates are rejected. It also holds leases, budgets and recovery accounting.
 - **Lease and fence:** A worker claims an incident by taking a time-limited lease (owner and expiry) in the ledger. Each claim increments a fencing token, and every later write must present the current token, so a slow worker whose lease expired cannot overwrite the newer attempt.
 - **Local single-user mode:** The default. One shared password (`APP_PASSWORD`, at least 12 characters) protects the web UI, and chat runs without a gateway using the UI role's AWS credentials. There are no grants, sessions, per-person quotas or identity tables. The throttle of 20 requests per hour is kept per browser session.
+- **Local tools mode:** A development-only option for chat. With `KIRA_LOCAL_TOOLS` set to a one-file JSON config, the UI process runs the two read-only tool handlers itself with the AWS credentials on your machine, so nothing is deployed. It needs `ENVIRONMENT=development`, the standalone target and password sign-in, and it cannot run incident investigations. The handlers are the deployed ones; only the transport differs. IAM no longer limits them to your instances and log groups. See the [README recipe](../README.md#try-it-against-your-own-cloudwatch-no-deployment).
 - **Model API provider:** An alternative to Bedrock for the standalone target. It is an OpenAI-compatible Chat Completions endpoint with tool calling, or the Anthropic Messages API, set by `model_provider` and `model_api` in `deployment.json`. Its API key lives in a Secrets Manager secret that you create, and each release pins one version of it. Redacted excerpts leave your AWS account for that provider.
 - **Outbox and intent:** An intent is a ledger row saying that something still has to happen, such as the initial notification, an investigation or the follow-up. Intents start as `PENDING` and become `SENT` once queued. The message is queued first, so a crash can cause a duplicate but never a lost intent. The set of pending intents is the outbox.
 - **Plan hash and review hash:** The plan hash is a SHA-256 digest of the `dry-run` plan, and `apply` refuses to run without it. The review hash is the digest of a rendered release bundle (source, settings, templates and bindings); operator commands refuse a bundle that does not match it.

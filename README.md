@@ -79,6 +79,31 @@ runtime" checklist and chat stays disabled. That is expected. The same password
 sign-in is the default mode of a deployed backend; the FAQ explains what it does and
 does not protect.
 
+### Try it against your own CloudWatch (no deployment)
+
+For development, the UI can run its two read-only tools (`fetch_logs`, `fetch_metrics`) in
+its own process with your AWS credentials. You skip the tool Lambdas and `infra.automation`.
+
+1. Write the one-file tool config: copy `examples/local-tools.example.json` and edit it, or
+   generate it from a `deployment.json` (the shape of `examples/deployment.example.json`).
+   Generating makes no AWS call and will not overwrite a file without `--force`:
+   `mkdir -p .local && python scripts/make_local_tools.py --spec deployment.json --out .local/local-tools.json`
+2. In `.env`, set `KIRA_LOCAL_TOOLS=.local/local-tools.json`, `APP_PASSWORD`, `BEDROCK_REGION`,
+   `BEDROCK_MODEL_ID` and `EXPECTED_ACCOUNT_ID`. Keep `ENVIRONMENT=development` and the prefilled
+   `RUNTIME_LIMITS`. Leave `LOGS_TOOL_ARN`, `METRICS_TOOL_ARN` and `RUNTIME_RELEASE` empty.
+3. Use a read-only AWS profile (`AWS_PROFILE` in `.env`, or an SSO sign-in) with
+   `logs:DescribeLogGroups`, `logs:StartQuery` (billable), `logs:GetQueryResults`,
+   `logs:StopQuery`, `cloudwatch:GetMetricStatistics`, and `bedrock:InvokeModel` and
+   `bedrock:CountTokens` on your model. Kira does not check that it matches `EXPECTED_ACCOUNT_ID`.
+4. Run `streamlit run app.py --server.address 127.0.0.1` and sign in. "Connection details"
+   shows "Local tools (this machine's AWS credentials)".
+
+**Limits.** The tools read only log groups named `<log_prefix>/<instance-id>/<suffix>`, the
+layout of the agent file in [SERVERS.md](docs/SERVERS.md). Other groups, such as `/aws/lambda/...`,
+are out of reach. The UI process holds your read credentials, so Kira's checks run in code and
+IAM does not back them up. Keep the UI on `127.0.0.1`. Use the deployed tools for anything
+shared or production. This mode has never run against real AWS either.
+
 ## Deploy to your AWS account
 
 Run from a clean, committed checkout on macOS or Linux (Windows: WSL) with the
@@ -162,12 +187,13 @@ telemetry setup is for Linux EC2) and a Model API with AgentCore.
 
 ## Documentation
 
-1. [Deployment guide](docs/DEPLOY.md): prerequisites, costs, setup, the optional identity module and Model API.
-2. [Server setup](docs/SERVERS.md): CloudWatch agent, heartbeat and Nginx on your hosts.
-3. [Operations](docs/OPERATE.md): incidents, replay, recipients, rotation, erasure, restore.
-4. [Architecture](docs/ARCHITECTURE.md): components, workflows and a glossary.
-5. [Live acceptance](docs/ACCEPTANCE.md): the checklist to complete before relying on it.
-6. [Diagnostic evaluations](evaluations/diagnostics/README.md): synthetic cases and optional paid model tests.
+1. [Prerequisites](docs/PREREQUISITES.md): what must exist and be decided before you run the deploy tool.
+2. [Deployment guide](docs/DEPLOY.md): prerequisites, costs, setup, the optional identity module and Model API.
+3. [Server setup](docs/SERVERS.md): CloudWatch agent, heartbeat and Nginx on your hosts.
+4. [Operations](docs/OPERATE.md): incidents, replay, recipients, rotation, erasure, restore.
+5. [Architecture](docs/ARCHITECTURE.md): components, workflows and a glossary.
+6. [Live acceptance](docs/ACCEPTANCE.md): the checklist to complete before relying on it.
+7. [Diagnostic evaluations](evaluations/diagnostics/README.md): synthetic cases and optional paid model tests.
 
 ## Contributing and license
 

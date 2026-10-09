@@ -54,50 +54,10 @@ adds a secret that you create before `check` (section 8).
 
 ## 1. What you need before you start
 
-- [ ] **A workstation and a reviewed checkout.** macOS or Linux (on Windows use WSL), Python 3.12,
-  Git, and ideally the AWS CLI to sign in and check which account you are in. Use a clean
-  checkout of a reviewed commit. `apply` refuses to run if `git status` shows any change,
-  including untracked files.
-- [ ] **An AWS account and three existing IAM roles.** Kira creates none of them and never grants
-  itself permissions. Ask your security administrator if they do not exist.
-
-  | `deployment.json` field | Role | Used for |
-  | --- | --- | --- |
-  | `ci_principal_arn` | Operator | The role you run the CLI as. Needs scoped stack and artifact management, passing the execution role to CloudFormation, IAM simulation and policy reads, Secrets Manager describe and version-label actions on the project's secrets, and canary invocation. Team sign-in adds first-user grants |
-  | `deployment_role_arn` | CloudFormation execution | Creates the resources. Must explicitly trust `cloudformation.amazonaws.com` |
-  | `ui_principal_arn` | UI workload | The identity the web UI runs as. Kira's generated UI role (and, with team sign-in, its session-issuer role) trusts only this role |
-
-  All three must be explicit, different roles in the target account. Use SSO, assumed roles or
-  workload roles through the normal AWS credential chain. Never put AWS keys in the JSON files or
-  a browser. Do not attach AdministratorAccess to get past a blocker. The `agentcore` runtime needs
-  extra permissions (section 9).
-- [ ] **Two regions.** A monitor region (alarms, queues, tables) and a Bedrock region (the model,
-  plus the read-only tool functions and their secret). They may be the same. Both must be enabled
-  in your account.
-- [ ] **A Bedrock model that works with Kira.** (Using a model API instead? Skip this item and read
-  section 8.) The model must support Converse with tools and the `CountTokens` call for the exact
-  request. Not every model does. Model access must be granted in the Bedrock region, and your
-  throughput quotas must fit. A catalog entry is not proof. `check` only reads model metadata. The
-  paid staging canary is what proves it works.
-  [AWS token-count support](https://docs.aws.amazon.com/bedrock/latest/userguide/count-tokens.html).
-- [ ] **Lambda concurrency headroom.** Kira reserves `initial_reserved_concurrency` executions for
-  initial notifications. AWS requires 100 to stay unreserved. If your limit is low, `check` fails
-  with "Reserved concurrency would consume Lambda's required unreserved capacity". Ask for a quota
-  increase. Team sign-in reserves 3 more (section 7).
-- [ ] **Monitored servers.** Existing Linux EC2 instances (1 to 10) with the CloudWatch agent,
-  the right log paths and metrics, a heartbeat if you use observers, and readiness routes.
-  `check` fails if a declared instance does not exist. See [SERVERS.md](SERVERS.md).
-- [ ] **Mailboxes and a status URL.** A primary address (`notification_email`), a different
-  fallback address (`fallback_email`) and a fixed HTTPS `status_base_url` that alert emails link
-  to. A laptop's `127.0.0.1` address cannot be a shared link. Expect AWS confirmation emails
-  (step 3.7). In default mode the UI runs on your machine, so an email link opens only if its
-  address reaches that machine (section 4).
-- [ ] **People and approvals.** Name owners for deployment and access, incident response,
-  security and data, and budget. Approve retention, model and query limits, and a pilot budget.
-- [ ] **A runtime choice.** `standalone` runs on Lambda and is the simpler pilot. Use it unless you
-  have a reason to pick `agentcore` (section 9).
-- [ ] **Optional extras, only if you choose them.** An OIDC identity provider with MFA (section 7),
-  a model API account and key (section 8), or the AgentCore roles and ARM64 build (section 9).
+Read [PREREQUISITES.md](PREREQUISITES.md) first. It lists what must already exist before you run
+the deploy tool: the AWS account, regions and quotas, the three IAM roles, your monitored servers,
+your workstation, the private configuration files, and the people you need. It also shows how to
+check each item. Return here when its quick checklist is complete and `dry-run` passes.
 
 ## 2. What it costs
 
@@ -352,9 +312,13 @@ Leave it off the first time if you want to check your telemetry before the paid 
 incident fallback topic (early in the run) and one for the observation fallback topic if you
 configured observers. The primary address gets its email only when the routing stage runs, near
 the end. Confirm each one when it arrives. The registration check requires every subscription
-to be confirmed, so the first `apply` that reaches routing normally **fails** at that point
-with `FAILED` (exit 1) and "infra.durable_ops failed; inspect private operations.log". After you
-confirm, run the same command again. Do this within one hour of the canary (see C).
+to be confirmed. The first `apply` that reaches routing therefore stops with `WAITING` (exit 2):
+"Confirm the subscription emails sent to the addresses configured as notification_email ..., then
+resume apply with the same plan hash". It names the settings, never the addresses. After you
+confirm, run the same command again. Nothing is created again; the earlier steps are only
+rechecked, then the registration check runs. Do this within one hour of the canary (see C). Any
+other subscription problem (another address or protocol, a missing or unsubscribed subscription)
+is still `FAILED`.
 
 **C. The canary receipt.** A passing canary writes a receipt that is valid for one hour. Every
 later `apply` checks it. If it is older, you see "Canary receipt expired/differs". Then you
@@ -404,6 +368,10 @@ real AWS.
 After the last row, open the UI (section 4).
 
 ## 4. Open the UI on your own machine
+
+Only want to try chat without deploying anything? Use the README recipe
+[Try it against your own CloudWatch](../README.md#try-it-against-your-own-cloudwatch-no-deployment)
+instead of this section. It is for development only.
 
 This section is for default mode (team sign-in: section 7). The tool writes `ui-connection.json`
 as its last step, so start here when `status` shows
@@ -481,14 +449,15 @@ public places.
 | "Existing stack is not owned by this deployment", "Immutable release exists with a different template; use a new release" | A same-named stack has other tags, or a release already exists with other content. Set a new `release_id` |
 | "STAGE: stack needs operator recovery; rollback/failure is not success", "STAGE: change set failed; inspect private AWS events" | Read the stack's events in CloudFormation, then repair it. Never delete retained resources blindly |
 | "Change set deletes/replaces resources; separate operator review required" | The tool will not approve this. Review it by hand (Appendix A) |
-| "MODULE failed; inspect private operations.log and repair before resuming" | A sub-command failed. After routing it usually means an unconfirmed email subscription (3.7 B). Otherwise read `operations.log` |
+| "MODULE failed; inspect private operations.log and repair before resuming" | A sub-command failed. Read `operations.log`. An email that only awaits its confirmation click is not this error: it is a `WAITING` stop (3.7 B) |
+| "Confirm the subscription emails sent to the addresses configured as ..." | `WAITING`, exit 2. A subscription email is still unconfirmed. Click the link in each one, then resume with the same plan hash (3.7 B) |
 | "Required metric unavailable: ID", "Required evidence log group is absent", "Required access metric filter failed its positive/negative fixtures", "Access filter does not cover declared failed-request statuses" | Telemetry is not yet as declared. See [SERVERS.md](SERVERS.md), then resume with `--retry-canary` (3.7 C) |
 | "Canary requires explicit paid invocation authorization in staging" | The canary needs `environment: staging` and `--allow-model-invocation` |
 | "A private individual-session ticket is required for the staging chat canary", "A canary ticket requires explicit paid model authorization", "Canary ticket and parent directory must be private, with a bounded nonempty ticket" | Team sign-in only. The canary needs a ticket (mode 600, in a folder with mode 700, not a symlink) and `--allow-model-invocation` (section 7) |
 | "Owned runtime canary failed", "Canary did not prove both successful tool contracts and model completion" | The function failed or the run stopped early. Read the staging Investigate function's CloudWatch logs in the monitor region. With a model API, common causes are an API host that Lambda cannot reach, a rejected key, a model without tool calling, or a token report that fails Kira's accounting check (8.1). The failed canary is ambiguous (3.7 C) |
 | "Canary receipt expired/differs", "Previous paid canary outcome is ambiguous" | See 3.7 C |
 | "Legacy resource retirement requires separate review" | Review the named alarms or subscriptions by hand. The tool never deletes them |
-| "Routing includes an unexpected or unconfirmed subscriber" | Confirm the pending email subscriptions, then resume |
+| "Routing includes an unexpected or unconfirmed subscriber" | A subscriber differs from the plan, for example another address or protocol, or one that is missing or unsubscribed. This stays `FAILED`. Correct it, then resume. A pending email alone waits instead (3.7 B) |
 | "Access administration failed; verify the private inputs, ownership and reviewed source" | Team sign-in only. A `grant-plan` or `grant-apply` input, the owner or the clean checkout is wrong. The message hides the details on purpose |
 | "UI profile must assume the generated UI role (or limited staging issuer); do not use deployment credentials", "Connection file must be private (chmod 600) and not a symlink" | Fix the profile (section 4, or 7.8 with team sign-in), or run `chmod 600` on `ui-connection.json` |
 | "APP_PASSWORD is not set: export it (12+ characters) in this shell first; .env is not loaded." | Default mode. Export `APP_PASSWORD` before you run the launcher (section 4). The UI page may mention a `.env` file, but the launcher does not read it |

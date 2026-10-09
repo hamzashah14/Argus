@@ -20,7 +20,7 @@ privately ([SECURITY.md](SECURITY.md)), never in public issues.
 | `scripts/dev/` | Maintainer checks used by CI: validators, build and render verification, secret and publication checks, diagnostics evaluation |
 | `tests/`, `evaluations/` | Offline tests and synthetic diagnostic cases |
 | `requirements/` | Hash-locked dependencies for the UI, development and Lambda packages |
-| `docs/` | Guides: deploy, servers, operate, acceptance, architecture |
+| `docs/` | Guides: prerequisites, deploy, servers, operate, acceptance, architecture |
 
 ## Set up and run the checks
 

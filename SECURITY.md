@@ -34,6 +34,15 @@ incident report. Keep the UI on `127.0.0.1` or behind your own SSO or VPN proxy.
 sign-in with MFA, per-person grants, revocation, audit, per-user and shared quotas and a
 dedicated chat gateway. Use it when more than one person uses the UI.
 
+**Local tools mode (development only).** With `KIRA_LOCAL_TOOLS` set, the UI process runs the
+two read-only tool handlers itself with your own AWS credentials, and nothing is deployed. The
+UI process then holds CloudWatch Logs and Metrics read access directly. You lose the pinned
+immutable tool code, the per-function IAM scoping and the instance and log-group scope baked
+into a deployment. Kira still checks that scope in code, from a file you control, but IAM no
+longer backs those checks up. The mode needs `ENVIRONMENT=development` and the password UI,
+and it is refused with the OIDC module. Keep the UI on `127.0.0.1`, and use the deployed
+tools for anything shared or production.
+
 **Model provider.** With Bedrock, redacted excerpts go to Amazon Bedrock in your account
 and region. With a Model API, redacted log and metric excerpts and your chat questions leave your
 AWS account for that provider's HTTPS endpoint. The provider sets its own retention and
