@@ -88,7 +88,6 @@ def variant(old, new):
     return text
 
 
-MANY_INSTANCES = ", ".join(f'"i-{n:017x}"' for n in range(101))
 BAD_FILES = {
     "unknown top-level key": "extra = 1\n" + TEXT,
     "unknown user key": variant('role = "viewer"', 'role = "viewer"\nnote = "x"'),
@@ -110,7 +109,6 @@ BAD_FILES = {
     "duplicate instance": variant(f'["{IID}", "{OTHER}"]', f'["{IID}", "{IID}"]'),
     "no instances": variant(f'instances = ["{IID}"]\n\n[[users]]', "instances = []\n\n[[users]]"),
     "instances not a list": variant(f'instances = ["{IID}"]\n\n[[users]]', 'instances = "x"\n\n[[users]]'),
-    "too many instances": variant(f'instances = ["{IID}", "{OTHER}"]', f"instances = [{MANY_INSTANCES}]"),
     "session_hours zero": variant(f'issuer = "{ISSUER}"\n', f'issuer = "{ISSUER}"\nsession_hours = 0\n'),
     "session_hours too large": variant(
         f'issuer = "{ISSUER}"\n', f'issuer = "{ISSUER}"\nsession_hours = 25\n'
@@ -145,6 +143,35 @@ def test_a_hundred_and_one_users_are_rejected(tmp_path):
         roster(tmp_path, f'issuer = "{ISSUER}"\n{users}')
 
 
+def test_too_many_instances_per_user_are_rejected(tmp_path):
+    deployed = {f"i-{n:017x}" for n in range(101)}
+    instances_list = ", ".join(f'"i-{n:017x}"' for n in range(101))
+    text = (
+        f'issuer = "{ISSUER}"\n\n[[users]]\nsub = "user-1"\nrole = "viewer"\ninstances = [{instances_list}]\n'
+    )
+    with pytest.raises(team.TeamError):
+        team.load(write(tmp_path, text), deployed)
+
+
+def test_exactly_one_hundred_instances_per_user_loads(tmp_path):
+    deployed = {f"i-{n:017x}" for n in range(100)}
+    instances_list = ", ".join(f'"i-{n:017x}"' for n in range(100))
+    text = (
+        f'issuer = "{ISSUER}"\n\n[[users]]\nsub = "user-1"\nrole = "viewer"\ninstances = [{instances_list}]\n'
+    )
+    loaded = team.load(write(tmp_path, text), deployed)
+    assert len(loaded.users["user-1"].instances) == 100
+
+
+def test_exactly_two_hundred_fifty_six_char_subject_loads(tmp_path):
+    subject_256 = "s" * 256
+    text = (
+        f'issuer = "{ISSUER}"\n\n[[users]]\nsub = "{subject_256}"\nrole = "viewer"\ninstances = ["{IID}"]\n'
+    )
+    loaded = roster(tmp_path, text)
+    assert subject_256 in loaded.users
+
+
 def test_errors_name_fields_and_never_echo_values(tmp_path):
     private = "PRIVATE-SUBJECT-VALUE"
     text = TEXT.replace('sub = "user-1"', f'sub = "{private}"').replace(
@@ -168,6 +195,19 @@ def test_missing_file_directory_bad_toml_and_unsafe_modes_are_rejected(tmp_path)
         team.load(write(tmp_path, TEXT, mode=0o660), ALLOWED)
     with pytest.raises(team.TeamError):
         team.load(write(tmp_path, "#" * (256 * 1024 + 1)), ALLOWED)
+
+
+def test_invalid_file_encoding_is_rejected(tmp_path):
+    path = tmp_path / "team.toml"
+    path.write_bytes(b'issuer = "\xff"')
+    with pytest.raises(team.TeamError):
+        team.load(str(path), ALLOWED)
+
+
+def test_deeply_nested_toml_is_rejected(tmp_path):
+    text = "a = " + "[" * 100000 + "]" * 100000
+    with pytest.raises(team.TeamError):
+        team.load(write(tmp_path, text), ALLOWED)
 
 
 # ---- authorization ---------------------------------------------------------
@@ -197,6 +237,10 @@ def test_listed_user_with_fresh_mfa_is_authorized(tmp_path):
         ({"amr": ...}, "mfa"),
         ({"amr": "mfa"}, "mfa"),
         ({"amr": ["pwd"]}, "mfa"),
+        ({"auth_time": float("nan")}, "expired"),
+        ({"auth_time": float("inf")}, "expired"),
+        ({"auth_time": 10**400}, "claims"),
+        ({"auth_time": -(10**400)}, "claims"),
     ],
 )
 def test_malformed_or_unacceptable_claims_are_denied_never_raised(tmp_path, changes, reason):
@@ -320,6 +364,23 @@ def test_audit_omits_what_is_unknown(capsys):
     team.audit("user-1", "viewer", IID, "report", "OK")
     data = json.loads(capsys.readouterr().out)
     assert data["instance"] == IID and "tokens" not in data and "instance_count" not in data
+
+
+def test_audit_filters_tokens_to_valid_keys_and_types(capsys):
+    team.audit(
+        "user-1",
+        "investigator",
+        None,
+        "chat",
+        "OK",
+        tokens={"input": 10, "output": 5, "extra": 99, "output_float": 5.5},
+    )
+    data = json.loads(capsys.readouterr().out)
+    assert data["tokens"] == {"input": 10, "output": 5}
+
+    team.audit("user-1", "investigator", None, "chat", "OK", tokens={})
+    data = json.loads(capsys.readouterr().out)
+    assert "tokens" not in data
 
 
 # ---- packaging -----------------------------------------------------------------

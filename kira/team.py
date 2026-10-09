@@ -13,6 +13,7 @@ import threading
 import time
 import tomllib
 from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 INSTANCE = re.compile(r"i-(?:[0-9a-f]{8}|[0-9a-f]{17})\Z")
@@ -61,7 +62,7 @@ class Roster:
     def authorize(self, claims, now=None):
         """Return the person's access, or raise TeamDenied. Malformed claims are a denial, never an error."""
         now = time.time() if now is None else now
-        if not isinstance(claims, dict):
+        if not isinstance(claims, Mapping):
             raise TeamDenied("claims")
         if claims.get("iss") != self.issuer:
             raise TeamDenied("issuer")
@@ -71,8 +72,11 @@ class Roster:
         stamp = claims.get("auth_time", claims.get("iat"))
         if isinstance(stamp, bool) or not isinstance(stamp, (int, float)):
             raise TeamDenied("claims")
-        age = now - stamp
-        if age < -CLOCK_SKEW_SECONDS or age > self.session_seconds:
+        try:
+            age = now - stamp
+        except OverflowError:
+            raise TeamDenied("claims") from None
+        if not -CLOCK_SKEW_SECONDS <= age <= self.session_seconds:
             raise TeamDenied("expired")
         if self.require_mfa:
             amr = claims.get("amr")
@@ -150,15 +154,15 @@ def load(path, allowed):
         raise TeamError("Team file is missing or unreadable") from None
     if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES or info.st_mode & 0o022:
         raise TeamError("Team file must be a regular file under 256 KiB that others cannot write")
-    # ponytail: modification time plus size; two same-size edits inside one filesystem timestamp tick are missed.
-    key = (info.st_mtime_ns, info.st_size, deployed)
+    # ponytail: mtime, size, and ctime; same-size edit within one ctime tick with preserved mtime will miss the reload.
+    key = (info.st_mtime_ns, info.st_size, info.st_ctime_ns, deployed)
     cached = _CACHE.get(path)
     if cached and cached[0] == key:
         return cached[1]
     try:
         with open(path, "rb") as handle:
             raw = tomllib.load(handle)
-    except (OSError, tomllib.TOMLDecodeError):
+    except (OSError, ValueError, RecursionError):
         raise TeamError("Team file cannot be read as TOML") from None
     roster = _parse(raw, deployed)
     _CACHE[path] = (key, roster)
@@ -196,5 +200,7 @@ def audit(sub, role, instance, action, outcome, *, instance_count=None, tokens=N
     if instance_count is not None:
         line["instance_count"] = instance_count
     if tokens:
-        line["tokens"] = tokens
+        filtered = {k: v for k, v in tokens.items() if k in ("input", "output") and type(v) is int}
+        if filtered:
+            line["tokens"] = filtered
     print(json.dumps(line, separators=(",", ":")), flush=True)
