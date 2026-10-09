@@ -1,6 +1,6 @@
 """Retire only CloudFormation-owned resources, with a reviewed immutable diff."""
 
-from infra.spec import digest, name, topic_arn
+from infra.spec import digest, name, recipients, topic_arn
 from infra.verify import VerificationError, assert_account
 
 
@@ -20,13 +20,11 @@ def plan(spec, owned, desired_worker_arn, desired_alarm_names=None):
                 result["disable_alarms"].append(item["id"])
         elif item["type"] == "AWS::SNS::Subscription":
             expected = (
-                desired_worker_arn
-                if item["topic"] == topic_arn(spec, "alarms")
-                else spec["notification_email"]
+                {desired_worker_arn} if item["topic"] == topic_arn(spec, "alarms") else set(recipients(spec))
             )
             if item["topic"] not in {topic_arn(spec, "alarms"), topic_arn(spec, "reports")}:
                 raise VerificationError("Owned subscription references an unexpected topic")
-            if item["endpoint"] != expected:
+            if item["endpoint"] not in expected:
                 if not item["id"].startswith("arn:"):
                     raise VerificationError(
                         "Retired subscription is unconfirmed; resolve ownership before promotion"
@@ -81,13 +79,14 @@ def owned_resources(spec, clients):
                 item["actions_enabled"] = alarm[0]["ActionsEnabled"]
             if item["type"] == "AWS::SNS::Subscription":
                 if not item["id"].startswith("arn:"):
-                    # Only the current recipient may still await its click: the digest-named logical ID fixes
+                    # Only a current recipient may still await its click: the digest-named logical ID fixes
                     # its endpoint. Verification, not this plan, refuses to pass until it is confirmed.
-                    if entry["LogicalResourceId"] != "Email" + digest(spec["notification_email"])[:16]:
+                    awaiting = {"Email" + digest(address)[:16]: address for address in recipients(spec)}
+                    if entry["LogicalResourceId"] not in awaiting:
                         raise VerificationError("Cannot reconcile an unconfirmed subscription automatically")
                     item.update(
                         topic=topic_arn(spec, "reports"),
-                        endpoint=spec["notification_email"],
+                        endpoint=awaiting[entry["LogicalResourceId"]],
                         protocol="email",
                     )
                     result.append(item)

@@ -24,7 +24,6 @@ def load_config(path, spec):
     value = json.loads(Path(path).read_text())
     expected = {
         "status_base_url",
-        "fallback_email",
         "retention_days",
         "initial_reserved_concurrency",
         "investigation_paused",
@@ -33,25 +32,25 @@ def load_config(path, spec):
     }
     if {"identity", "security"} & set(value):
         raise VerificationError(TEAM_SIGNIN_CHANGED)
-    if set(value) != expected:
+    if set(value) - {"fallback_email"} != expected:
         raise ValueError(
-            "Durable configuration requires status URL, fallback email, retention, initial capacity and model pause"
+            "Durable configuration requires status URL, retention, initial capacity and model pause"
         )
     url = value["status_base_url"]
-    email = value["fallback_email"]
+    email = value.get("fallback_email", "fallback@example.invalid")  # optional; checked below when present
     if (
         not isinstance(url, str)
         or not re.fullmatch(r"https://[A-Za-z0-9._:-]+(?:/[A-Za-z0-9/_-]+)*/?", url)
         or not isinstance(email, str)
         or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email)
-        or email == spec["notification_email"]
+        or "," in email
         or type(value["retention_days"]) is not int
         or not 7 <= value["retention_days"] <= 365
         or type(value["investigation_paused"]) is not bool
         or type(value["initial_reserved_concurrency"]) is not int
         or not 2 <= value["initial_reserved_concurrency"] <= 1000
     ):
-        raise ValueError("Invalid durable URL, distinct fallback recipient or retention")
+        raise ValueError("Invalid durable URL, fallback recipient or retention")
     from kira.runtime import Limits
 
     if value["runtime_target"] not in {"standalone", "agentcore"} or not isinstance(

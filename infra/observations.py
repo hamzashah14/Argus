@@ -6,7 +6,7 @@ import re
 import time
 
 from infra import durable, observation_templates, owned_ops
-from infra.spec import log_groups, metric_catalog, name
+from infra.spec import fallback_recipients, log_groups, metric_catalog, name, recipients
 from infra.verify import (
     PendingConfirmation,
     VerificationError,
@@ -216,8 +216,11 @@ def verify_registration(bundle, factory):
             {"kira_canary": ["true"]},
             observation_templates.queue_arn(spec, "observation-dead"),
         ),
-        ("reports", "email", spec["notification_email"], {}, None),
-        ("observation-fallback", "email", bundle["config"]["fallback_email"], {}, None),
+        *[("reports", "email", address, {}, None) for address in recipients(spec)],
+        *[
+            ("observation-fallback", "email", address, {}, None)
+            for address in fallback_recipients(spec, bundle["config"])
+        ],
     ):
         from infra.spec import topic_arn
 
@@ -232,13 +235,17 @@ def verify_registration(bundle, factory):
         # Reports also has its primary email. Do not silently accept extra fallback/canary recipients.
         if (
             len(matches) != 1
-            or (topic != "reports" and len(subscriptions) != 1)
+            or (topic != "reports" and len(subscriptions) != len(fallback_recipients(spec, bundle["config"])))
             or not (matches[0]["SubscriptionArn"].startswith("arn:") or awaiting_confirmation(matches[0]))
         ):
             raise VerificationError("Independent subscription missing, duplicated or unconfirmed")
         if awaiting_confirmation(matches[0]):
             # Its attributes cannot be read yet; they are checked on the pass after the click.
-            pending.append("fallback_email" if topic == "observation-fallback" else "notification_email")
+            pending.append(
+                "fallback_email"
+                if topic == "observation-fallback" and "fallback_email" in bundle["config"]
+                else "notification_email"
+            )
             continue
         attrs = sns.get_subscription_attributes(SubscriptionArn=matches[0]["SubscriptionArn"])["Attributes"]
         if json.loads(attrs.get("FilterPolicy", "{}")) != policy:
@@ -303,7 +310,7 @@ def attest_email(bundle, factory, notification_id, *, confirm=False):
         raise VerificationError("Canary expectation is missing or too old for a fresh inbox check")
     from infra.spec import topic_arn
 
-    fingerprint = recipient_fingerprint(topic_arn(spec, "reports"), spec["notification_email"])
+    fingerprint = recipient_fingerprint(topic_arn(spec, "reports"), ",".join(recipients(spec)))
     client.transact_write_items(
         TransactItems=[
             {

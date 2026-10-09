@@ -11,7 +11,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import durable_ops, owned_runtime
 from infra.aws import clients
-from infra.spec import digest, topic_arn
+from infra.spec import digest, fallback_recipients, recipients, topic_arn
 from infra.verify import VerificationError, assert_account
 from kira.governance import Erasure
 from kira.ledger import DATABASE_CONFIG
@@ -30,9 +30,9 @@ def recipient_plan(bundle, factory=clients):
     spec = bundle["spec"]
     assert_account(factory("sts", spec["monitor_region"]), spec)
     desired = {
-        topic_arn(spec, "reports"): spec["notification_email"],
-        topic_arn(spec, "incident-fallback"): bundle["config"]["fallback_email"],
-        topic_arn(spec, "observation-fallback"): bundle["config"]["fallback_email"],
+        topic_arn(spec, "reports"): set(recipients(spec)),
+        topic_arn(spec, "incident-fallback"): set(fallback_recipients(spec, bundle["config"])),
+        topic_arn(spec, "observation-fallback"): set(fallback_recipients(spec, bundle["config"])),
     }
     sns = factory("sns", spec["monitor_region"])
     retire = []
@@ -61,7 +61,7 @@ def recipient_plan(bundle, factory=clients):
                 topic = attrs["TopicArn"]
                 if topic not in desired or not arn.startswith(topic + ":"):
                     raise VerificationError("Owned email subscription topic drifted")
-                if attrs["Endpoint"] != desired[topic]:
+                if attrs["Endpoint"] not in desired[topic]:
                     retire.append({"arn": arn, "topic": topic, "endpoint": attrs["Endpoint"], "stage": stage})
     plan = {"bundle_hash": bundle["review_hash"], "retire": sorted(retire, key=lambda r: r["arn"])}
     return {**plan, "change_hash": digest(plan)}

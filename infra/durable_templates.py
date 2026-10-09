@@ -2,7 +2,7 @@
 
 import json
 
-from infra.spec import name, prefix, topic_arn
+from infra.spec import digest, fallback_recipients, name, prefix, topic_arn
 from infra.templates import (
     add_function,
     att,
@@ -308,14 +308,16 @@ def foundation(spec, config):
         },
         retain=True,
     )
-    r["FallbackRecipient"] = resource(
-        "SNS::Subscription",
-        {
-            "TopicArn": ref("FallbackTopic"),
-            "Protocol": "email",
-            "Endpoint": config["fallback_email"],
-        },
-    )
+    # The first recipient keeps the original logical ID, so a single address renders as before.
+    for index, address in enumerate(fallback_recipients(spec, config)):
+        r["FallbackRecipient" + (digest(address)[:16] if index else "")] = resource(
+            "SNS::Subscription",
+            {
+                "TopicArn": ref("FallbackTopic"),
+                "Protocol": "email",
+                "Endpoint": address,
+            },
+        )
     r["FallbackPolicy"] = resource(
         "SNS::TopicPolicy",
         {

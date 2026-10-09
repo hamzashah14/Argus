@@ -209,6 +209,8 @@ class TimedReads:
 
 
 def confirmed_recipient(sns, topic=None, email=None, *, deadline=None):
+    """True when every address (comma-separated) has exactly one confirmed, unfiltered email subscription."""
+    wanted = set((email or env("PRIMARY_EMAIL")).split(","))
     entries = []
     pages = iter(
         sns.get_paginator("list_subscriptions_by_topic").paginate(TopicArn=topic or env("REPORTS_TOPIC_ARN"))
@@ -220,19 +222,22 @@ def confirmed_recipient(sns, topic=None, email=None, *, deadline=None):
         except StopIteration:
             break
         entries.extend(
-            s
-            for s in page["Subscriptions"]
-            if s["Protocol"] == "email" and s["Endpoint"] == (email or env("PRIMARY_EMAIL"))
+            s for s in page["Subscriptions"] if s["Protocol"] == "email" and s["Endpoint"] in wanted
         )
         if not page.get("NextToken"):
             break
     else:
         raise RuntimeError("Recipient discovery page limit; delivery check incomplete")
-    if len(entries) != 1 or not entries[0]["SubscriptionArn"].startswith("arn:"):
+    if len(entries) != len(wanted) or {s["Endpoint"] for s in entries} != wanted:
         return False
-    require_time(deadline)
-    attrs = sns.get_subscription_attributes(SubscriptionArn=entries[0]["SubscriptionArn"])["Attributes"]
-    return not json.loads(attrs.get("FilterPolicy", "{}"))
+    if any(not s["SubscriptionArn"].startswith("arn:") for s in entries):
+        return False
+    for entry in entries:
+        require_time(deadline)
+        attrs = sns.get_subscription_attributes(SubscriptionArn=entry["SubscriptionArn"])["Attributes"]
+        if json.loads(attrs.get("FilterPolicy", "{}")):
+            return False
+    return True
 
 
 def recipient_fingerprint(topic, email):

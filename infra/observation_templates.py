@@ -3,7 +3,16 @@
 import json
 
 from infra import durable_templates, owned_runtime
-from infra.spec import alarm_descriptors, digest, log_groups, log_prefix, name, topic_arn
+from infra.spec import (
+    alarm_descriptors,
+    digest,
+    fallback_recipients,
+    log_groups,
+    log_prefix,
+    name,
+    recipients,
+    topic_arn,
+)
 from infra.templates import add_function, att, ref, resource, statement, tagged, template
 
 FUNCTIONS = {
@@ -24,10 +33,11 @@ def foundation(spec, outputs, config):
         r[logical] = resource(
             "SNS::Topic", {"TopicName": name(spec, suffix), "Tags": tagged(spec)}, retain=True
         )
-    r["EscalationRecipient"] = resource(
-        "SNS::Subscription",
-        {"TopicArn": ref("Escalation"), "Protocol": "email", "Endpoint": config["fallback_email"]},
-    )
+    for index, address in enumerate(fallback_recipients(spec, config)):
+        r["EscalationRecipient" + (digest(address)[:16] if index else "")] = resource(
+            "SNS::Subscription",
+            {"TopicArn": ref("Escalation"), "Protocol": "email", "Endpoint": address},
+        )
     r["EscalationPolicy"] = resource(
         "SNS::TopicPolicy",
         {
@@ -171,9 +181,9 @@ def runtime(spec, outputs, artifacts, durable_config):
         "ALARMS_TOPIC_ARN": topic_arn(spec, "alarms"),
         "ALARM_NAME_PREFIX": name(spec, ""),
         "REPORTS_TOPIC_ARN": topic_arn(spec, "reports"),
-        "PRIMARY_EMAIL": spec["notification_email"],
+        "PRIMARY_EMAIL": ",".join(recipients(spec)),
         "FALLBACK_TOPIC_ARN": topic_arn(spec, "observation-fallback"),
-        "FALLBACK_EMAIL": durable_config["fallback_email"],
+        "FALLBACK_EMAIL": ",".join(fallback_recipients(spec, durable_config)),
         "MAINTENANCE_MODE": str(spec["maintenance_mode"]).lower(),
     }
     read = statement(

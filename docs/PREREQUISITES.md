@@ -30,7 +30,7 @@ optional add-on of three Lambda functions that probe your services and send test
   profile that is a session of the operator role. No access keys in any file (section 3).
 - [ ] **1 to 10 Linux EC2 instances** in the monitor region, publishing the metrics and logs Kira
   expects (section 4).
-- [ ] **Two different mailboxes** and a fixed HTTPS status URL for alert links (6.1).
+- [ ] **One to five alert addresses** and a fixed HTTPS status URL for alert links (6.1).
 - [ ] **A workstation:** Python 3.12, Git, a clean committed checkout and the locked installs
   (section 5).
 - [ ] **Three private JSON files** drafted under `.local/` with real values (6.1).
@@ -132,7 +132,7 @@ cap, and nothing shuts down when a budget is crossed.
 | The monitored EC2 fleet | Existing Linux instances. Kira never installs software on them |
 | CloudWatch agent, heartbeat, Nginx logging, readiness routes | Section 4 |
 | The three IAM roles, the instance role for the agent, your AWS profiles | Section 3. Kira never gives itself permissions |
-| Two mailboxes | A primary and a different fallback address |
+| Alert addresses | One to five. A shared team address works. A separate fallback address is optional |
 | HTTPS hosting for the UI and the status URL | The launcher serves the UI on `127.0.0.1` only. Shared hosting is yours |
 | Identity provider (team mode), Model API account and key secret | Only with those options (section 8) |
 | AWS Budgets alarm, and an external monitor | If the whole account or region fails, Kira's alerts fail with it |
@@ -339,7 +339,7 @@ appear after a test request. The coverage check inside the canary enforces all o
 | `model_arns` | Bedrock | 1 to 10 unique foundation-model or inference-profile ARNs. Forbidden with `model_api` | Bedrock console |
 | `model_api` | Model API | `protocol` (`openai` or `anthropic`), `base_url`, optional `bytes_per_token` (`openai` only, 1 to 8). Forbidden with Bedrock | Your provider (section 8) |
 | `executor_mode`, `maintenance_mode`, `reserved_concurrency` | yes | `qualified`. `false`. `null` (or 0 to 1000, where 0 needs `maintenance_mode`) | Keep as generated |
-| `notification_email` | yes | A valid address, different from `fallback_email` | A mailbox you own |
+| `notification_email` or `notification_emails` | one of the two | One address, or a list of 1 to 5 distinct addresses. Not both | Mailboxes you own |
 | `log_retention_days` | yes | 7, 14, 30, 60, 90, 180 or 365 | Your retention decision |
 | `ui_principal_arn`, `ci_principal_arn`, `deployment_role_arn` | yes | Role ARNs in `account_id`, all different | `aws iam get-role --role-name NAME`: copy `Arn`, path included |
 | `instances` | yes | 1 to 10 unique objects with the six fields below | EC2 console |
@@ -368,7 +368,7 @@ can be at most 2500 bytes.
 | Field | Req. | Type and constraints |
 | --- | --- | --- |
 | `status_base_url` | yes | `https://` host with an optional path of letters, digits, `/`, `_`, `-`. No query, no credentials. Alert emails link to it |
-| `fallback_email` | yes | A valid address, different from `notification_email` |
+| `fallback_email` | no | A valid address with no comma. If you omit it, the fallback topics use the same addresses as the reports |
 | `retention_days` | yes | Integer, 7 to 365 |
 | `initial_reserved_concurrency` | yes | Integer, 2 to 1000 |
 | `investigation_paused` | yes | Boolean. Must be `true` for the first deployment |

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from botocore.exceptions import ClientError
 
-from infra.spec import alarm_descriptors, digest, log_groups, name, topic_arn
+from infra.spec import alarm_descriptors, digest, log_groups, name, recipients, topic_arn
 
 
 class VerificationError(RuntimeError):
@@ -174,9 +174,9 @@ def routing_health(
         raise VerificationError("EC2 rule target differs from desired routing")
     sns = clients("sns", spec["monitor_region"])
     pending = []
-    for topic, protocol, endpoint in (
-        ("alarms", "sqs", ingress_arn),
-        ("reports", "email", spec["notification_email"]),
+    for topic, protocol, endpoints in (
+        ("alarms", "sqs", [ingress_arn]),
+        ("reports", "email", recipients(spec)),
     ):
         subs = []
         for page in sns.get_paginator("list_subscriptions_by_topic").paginate(
@@ -184,7 +184,7 @@ def routing_health(
         ):
             subs.extend(page["Subscriptions"])
         if sorted((s["Protocol"], s["Endpoint"]) for s in subs) != sorted(
-            [(protocol, endpoint)]
+            [(protocol, endpoint) for endpoint in endpoints]
             + (
                 [
                     (
@@ -197,7 +197,7 @@ def routing_health(
             )
         ) or any(not (s["SubscriptionArn"].startswith("arn:") or awaiting_confirmation(s)) for s in subs):
             raise VerificationError("Routing includes an unexpected or unconfirmed subscriber")
-        # The endpoints matched exactly, so a pending email here is the configured primary recipient.
+        # The endpoints matched exactly, so a pending email here is one of the configured report recipients.
         if any(awaiting_confirmation(s) for s in subs):
             pending.append("notification_email")
     desired = {

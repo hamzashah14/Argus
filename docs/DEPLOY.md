@@ -121,8 +121,8 @@ never overwrites existing files. The work directory must be under `.local/` in t
 | File | What it holds |
 | --- | --- |
 | `automation.json` | Which AWS profile to use, and where the other files and the wheels are |
-| `deployment.json` | Account, regions, release ID, model, IAM roles, server inventory, Nginx filters, primary recipient |
-| `runtime.json` | Status URL, fallback recipient, retention, capacity, model and tool limits |
+| `deployment.json` | Account, regions, release ID, model, IAM roles, server inventory, Nginx filters, alert addresses |
+| `runtime.json` | Status URL, optional fallback address, retention, capacity, model and tool limits |
 
 The examples are synthetic (`reference_only: true`, `.invalid` addresses). `check` and `apply`
 reject them before they touch AWS. Keep every real value, secret and receipt out of Git.
@@ -159,7 +159,7 @@ with the configured CI/operator role credentials" otherwise.
 | Group | Settings and rules |
 | --- | --- |
 | Names and places | `project`: 2 to 12 lowercase letters or digits, starting with a letter. `environment`: `development`, `staging` or `production` (only `staging` finishes automatically, see 3.8). `account_id`: 12 digits. `monitor_region`, `bedrock_region`. `release_id`: 1 to 16 lowercase letters, digits or hyphens. A release is immutable, so use a new `release_id` for any new code or configuration. Resource names must stay within 64 characters |
-| Roles and recipient | `ci_principal_arn`, `deployment_role_arn`, `ui_principal_arn`: explicit, different roles in `account_id`. `notification_email`: the primary address, which must differ from `fallback_email` |
+| Roles and recipient | `ci_principal_arn`, `deployment_role_arn`, `ui_principal_arn`: explicit, different roles in `account_id`. `notification_email` (one address) or `notification_emails` (a list of 1 to 5), not both: everyone listed receives the alerts and reports |
 | Model (Bedrock, the default) | `model_id` and `model_arns` (1 to 10 ARNs of a foundation model or inference profile; a profile must belong to your account, and every model behind a profile must also be listed). If `model_id` is an ARN it must be in `model_arns`. To use a model API instead, see section 8: it replaces these fields |
 | Switches | `maintenance_mode`: keep `false` (true disables routing). `reserved_concurrency`: leave `null`. 0 needs `maintenance_mode`, and the value is only used for a headroom check |
 | Retention | `log_retention_days`: 7, 14, 30, 60, 90, 180 or 365. `log_segment`: empty, or up to 24 letters, digits, `_` or `-`, added to log group names |
@@ -174,7 +174,7 @@ and configuring agents stays your job.
 
 | Group | Settings and rules |
 | --- | --- |
-| Alerts | `status_base_url`: a fixed `https://` URL. `fallback_email`: a valid address that differs from `notification_email`. It serves both fallback topics |
+| Alerts | `status_base_url`: a fixed `https://` URL. `fallback_email` (optional): one address for the two fallback topics, which carry alarms about Kira's own pipeline. Omit it and those topics use the same addresses as the reports |
 | Retention and capacity | `retention_days`: 7 to 365. `initial_reserved_concurrency`: 2 to 1000 (capacity kept for initial notifications) |
 | Model pause | `investigation_paused`: must be `true`. The tool rejects `false`: "Initial deployment must keep investigation_paused true; activation is a separate qualified release" |
 | Runtime | `runtime_target`: `standalone` (default) or `agentcore` (section 9) |
@@ -348,9 +348,10 @@ unavailable". With a model API, the provider bills this request, not AWS. You ma
 `--allow-model-invocation` to the very first `apply` and skip this stop.
 Leave it off the first time if you want to check your telemetry before the paid call.
 
-**B. Confirm the emails.** AWS sends subscription emails. The fallback address gets one for the
-incident fallback topic (early in the run) and one for the observation fallback topic if you
-configured observers. The primary address gets its email only when the routing stage runs, near
+**B. Confirm the emails.** AWS sends one subscription email per address and topic. The fallback
+addresses (the `fallback_email`, or your alert addresses if you set none) get one for the incident
+fallback topic (early in the run) and one for the observation fallback topic if you configured
+observers. The alert addresses get their report-topic email only when the routing stage runs, near
 the end. Confirm each one when it arrives. The registration check requires every subscription
 to be confirmed. The first `apply` that reaches routing therefore stops with `WAITING` (exit 2):
 "Confirm the subscription emails sent to the addresses configured as notification_email ..., then

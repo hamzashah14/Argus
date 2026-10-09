@@ -88,6 +88,18 @@ def name(spec, suffix, release=False):
     return value
 
 
+def recipients(spec):
+    """Report recipients, sorted: `notification_emails`, or the single `notification_email`."""
+    return (
+        sorted(spec["notification_emails"]) if "notification_emails" in spec else [spec["notification_email"]]
+    )
+
+
+def fallback_recipients(spec, config):
+    """Fallback-topic recipients: `fallback_email` if the runtime config sets one, else the report recipients."""
+    return [config["fallback_email"]] if "fallback_email" in config else recipients(spec)
+
+
 def topic_arn(spec, topic):
     return f"arn:aws:sns:{spec['monitor_region']}:{spec['account_id']}:{name(spec, topic)}"
 

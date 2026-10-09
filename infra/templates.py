@@ -7,7 +7,17 @@ import base64
 import hashlib
 import json
 
-from infra.spec import alarm_descriptors, digest, log_groups, log_prefix, name, prefix, tags, topic_arn
+from infra.spec import (
+    alarm_descriptors,
+    digest,
+    log_groups,
+    log_prefix,
+    name,
+    prefix,
+    recipients,
+    tags,
+    topic_arn,
+)
 
 
 def ref(key):
@@ -362,10 +372,11 @@ def service_routing(spec):
     )
     r = t["Resources"]
     # Endpoint-specific logical IDs make retirement explicit. Reconciliation removes the old recipient first.
-    r["Email" + digest(spec["notification_email"])[:16]] = resource(
-        "SNS::Subscription",
-        {"Protocol": "email", "Endpoint": spec["notification_email"], "TopicArn": topic_arn(spec, "reports")},
-    )
+    for address in recipients(spec):
+        r["Email" + digest(address)[:16]] = resource(
+            "SNS::Subscription",
+            {"Protocol": "email", "Endpoint": address, "TopicArn": topic_arn(spec, "reports")},
+        )
     r["Ec2Down"] = resource(
         "Events::Rule",
         {

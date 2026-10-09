@@ -149,8 +149,8 @@ nothing was published.
 
 ## Change alert recipients
 
-The primary address is `notification_email` in `deployment.json`. The fallback is `fallback_email` in `runtime.json`.
-It must differ from the primary and serves both fallback topics. The subscriptions live in updateable stacks. If
+The alert addresses are `notification_email` (one) or `notification_emails` (up to five) in `deployment.json`. The
+optional `fallback_email` in `runtime.json` serves both fallback topics. Without it they use the same addresses as the reports. The subscriptions live in updateable stacks. If
 observers are deployed, their create-only runtime also holds both addresses, so the change needs a new `release_id`
 and observer runtime ([DEPLOY.md](DEPLOY.md#appendix-a-manual-commands)).
 
