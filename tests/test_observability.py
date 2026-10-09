@@ -247,7 +247,8 @@ def test_recipient_receipt_is_conditional_and_never_reads_notification_body(envi
             "batchItemFailures": []
         }
     call = ledger.table.update_item.call_args.kwargs
-    assert call["ConditionExpression"].startswith("incident_id=:incident AND ttl>:now")
+    assert call["ConditionExpression"].startswith("incident_id=:incident AND #t>:now")
+    assert call["ExpressionAttributeNames"] == {"#t": "ttl"}  # ttl is a DynamoDB reserved word
     assert "size(recipient_message_ids)<:max" in call["ConditionExpression"]
     assert "if_not_exists(recipient_received_at,:now)" in call["UpdateExpression"]
 

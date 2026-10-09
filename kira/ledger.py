@@ -196,7 +196,8 @@ class Ledger:
                             "TableName": self.name,
                             "Key": item({"PK": f"INCIDENT#{recovery}", "SK": "META"}),
                             "UpdateExpression": "SET recovery_event_id=:event, recovered_at=:at",
-                            "ConditionExpression": "attribute_exists(PK) AND ttl>:now",
+                            "ConditionExpression": "attribute_exists(PK) AND #t>:now",
+                            "ExpressionAttributeNames": {"#t": "ttl"},
                             "ExpressionAttributeValues": item(
                                 {":event": eid, ":at": event["occurred_at"], ":now": int(time.time())}
                             ),
@@ -614,7 +615,7 @@ class Ledger:
                                     ":owner": claim["lease_owner"],
                                     ":token": claim["fencing_token"],
                                     ":open": "OPEN",
-                                    ":deadline_key": f"{claim['deadline_epoch']:012d}#{iid}",
+                                    ":deadline_key": f"{int(claim['deadline_epoch']):012d}#{iid}",
                                     ":intent": f"INTENT#WORK#{claim['attempts'] + 1}",
                                     ":due": int((now + timedelta(seconds=delay)).timestamp()),
                                 }
@@ -776,7 +777,7 @@ class Ledger:
                                 if terminal
                                 else {
                                     ":open": "OPEN",
-                                    ":deadline_key": f"{claim['deadline_epoch']:012d}#{iid}",
+                                    ":deadline_key": f"{int(claim['deadline_epoch']):012d}#{iid}",
                                     ":intent": f"INTENT#WORK#{suffix}",
                                     ":due": now_epoch,
                                 }

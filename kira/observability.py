@@ -123,7 +123,8 @@ def recipient(event, context=None):
         ledger.table.update_item(
             Key={"PK": pk, "SK": "META"},
             UpdateExpression="SET recipient_received_at=if_not_exists(recipient_received_at,:now), recipient_message_id=if_not_exists(recipient_message_id,:message), recipient_notification_id=:notification ADD recipient_message_ids :messages",
-            ConditionExpression="incident_id=:incident AND ttl>:now AND (attribute_not_exists(recipient_message_ids) OR contains(recipient_message_ids,:message) OR size(recipient_message_ids)<:max)",
+            ConditionExpression="incident_id=:incident AND #t>:now AND (attribute_not_exists(recipient_message_ids) OR contains(recipient_message_ids,:message) OR size(recipient_message_ids)<:max)",
+            ExpressionAttributeNames={"#t": "ttl"},
             ExpressionAttributeValues={
                 ":now": now,
                 ":incident": iid,
