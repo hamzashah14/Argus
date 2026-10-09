@@ -12,7 +12,7 @@ import pytest
 
 from infra import observation_templates, observations
 from infra.spec import ROOT, alarm_descriptors, cwagent, load, metric_catalog, name
-from infra.verify import VerificationError
+from infra.verify import PendingConfirmation, VerificationError
 from kira import observability, probes, telemetry
 from kira.incident import InvalidEvent, normalize_sns
 from kira.ledger import Ledger
@@ -540,8 +540,12 @@ def test_registration_requires_each_independent_component(drift):
         return clients[service]
 
     if drift:
-        with pytest.raises(VerificationError):
+        with pytest.raises(VerificationError) as failure:
             observations.verify_registration(bundle, factory)
+        # Only an unclicked email is a wait; every other drift is a plain failure.
+        assert isinstance(failure.value, PendingConfirmation) == (drift == "fallback")
+        if drift == "fallback":
+            assert failure.value.recipients == ["fallback_email"]
     else:
         assert observations.verify_registration(bundle, factory)["status"] == "PASS"
 

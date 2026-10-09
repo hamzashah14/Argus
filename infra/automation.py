@@ -20,7 +20,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from infra import deployment_preflight, durable, templates
 from infra.spec import ROOT, cwagent, digest, load, name, prefix
-from infra.verify import VerificationError
+from infra.verify import PendingConfirmation, VerificationError
 
 
 class Waiting(RuntimeError):
@@ -29,6 +29,14 @@ class Waiting(RuntimeError):
     def __init__(self, message, *, automatic=False):
         super().__init__(message)
         self.automatic = automatic
+
+
+def confirmation_wait(recipients):
+    """The human step when the only thing missing is a click on the subscription emails."""
+    return Waiting(
+        f"Confirm the subscription emails sent to the addresses configured as {' and '.join(recipients)}, "
+        "then resume apply with the same plan hash"
+    )
 
 
 def private_json(path, value):
@@ -308,6 +316,8 @@ class Driver:
             result = subprocess.run(
                 command, cwd=ROOT, env=self.env, stdout=log, stderr=log, timeout=600, umask=0o077
             )
+        if result.returncode == PendingConfirmation.EXIT_CODE and module == "infra.durable_ops" and output:
+            raise confirmation_wait(json.loads(output.read_text())["recipients"])
         if result.returncode:
             raise VerificationError(
                 f"{module} failed; inspect private operations.log and repair before resuming"

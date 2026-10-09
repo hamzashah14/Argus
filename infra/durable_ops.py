@@ -13,6 +13,7 @@ from infra import durable, durable_templates, owned_ops, reconcile, release, tem
 from infra.aws import clients
 from infra.spec import ROOT, alarm_descriptors, digest, name, prefix, tags
 from infra.verify import (
+    PendingConfirmation,
     VerificationError,
     assert_account,
     assert_concurrency,
@@ -389,12 +390,6 @@ def verify_routing(bundle):
         config=bundle["config"],
         owned_bindings=bundle["bindings"],
     )["Resources"]
-    routing_health(
-        spec,
-        clients,
-        outputs["IngressQueueArn"],
-        ec2_targets=desired["Ec2Down"]["Properties"]["Targets"],
-    )
     sources = {
         "Ingress": outputs["IngressQueueArn"],
         "Dispatch": outputs["StreamArn"],
@@ -440,6 +435,13 @@ def verify_routing(bundle):
         or targets["Targets"] != sweep["Targets"]
     ):
         raise VerificationError("Incident reconciler schedule or target drifted")
+    # Last: an unconfirmed email is reported as a wait only when every other check above has passed.
+    routing_health(
+        spec,
+        clients,
+        outputs["IngressQueueArn"],
+        ec2_targets=desired["Ec2Down"]["Properties"]["Targets"],
+    )
     return {"status": "PASS", "scope": "registration only; live delivery and latency still need tests"}
 
 
@@ -640,6 +642,11 @@ def main():
         release.write_json(args.output, value)
         print(f"Saved {args.command} result to {args.output}")
         return 0
+    except PendingConfirmation as exc:
+        # Distinct from failure: the automation waits for the human click and then repeats this check.
+        release.write_json(args.output, {"status": "PENDING_CONFIRMATION", "recipients": exc.recipients})
+        print("Email subscriptions await confirmation; no success receipt was produced.", file=sys.stderr)
+        return PendingConfirmation.EXIT_CODE
     except (VerificationError, ValueError, KeyError, OSError, TypeError, BotoCoreError, ClientError):
         print("Durable operation failed; no success receipt was produced.", file=sys.stderr)
         return 1

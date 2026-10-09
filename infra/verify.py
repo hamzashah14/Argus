@@ -13,6 +13,21 @@ class VerificationError(RuntimeError):
     pass
 
 
+class PendingConfirmation(VerificationError):
+    """Only email subscriptions awaiting a human click stand between a check and a pass."""
+
+    EXIT_CODE = 3  # An operation's exit status for this case; every other failure exits 1.
+
+    def __init__(self, recipients):
+        super().__init__("Email subscriptions await confirmation")
+        self.recipients = sorted(set(recipients))  # Config key names only, never addresses.
+
+
+def awaiting_confirmation(subscription):
+    """An email subscription whose owner has not clicked the link yet; no other state qualifies."""
+    return subscription["Protocol"] == "email" and subscription["SubscriptionArn"] == "PendingConfirmation"
+
+
 def assert_account(sts, spec):
     if spec["reference_only"]:
         raise VerificationError("Synthetic reference inputs cannot be used for cloud operations")
@@ -158,6 +173,7 @@ def routing_health(
     if result.get("NextToken") or result["Targets"] != wanted_targets:
         raise VerificationError("EC2 rule target differs from desired routing")
     sns = clients("sns", spec["monitor_region"])
+    pending = []
     for topic, protocol, endpoint in (
         ("alarms", "sqs", ingress_arn),
         ("reports", "email", spec["notification_email"]),
@@ -179,8 +195,11 @@ def routing_health(
                 if topic == "reports" and "observability" in spec
                 else []
             )
-        ) or any(not s["SubscriptionArn"].startswith("arn:") for s in subs):
+        ) or any(not (s["SubscriptionArn"].startswith("arn:") or awaiting_confirmation(s)) for s in subs):
             raise VerificationError("Routing includes an unexpected or unconfirmed subscriber")
+        # The endpoints matched exactly, so a pending email here is the configured primary recipient.
+        if any(awaiting_confirmation(s) for s in subs):
+            pending.append("notification_email")
     desired = {
         r["Properties"]["AlarmName"]: r["Properties"]
         for r in expected.values()
@@ -205,4 +224,6 @@ def routing_health(
             "InsufficientDataActions"
         ):
             raise VerificationError("Required alarm has unexpected additional notification actions")
+    if pending:  # Never a pass, but raised only once nothing else is wrong.
+        raise PendingConfirmation(pending)
     return {"status": "PASS", "scope": "routing registration only; delivery requires a live canary"}

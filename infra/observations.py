@@ -7,7 +7,13 @@ import time
 
 from infra import durable, observation_templates, owned_ops
 from infra.spec import log_groups, metric_catalog, name
-from infra.verify import VerificationError, assert_account, verify_function
+from infra.verify import (
+    PendingConfirmation,
+    VerificationError,
+    assert_account,
+    awaiting_confirmation,
+    verify_function,
+)
 from kira.ledger import item
 from kira.observability import recipient_fingerprint
 from scripts.build_lambdas import OBSERVATION_FUNCTIONS, build
@@ -194,6 +200,7 @@ def verify_registration(bundle, factory):
     ):
         raise VerificationError("Operations dashboard differs from reviewed inventory")
     sns = factory("sns", spec["monitor_region"])
+    pending = []
     for topic, protocol, endpoint, policy, dead in (
         (
             "canary",
@@ -226,9 +233,13 @@ def verify_registration(bundle, factory):
         if (
             len(matches) != 1
             or (topic != "reports" and len(subscriptions) != 1)
-            or not matches[0]["SubscriptionArn"].startswith("arn:")
+            or not (matches[0]["SubscriptionArn"].startswith("arn:") or awaiting_confirmation(matches[0]))
         ):
             raise VerificationError("Independent subscription missing, duplicated or unconfirmed")
+        if awaiting_confirmation(matches[0]):
+            # Its attributes cannot be read yet; they are checked on the pass after the click.
+            pending.append("fallback_email" if topic == "observation-fallback" else "notification_email")
+            continue
         attrs = sns.get_subscription_attributes(SubscriptionArn=matches[0]["SubscriptionArn"])["Attributes"]
         if json.loads(attrs.get("FilterPolicy", "{}")) != policy:
             raise VerificationError("Independent recipient filter drifted")
@@ -238,6 +249,8 @@ def verify_registration(bundle, factory):
             or attrs.get("FilterPolicyScope", "MessageAttributes") != "MessageAttributes"
         ):
             raise VerificationError("Independent recipient envelope/redrive settings drifted")
+    if pending:  # Never a pass, but raised only once nothing else is wrong.
+        raise PendingConfirmation(pending)
     return {
         "status": "PASS",
         "scope": "registration only; failure injection and real delivery require customer acceptance",

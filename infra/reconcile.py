@@ -81,7 +81,17 @@ def owned_resources(spec, clients):
                 item["actions_enabled"] = alarm[0]["ActionsEnabled"]
             if item["type"] == "AWS::SNS::Subscription":
                 if not item["id"].startswith("arn:"):
-                    raise VerificationError("Cannot reconcile an unconfirmed subscription automatically")
+                    # Only the current recipient may still await its click: the digest-named logical ID fixes
+                    # its endpoint. Verification, not this plan, refuses to pass until it is confirmed.
+                    if entry["LogicalResourceId"] != "Email" + digest(spec["notification_email"])[:16]:
+                        raise VerificationError("Cannot reconcile an unconfirmed subscription automatically")
+                    item.update(
+                        topic=topic_arn(spec, "reports"),
+                        endpoint=spec["notification_email"],
+                        protocol="email",
+                    )
+                    result.append(item)
+                    continue
                 try:
                     attrs = clients("sns", spec["monitor_region"]).get_subscription_attributes(
                         SubscriptionArn=item["id"]

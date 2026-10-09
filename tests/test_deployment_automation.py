@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from datetime import datetime, timezone
@@ -8,8 +9,9 @@ import pytest
 from botocore.exceptions import ClientError
 
 from infra import automation, deployment_preflight, durable, identity, identity_ops, owned_runtime
-from infra.spec import name, prefix
-from infra.verify import VerificationError
+from infra.spec import name, prefix, topic_arn
+from infra.templates import service_routing
+from infra.verify import PendingConfirmation, VerificationError, routing_health
 from scripts.dev.validate_durable import examples
 from tests.helpers import ROOT
 
@@ -157,6 +159,57 @@ def test_order_and_separate_runtime_candidates(tmp_path, target, observations):
         assert stages.index("health-bootstrap") < stages.index("staging-canary")
 
 
+def confirmed_subscriptions(spec, ingress_arn):
+    """The SNS state a finished routing stage leaves behind, every email already clicked."""
+    base = f"arn:aws:sns:{spec['monitor_region']}:{spec['account_id']}"
+    subscriptions = [
+        {
+            "TopicArn": topic_arn(spec, "reports"),
+            "Protocol": "email",
+            "Endpoint": spec["notification_email"],
+            "SubscriptionArn": f"{base}:{name(spec, 'reports')}:primary",
+        },
+        {
+            "TopicArn": topic_arn(spec, "alarms"),
+            "Protocol": "sqs",
+            "Endpoint": ingress_arn,
+            "SubscriptionArn": f"{base}:{name(spec, 'alarms')}:ingress",
+        },
+    ]
+    if "observability" in spec:
+        subscriptions.append(
+            {
+                "TopicArn": topic_arn(spec, "reports"),
+                "Protocol": "sqs",
+                "Endpoint": f"arn:aws:sqs:{spec['monitor_region']}:{spec['account_id']}:{name(spec, 'observation-receipts')}",
+                "SubscriptionArn": f"{base}:{name(spec, 'reports')}:receipts",
+            }
+        )
+    return subscriptions
+
+
+def routing_clients(spec, subscriptions):
+    """Synthetic SDK clients serving exactly the planned routing, with the given SNS subscriptions."""
+    expected = service_routing(spec)["Resources"]
+    rule = expected["Ec2Down"]["Properties"]
+    events, sns, cloudwatch = Mock(), Mock(), Mock()
+    events.describe_rule.return_value = {
+        "State": rule["State"],
+        "EventPattern": json.dumps(rule["EventPattern"]),
+    }
+    events.list_targets_by_rule.return_value = {"Targets": rule["Targets"]}
+    sns.get_paginator.return_value.paginate.side_effect = lambda TopicArn: [
+        {"Subscriptions": [s for s in subscriptions if s["TopicArn"] == TopicArn]}
+    ]
+    cloudwatch.describe_alarms.return_value = {
+        "MetricAlarms": [
+            copy.deepcopy(r["Properties"]) for r in expected.values() if r["Type"] == "AWS::CloudWatch::Alarm"
+        ]
+    }
+    clients = {"events": events, "sns": sns, "cloudwatch": cloudwatch}
+    return lambda service, region: clients[service]
+
+
 class FakeDriver(automation.Driver):
     """Real staged renderer; synthetic SDK/build adapters only."""
 
@@ -193,6 +246,7 @@ class FakeDriver(automation.Driver):
         self.calls = []
         self.grants = {}
         self.canaries = 0
+        self.subscriptions = confirmed_subscriptions(spec, self.outputs["foundation"]["IngressQueueArn"])
         from infra import observations, release
         from scripts.build_lambdas import PIPELINE_FUNCTIONS
 
@@ -319,6 +373,17 @@ class FakeDriver(automation.Driver):
             }
         if command == "retirement-plan":
             return {"disable_alarms": [], "unsubscribe": []}
+        if command == "verify-routing":
+            try:
+                return routing_health(
+                    spec,
+                    routing_clients(spec, self.subscriptions),
+                    self.outputs["foundation"]["IngressQueueArn"],
+                )
+            except (
+                PendingConfirmation
+            ) as exc:  # The real op exits 3 and Driver.command raises the same Waiting.
+                raise automation.confirmation_wait(exc.recipients) from None
         return {"status": "PASS"}
 
     def command(self, module, args, output=None):
@@ -1365,3 +1430,242 @@ def test_model_secret_version_op_is_model_api_only(tmp_path, monkeypatch):
 def test_model_api_requires_standalone_runtime(tmp_path):
     with pytest.raises(VerificationError, match="standalone"):
         configuration(tmp_path, "agentcore", model_api=True)
+
+
+def primary_email(driver):
+    return next(s for s in driver.subscriptions if s["Protocol"] == "email")
+
+
+def awaiting_routing_verification(tmp_path, monkeypatch, identity_mode):
+    """A deployment that has provisioned routing and will run its registration verification next."""
+    planned = configuration(tmp_path, identity=identity_mode)
+    directory = tmp_path / "work"
+    directory.mkdir()
+    driver = FakeDriver(planned, directory, monkeypatch)
+    return planned, directory, driver, (tmp_path / "ticket" if identity_mode else None)
+
+
+def journal(directory):
+    return json.loads((directory / "state.json").read_text())
+
+
+@pytest.mark.parametrize("identity_mode", [True, False])
+def test_pending_email_confirmation_waits_instead_of_failing(tmp_path, monkeypatch, identity_mode):
+    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+    primary_email(driver)["SubscriptionArn"] = "PendingConfirmation"
+    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    assert result["status"] == "WAITING" and not result["auto_resume"]
+    assert "notification_email" in result["next"] and "same plan hash" in result["next"]
+    assert planned["spec"]["notification_email"] not in result["next"]  # key names only, never the address
+    state = journal(directory)
+    assert state["status"] == "WAITING" and state["next"] == result["next"]
+    assert state["stages"]["routing"]["status"] == "COMPLETE"
+    assert "routing" in result["completed_stages"] and driver.canaries == 1
+    # Nothing past verification ran, and nothing was recorded as verified.
+    assert "collect:routing" not in driver.calls
+    connection = directory / "ui-connection.json"
+    assert not connection.exists() or "ui_role_arn" not in json.loads(connection.read_text())
+
+
+@pytest.mark.parametrize("identity_mode", [True, False])
+def test_resume_after_confirmation_reruns_only_verification_and_finishes(
+    tmp_path, monkeypatch, identity_mode
+):
+    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+    primary_email(driver)["SubscriptionArn"] = "PendingConfirmation"
+    automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    # Resuming before the click still waits; it is neither a failure nor progress.
+    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    assert result["status"] == "WAITING" and journal(directory)["status"] == "WAITING"
+    primary_email(driver)["SubscriptionArn"] = driver.subscriptions[1]["SubscriptionArn"] + ":confirmed"
+    before = len(driver.calls)
+    result = automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    assert result["status"] == "INFRASTRUCTURE_READY_MANUAL_ACCEPTANCE_PENDING"
+    assert "verify-routing" in driver.calls[before:] and "collect:routing" in driver.calls[before:]
+    # No rebuild, upload, second paid canary or new change set: provisioning is not repeated.
+    assert not {"build", "upload", "canary", "change-set", "execute"} & set(driver.calls[before:])
+    assert driver.canaries == 1 and driver.calls.count("build") == 1
+    assert json.loads((directory / "ui-connection.json").read_text())["ui_role_arn"]
+
+
+def mismatch(kind, driver, spec):
+    email, ingress = primary_email(driver), driver.subscriptions[1]
+    pending = {"SubscriptionArn": "PendingConfirmation"}
+    if kind == "wrong_endpoint":
+        email["Endpoint"] = "someone-else@example.invalid"
+    elif kind == "wrong_endpoint_pending":
+        email.update(Endpoint="someone-else@example.invalid", **pending)
+    elif kind == "missing":
+        driver.subscriptions.remove(email)
+    elif kind == "missing_ingress_while_pending":
+        email.update(pending)
+        driver.subscriptions.remove(ingress)
+    elif kind == "wrong_protocol":
+        email["Protocol"] = "https"
+    elif kind == "wrong_protocol_pending":
+        email.update(Protocol="https", **pending)
+    elif kind == "unsubscribed":
+        email["SubscriptionArn"] = "Deleted"
+    elif kind == "wrong_topic":
+        email["TopicArn"] = topic_arn(spec, "alarms")
+    elif kind == "extra_subscriber_while_pending":
+        email.update(pending)
+        driver.subscriptions.append(
+            {**email, "Endpoint": "extra@example.invalid", "SubscriptionArn": "arn:x:1"}
+        )
+
+
+@pytest.mark.parametrize("identity_mode", [True, False])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "wrong_endpoint",
+        "wrong_endpoint_pending",
+        "missing",
+        "missing_ingress_while_pending",
+        "wrong_protocol",
+        "wrong_protocol_pending",
+        "unsubscribed",
+        "wrong_topic",
+        "extra_subscriber_while_pending",
+    ],
+)
+def test_every_other_subscription_mismatch_still_fails_closed(tmp_path, monkeypatch, identity_mode, kind):
+    planned, directory, driver, ticket = awaiting_routing_verification(tmp_path, monkeypatch, identity_mode)
+    mismatch(kind, driver, planned["spec"])
+    with pytest.raises(VerificationError) as failure:
+        automation.deploy(planned, directory, driver, allow_model=True, ticket=ticket)
+    assert not isinstance(failure.value, PendingConfirmation)
+    assert journal(directory)["status"] == "FAILED" and "collect:routing" not in driver.calls
+
+
+def test_routing_verification_waits_only_after_every_other_check_passed(tmp_path, monkeypatch):
+    from collections import defaultdict
+
+    from infra import durable_ops, identity
+
+    spec = {**configuration(tmp_path)["spec"], "reference_only": False}
+    queues = {key: "arn:aws:sqs:eu-central-1:123456789012:q" for key in ("Ingress", "Dispatch", "Work")}
+    outputs = {
+        "IngressQueueArn": queues["Ingress"],
+        "StreamArn": queues["Dispatch"],
+        "WorkQueueArn": queues["Work"],
+        "InitialQueueArn": queues["Work"],
+        "ReportQueueArn": queues["Work"],
+    }
+    for name_, value in {
+        "assert_account": Mock(),
+        "owned_stack": Mock(),
+        "verify_capture": Mock(return_value=outputs),
+        "routing_health": Mock(side_effect=PendingConfirmation(["notification_email"])),
+    }.items():
+        monkeypatch.setattr(durable_ops, name_, value)
+    monkeypatch.setattr(identity, "verify_ui_role", Mock())
+    monkeypatch.setattr(
+        durable_ops.durable_templates,
+        "active_routing",
+        Mock(return_value={"Resources": {"Ec2Down": {"Properties": {"Targets": []}}}}),
+    )
+    drifted = Mock()  # A durable event mapping is missing while the subscription is also pending.
+    drifted.get_paginator.return_value.paginate.return_value = [{"EventSourceMappings": []}]
+    monkeypatch.setattr(durable_ops, "clients", lambda service, region: drifted)
+    bundle = {
+        "spec": spec,
+        "config": {"investigation_paused": True},
+        "bindings": {
+            "versions": defaultdict(lambda: "arn:aws:lambda:eu-central-1:123456789012:function:f:1")
+        },
+    }
+    with pytest.raises(VerificationError, match="event mapping") as failure:
+        durable_ops.verify_routing(bundle)
+    assert not isinstance(failure.value, PendingConfirmation)
+
+
+def test_pending_exit_code_is_distinct_and_names_config_keys_only(tmp_path, monkeypatch):
+    from infra import durable_ops
+
+    output = tmp_path / "out.json"
+    monkeypatch.setattr(
+        durable_ops, "read_bundle", lambda path, review_hash: {"spec": {"reference_only": False}}
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        ["durable_ops", "verify-routing", "--bundle", str(tmp_path), "--review-hash", "h"]
+        + ["--output", str(output)],
+    )
+    monkeypatch.setattr(
+        durable_ops, "verify_routing", Mock(side_effect=PendingConfirmation(["notification_email"]))
+    )
+    assert durable_ops.main() == 3
+    assert json.loads(output.read_text()) == {
+        "status": "PENDING_CONFIRMATION",
+        "recipients": ["notification_email"],
+    }
+    output.unlink()
+    monkeypatch.setattr(durable_ops, "verify_routing", Mock(side_effect=VerificationError("drift")))
+    assert durable_ops.main() == 1 and not output.exists()
+
+
+def test_driver_turns_only_the_pending_exit_of_a_durable_operation_into_waiting(tmp_path, monkeypatch):
+    planned = configuration(tmp_path)
+    monkeypatch.setattr(automation, "factory", Mock())
+    directory = tmp_path / "work"
+    directory.mkdir()
+    driver = automation.Driver(planned, directory)
+    output = directory / "operation.json"
+
+    def exits(code):
+        def run(*args, **kwargs):
+            output.write_text(
+                json.dumps({"status": "PENDING", "recipients": ["notification_email", "fallback_email"]})
+            )
+            return Mock(returncode=code)
+
+        monkeypatch.setattr(automation.subprocess, "run", run)
+
+    exits(3)
+    with pytest.raises(automation.Waiting, match="notification_email and fallback_email") as waiting:
+        driver.command("infra.durable_ops", ["verify-routing"], output)
+    assert not waiting.value.automatic and "same plan hash" in str(waiting.value)
+    for module, code in (("infra.identity_ops", 3), ("infra.durable_ops", 1), ("infra.durable_ops", 2)):
+        exits(code)
+        with pytest.raises(VerificationError, match="failed"):
+            driver.command(module, ["verify-routing"], output)
+
+
+def owned_routing_resources(spec, summaries):
+    from infra import reconcile
+
+    cfn = Mock()
+    cfn.describe_stacks.return_value = {
+        "Stacks": [
+            {
+                "Tags": [
+                    {"Key": "Project", "Value": spec["project"]},
+                    {"Key": "Environment", "Value": spec["environment"]},
+                    {"Key": "ManagedBy", "Value": "kira-cloudformation"},
+                ]
+            }
+        ]
+    }
+    cfn.get_paginator.return_value.paginate.return_value = [{"StackResourceSummaries": summaries}]
+    return reconcile.owned_resources(spec, lambda service, region: cfn)
+
+
+def test_retirement_plan_accepts_only_the_current_recipients_pending_subscription(tmp_path):
+    from infra import reconcile
+    from infra.spec import digest
+
+    spec = configuration(tmp_path)["spec"]
+    pending = {
+        "ResourceType": "AWS::SNS::Subscription",
+        "ResourceStatus": "CREATE_COMPLETE",
+        "PhysicalResourceId": "PendingConfirmation",
+    }
+    current = {**pending, "LogicalResourceId": "Email" + digest(spec["notification_email"])[:16]}
+    plan = reconcile.plan(spec, owned_routing_resources(spec, [current]), "worker")
+    assert plan["unsubscribe"] == [] and plan["disable_alarms"] == []
+    # A pending subscription of any other (retired) recipient still needs an explicit decision.
+    former = {**pending, "LogicalResourceId": "Email" + digest("former@example.invalid")[:16]}
+    with pytest.raises(VerificationError, match="unconfirmed"):
+        owned_routing_resources(spec, [former])
