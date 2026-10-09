@@ -119,3 +119,59 @@ def test_local_tools_chat_passes_the_loaded_config_and_the_local_release(monkeyp
     assert chat.invoke("investigate", "session", local).status == "ok"
     assert execute.call_args.args[0]["release"] == "local"
     assert execute.call_args.kwargs["local"].instances == local_tools.load(path).instances
+
+
+def team_settings(monkeypatch):
+    import json
+
+    from kira.config import AppConfig
+    from kira.runtime import Limits
+
+    for key, value in {
+        "BEDROCK_REGION": "eu-central-1",
+        "ENVIRONMENT": "development",
+        "RUNTIME_TARGET": "standalone",
+        "EXPECTED_ACCOUNT_ID": "123456789012",
+        "BEDROCK_MODEL_ID": "fixture-model",
+        "ALLOWED_INSTANCE_IDS": "i-0123456789abcdef0",
+        "RUNTIME_RELEASE": "a" * 64,
+        "RUNTIME_LIMITS": json.dumps(Limits().__dict__),
+        "LOGS_TOOL_ARN": "arn:aws:lambda:eu-central-1:123456789012:function:logs:1",
+        "METRICS_TOOL_ARN": "arn:aws:lambda:eu-central-1:123456789012:function:metrics:1",
+    }.items():
+        monkeypatch.setenv(key, value)
+    for key in ("KIRA_AUTH_MODE", "MODEL_API", "KIRA_LOCAL_TOOLS"):
+        monkeypatch.delenv(key, raising=False)
+    return AppConfig.from_env()
+
+
+def test_invoke_without_a_scope_calls_execute_exactly_as_before(monkeypatch):
+    from unittest.mock import Mock
+
+    from kira import chat, execution
+
+    execute = Mock(
+        return_value={"text": "ok", "complete": True, "usage": {"input_tokens": 3, "output_tokens": 4}}
+    )
+    monkeypatch.setattr(execution, "execute", execute)
+    result = chat.invoke("question", "session", team_settings(monkeypatch))
+    assert result.status == "ok"
+    assert execute.call_args.kwargs == {}
+    assert result.usage == {"input_tokens": 3, "output_tokens": 4}
+
+
+def test_invoke_passes_the_callers_scope_to_execute(monkeypatch):
+    from unittest.mock import Mock
+
+    from kira import chat, execution
+
+    execute = Mock(return_value={"text": "ok", "complete": True, "usage": {}})
+    monkeypatch.setattr(execution, "execute", execute)
+    chat.invoke("question", "session", team_settings(monkeypatch), allowed={"i-0123456789abcdef0"})
+    assert execute.call_args.kwargs == {"allowed": frozenset({"i-0123456789abcdef0"})}
+
+
+def test_failures_carry_no_usage():
+    from kira import chat
+
+    assert chat.failure("X", "message").usage == {}

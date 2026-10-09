@@ -48,10 +48,11 @@ def tools(policy, reserve, instance=None, anchor=None, allowed=None, access_guar
     )
 
 
-def execute(payload, *, store=None, checkpoint=None, local=None):
+def execute(payload, *, store=None, checkpoint=None, local=None, allowed=None):
     """The host derives all authorization and allowances from trusted configuration.
 
-    `local` (a kira.local_tools.LocalConfig) is passed only by the development chat path, never by hosts."""
+    `local` (a kira.local_tools.LocalConfig) is passed only by the development chat path, never by hosts.
+    `allowed` (a frozenset of instance IDs) is passed only by team mode chat; hosts never pass it."""
     if not isinstance(payload, dict) or type(payload.get("version")) is not int or payload["version"] != 1:
         raise RuntimeStop("INVALID_EXECUTION_REQUEST")
     release = "local" if local is not None else required("RUNTIME_RELEASE")
@@ -64,6 +65,7 @@ def execute(payload, *, store=None, checkpoint=None, local=None):
         mode not in {"chat", "incident"}
         or (purpose != "both" and purpose != mode)
         or (identity.required() and purpose == "both")
+        or (allowed is not None and mode != "chat")
         or (
             local is not None
             and (
@@ -207,7 +209,7 @@ def execute(payload, *, store=None, checkpoint=None, local=None):
                 tools=tools(
                     policy,
                     reserve,
-                    allowed=access["instance_ids"] if access else None,
+                    allowed=access["instance_ids"] if access else allowed,
                     access_guard=guard if access else None,
                     **({"local": local} if local is not None else {}),
                 ),

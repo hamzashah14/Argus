@@ -1,7 +1,7 @@
 """Bounded Bedrock chat requests with safe failures and recoverable partial text."""
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
 
@@ -24,6 +24,7 @@ class ChatResult:
     code: str = ""
     message: str = ""
     reference: str = ""
+    usage: dict = field(default_factory=dict)
 
     def __post_init__(self):
         object.__setattr__(self, "text", safety.text(self.text))
@@ -34,7 +35,7 @@ def failure(code, message, partial=""):
     return ChatResult(partial, "partial" if partial else "error", code, message, problem["request_id"])
 
 
-def invoke(prompt, session_id, settings, *, history=(), access_ticket=None):
+def invoke(prompt, session_id, settings, *, history=(), access_ticket=None, allowed=None):
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > MAX_PROMPT_CHARS:
         return failure("INVALID_PROMPT", f"Enter a question of 1–{MAX_PROMPT_CHARS} characters.")
     if settings.problems():
@@ -65,12 +66,14 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None):
 
             result = invoke_gateway(payload)
         elif settings.runtime_target == "standalone":
+            options = {}
             if settings.local_tools:
                 from kira import local_tools
 
-                result = execution.execute(payload, local=local_tools.load(settings.local_tools))
-            else:
-                result = execution.execute(payload)
+                options["local"] = local_tools.load(settings.local_tools)
+            if allowed is not None:
+                options["allowed"] = frozenset(allowed)
+            result = execution.execute(payload, **options)
         else:
             result = agentcore.invoke(
                 payload,
@@ -89,7 +92,7 @@ def invoke(prompt, session_id, settings, *, history=(), access_ticket=None):
                     "The validated report exceeds the display budget. Narrow the investigation.",
                     text,
                 )
-            return ChatResult(text, "ok")
+            return ChatResult(text, "ok", usage=result.get("usage") or {})
         if result.get("code") in {"USER_OR_SHARED_ALLOWANCE_EXHAUSTED", "ADMISSION_UNAVAILABLE"}:
             return failure(
                 "WORK_ALLOWANCE",
